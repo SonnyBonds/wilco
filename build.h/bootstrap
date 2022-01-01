@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# TODO: Find/verify build environment. Right now we just assume it's there.
+
+set -e
+
+SELF=$0
+display_usage() { 
+	echo "Usage: $SELF path/to/build.cpp [arguments passed to build]" 
+} 
+
+if [ $# -le 0 ]; then
+    display_usage
+    exit 1
+fi
+
+INPUT="$1"
+shift
+
+BUILD_H_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+BUILD_DIR=$(cd $(dirname "$INPUT") && pwd)
+
+if [ ! -f "$INPUT" ]; then
+    display_usage
+    echo $INPUT not found >&2
+    exit 1
+fi
+
+INPUT_BASE=$(basename "$INPUT")
+OUTPUT="${INPUT%%.*}"
+OUTPUT_BASE=$(basename "$OUTPUT")
+
+if [[ "$INPUT" == "$OUTPUT" ]]; then
+    echo Expected an input with extension, e.g. "build.cpp"
+    exit 1
+fi
+
+if [[ "$INPUT" != /* ]]; then
+    OUTPUT=./$OUTPUT
+fi
+
+echo Build root: $BUILD_DIR
+
+clang++ -std=c++17 -I"$BUILD_H_DIR" -DSTART_DIR=\"$(pwd)\" -DBUILD_H_DIR=\"$BUILD_H_DIR\" -DBUILD_DIR=\"$BUILD_DIR\" -DBUILD_FILE=\"$INPUT_BASE\" -DBUILD_ARGS=\""$@"\" "$INPUT" -o "$OUTPUT"
+"$OUTPUT" "$@"
