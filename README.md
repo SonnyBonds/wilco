@@ -3,6 +3,13 @@ build.h is a generator framework for writing build files for C++ in C++.
 
 It is currently work in process and in a state of flux both in terms of interface and features. So far only tested on Mac, but should work on Linux with few if any changes. Windows support is a high priority. 
 
+# TL;DR - Let's run the example
+
+- Clone the repository.
+- `build.h/bootstrap example/build.cpp --ninja`
+- `ninja -C ninjabuild/debug`
+- Revel.
+
 # Philosophy
 
 With build.h the C++ build environment itself is the only requirement for build configuration. Currently "build environment" involves Ninja (or, in the future, GNU make, Visual Studio etc) which very well could be argued is a dependency in itself, but actual build execution is however outside of the current scope of build.h at this point at least.
