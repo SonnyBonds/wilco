@@ -10,6 +10,7 @@
 #include <sstream>
 #include <array>
 #include <unordered_set>
+#include <functional>
 
 // We're messing with the namespaces and various operator overloads and stuff
 // in this header which typically is bad form, but I've chosen to allow this 
