@@ -534,13 +534,13 @@ struct Project : public ProjectConfig
     }
 
 private:
-    ProjectConfig internalResolve(std::optional<ProjectType> projectType, std::string_view configName, bool Local)
+    ProjectConfig internalResolve(std::optional<ProjectType> projectType, std::string_view configName, bool local)
     {
         std::vector<ProjectConfig*> resolveConfigs;
 
         for(auto& entry : configs)
         {
-            if(Local)
+            if(local)
             {
                 if(entry.first.transitivity && entry.first.transitivity == PublicOnly) continue;
             }
@@ -580,7 +580,7 @@ private:
             a.combine(b);
         };
 
-        if(Local)
+        if(local)
         {
             addOptions(result.options, options);
         }
