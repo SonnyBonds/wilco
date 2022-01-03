@@ -67,15 +67,19 @@ struct std::hash<BundleEntry>
 struct CommandEntry
 {
     std::string command;
+    std::vector<fs::path> inputs;
     std::vector<fs::path> outputs;
     fs::path workingDirectory;
-    bool generator = false;
+    fs::path depFile;
+    std::string description;
 
     bool operator ==(const CommandEntry& other) const
     {
         return command == other.command &&
                outputs == other.outputs &&
-               generator == other.generator;
+               inputs == other.inputs &&
+               workingDirectory == other.workingDirectory &&
+               depFile == other.depFile;
     }
 };
 
@@ -89,7 +93,12 @@ struct std::hash<CommandEntry>
         {
             h = h ^ (fs::hash_value(output) << 1);
         }
+        for(auto& input : command.inputs)
+        {
+            h = h ^ (fs::hash_value(input) << 1);
+        }
         h = h ^ (fs::hash_value(command.workingDirectory) << 1);
+        h = h ^ (fs::hash_value(command.depFile) << 1);
         return h;
     }
 };
@@ -180,6 +189,17 @@ constexpr ConfigSelector operator/(std::string_view a, ConfigSelector b)
     return b;
 }
 
+struct ToolchainProvider
+{
+    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
+    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
+    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::string& input, const std::string& output) const = 0;
+
+    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
+    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
+    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::vector<std::string>& inputs, const std::string& output) const = 0;
+};
+
 Option<std::string> Platform{"Platform"};
 Option<std::vector<fs::path>> IncludePaths{"IncludePaths"};
 Option<std::vector<fs::path>> Files{"Files"};
@@ -188,8 +208,6 @@ Option<std::vector<fs::path>> Libs{"Libs"};
 Option<std::vector<std::string>> Defines{"Defines"};
 Option<std::vector<std::string>> Features{"Features"};
 Option<std::vector<std::string>> Frameworks{"Frameworks"};
-Option<std::vector<std::string>> ClangCppFlags{"ClangCppFlags"};
-Option<std::vector<std::string>> ClangLinkFlags{"ClangLinkFlags"};
 Option<std::vector<BundleEntry>> BundleContents{"BundleContents"};
 Option<fs::path> OutputDir{"OutputDir"};
 Option<std::string> OutputStem{"OutputStem"};
@@ -201,6 +219,7 @@ Option<fs::path> BuildPch{"BuildPch"};
 Option<fs::path> ImportPch{"ImportPch"};
 Option<std::vector<PostProcessor>> PostProcess{"PostProcess"};
 Option<std::vector<CommandEntry>> Commands{"Commands"};
+Option<ToolchainProvider*> Toolchain{"Toolchain"};
 
 // TODO: This whole thing can probably be templated and move better but I got lost in overload ambiguities and whatnot
 
@@ -593,6 +612,135 @@ private:
     }
 };
 
+struct GccLikeToolchainProvider : public ToolchainProvider
+{
+    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override 
+    {
+        return "clang++";
+    }
+
+    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    {
+        std::string flags;
+
+        for(auto& define : resolvedConfig[Defines])
+        {
+            flags += " -D\"" + define + "\"";
+        }
+        for(auto& path : resolvedConfig[IncludePaths])
+        {
+            flags += " -I\"" + fs::proximate(path, root).string() + "\"";
+        }
+        if(resolvedConfig[Platform] == "x64")
+        {
+            flags += " -m64 -arch x86_64";
+        }
+
+        std::map<std::string, std::string> featureMap = {
+            { "c++17", " -std=c++17"},
+            { "libc++", " -stdlib=libc++"},
+            { "optimize", " -O3"},
+            { "debuginfo", " -g"},
+        };
+        for(auto& feature : resolvedConfig[Features])
+        {
+            auto it = featureMap.find(feature);
+            if(it != featureMap.end())
+            {
+                flags += it->second;
+            }
+        }
+
+        return flags;
+    }
+
+    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::string& input, const std::string& output) const override
+    {
+        return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
+    }
+
+    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    {
+        if(project.type == StaticLib)
+        {
+            return "ar";
+        }
+        else
+        {
+            return "clang++";
+        }
+    }
+
+    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    {
+        std::string flags;
+
+        switch(*project.type)
+        {
+        default:
+            throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
+        case StaticLib:
+            flags += " -rcs";
+            break;
+        case Executable:
+        case SharedLib:
+            for(auto& path : resolvedConfig[Libs])
+            {
+                flags += " " + fs::proximate(path, root).string();
+            }
+
+            for(auto& framework : resolvedConfig[Frameworks])
+            {
+                flags += " -framework " + framework;
+            }
+
+            if(project.type == SharedLib)
+            {
+                auto features = resolvedConfig[Features];
+                if(std::find(features.begin(), features.end(), "bundle") != features.end())
+                {
+                    flags += " -bundle";
+                }
+                else
+                {
+                    flags += " -shared";
+                }
+            }
+            break;
+        }
+
+        return flags;
+    }
+
+    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::vector<std::string>& inputs, const std::string& output) const override
+    {
+        std::string flags;
+
+        switch(*project.type)
+        {
+        default:
+            throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
+        case StaticLib:
+            flags += " \"" + output + "\"";
+            for(auto& input : inputs)
+            {
+                flags += " \"" + input + "\"";
+            }
+            break;
+        case Executable:
+        case SharedLib:
+            flags += " -o \"" + output + "\"";
+            for(auto& input : inputs)
+            {
+                flags += " \"" + input + "\"";
+            }
+            break;
+        }
+
+        return flags;
+    }
+};
+
 class NinjaEmitter
 {
 public:
@@ -602,12 +750,6 @@ public:
 
         auto outputFile = targetPath / "build.ninja";
         NinjaEmitter ninja(outputFile);
-
-        // TODO: Proper toolchain config
-        ninja.rule("cpp", "clang++ $flags -MMD -MF ${out}.d -c -o $out $in", "${out}.d", "gcc");
-        ninja.rule("link", "clang++ $flags -o $out $in");
-        ninja.rule("lib", "ar -rcs $flags $out $in");
-        ninja.rule("copy", "cp $in $out");
 
         std::vector<Project*> orderedProjects;
         std::set<Project*> discoveredProjects;
@@ -629,26 +771,23 @@ public:
         }
 
         auto buildOutput = fs::path(BUILD_FILE).replace_extension("");
-        Project build("_build", Executable);
-        build[Features] += { "c++17", "optimize" };
-        build[IncludePaths] += BUILD_H_DIR;
-        build[OutputPath] = buildOutput;
-        build[Defines] += {
+        Project generator("_generator", Executable);
+        generator[Features] += { "c++17", "optimize" };
+        generator[IncludePaths] += BUILD_H_DIR;
+        generator[OutputPath] = buildOutput;
+        generator[Defines] += {
             "START_DIR=\\\"" START_DIR "\\\"",
             "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
             "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
             "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
             "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
         };
-        build[Files] += BUILD_FILE;
-        orderedProjects.push_back(&build);
+        generator[Files] += BUILD_FILE;
 
-        Project generate("_generate", Command);
-        generate.links += &build;
-        generate[Dependencies] += generatorDependencies;
-        generate[Dependencies] += buildOutput;
-        generate[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" " BUILD_ARGS, { outputFile }, START_DIR, true };
-        orderedProjects.push_back(&generate);
+        generatorDependencies += buildOutput;
+        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" " BUILD_ARGS, generatorDependencies, { outputFile }, START_DIR, {}, "Running build generator." };
+
+        orderedProjects.push_back(&generator);
 
         for(auto project : orderedProjects)
         {
@@ -670,121 +809,10 @@ private:
 
         return fs::proximate(path, root);
     }
-    
-    static std::string getCppFlags(const fs::path& root, OptionCollection& options)
-    {
-        std::string flags;
-
-        for(auto& define : options[Defines])
-        {
-            flags += " -D\"" + define + "\"";
-        }
-        for(auto& path : options[IncludePaths])
-        {
-            if(fs::path(path).is_absolute())
-            {
-                flags += " -I\"" + path.string() + "\"";
-            }
-            else
-            {
-                flags += " -I\"" + fixPath(path, root).string() + "\"";
-            }
-        }
-        if(options[Platform] == "x64")
-        {
-            flags += " -m64 -arch x86_64";
-        }
-        for(auto& feature : options[Features])
-        {
-            // TODO: These should probably be identifiers and not just literals
-            if(feature == "c++17")
-            {
-                flags += " -std=c++17";
-            }
-            else if(feature == "libc++")
-            {
-                flags += " -stdlib=libc++";
-            }
-            else if(feature == "optimize")
-            {
-                flags += " -O3";
-            }
-            else if(feature == "debuginfo")
-            {
-                flags += " -g";
-            }
-        }
-
-        for(auto& flag : options[ClangCppFlags])
-        {
-            flags += " " + flag;
-        }
-
-        return flags;
-    }
-
-    static std::string getLibFlags(const fs::path& root, OptionCollection& options)
-    {
-        return {};
-    }
-
-    static std::string getSharedLinkFlags(const fs::path& root, OptionCollection& options)
-    {
-        std::string flags;
-
-        for(auto& lib : options[Libs])
-        {
-            flags += " " + fixPath(lib, root).string();
-        }
-
-        for(auto& flag : options[ClangLinkFlags])
-        {
-            flags += " " + flag;
-        }
-
-        for(auto& framework : options[Frameworks])
-        {
-            flags += " -framework " + framework;
-        }
-
-        auto features = options[Features];
-        if(std::find(features.begin(), features.end(), "bundle") != features.end())
-        {
-            flags += " -bundle";
-        }
-        else
-        {
-            flags += " -shared";
-        }
-
-        return flags;
-    }
-
-    static std::string getAppLinkFlags(const fs::path& root, OptionCollection& options)
-    {
-        std::string flags;
-
-        for(auto& lib : options[Libs])
-        {
-            flags += " " + fixPath(lib, root).string();
-        }
-
-        for(auto& flag : options[ClangLinkFlags])
-        {
-            flags += " " + flag;
-        }
-
-        for(auto& framework : options[Frameworks])
-        {
-            flags += " -framework " + framework;
-        }
-        
-        return flags;
-    }
 
     static std::string emitProject(fs::path& root, Project& project, std::string_view config)
     {
-        static const Option<std::vector<fs::path>> LinkedOutputs{"_LinkedOutputs"};
+        Option<std::vector<std::string>> LinkedOutputs{"_Ninja_LinkedOutputs"};
 
         auto resolved = project.resolve(project.type, config);
 
@@ -813,165 +841,130 @@ private:
         auto ninjaName = project.name + ".ninja";
         NinjaEmitter ninja(root / ninjaName);
 
-        fs::path binDir = "bin";
-
-        std::string cppFlags = getCppFlags(root, resolved.options);
-
-        std::string mmFlags = cppFlags;
-
-        std::vector<std::string> implicitInputs;
-
-        for(auto& dependency : resolved[Dependencies])
+        auto& commands = resolved[Commands];
+        if(project.type == Command && commands.empty())
         {
-            if(fs::is_directory(dependency))
-            {
-                ninja.build({ fixPath(dependency, root) }, "phony", {});
-            }
-            implicitInputs.push_back(fixPath(dependency, root).string());
+            throw std::runtime_error("Command project '" + project.name + "' has no commands.");
         }
 
-        auto buildPch = resolved[BuildPch];
-        auto importPch = resolved[ImportPch];
+        std::vector<std::string> projectOutputs;
 
-        std::vector<fs::path> outputs;
-
-        if(!buildPch.empty())
+        if(project.type == Executable ||
+           project.type == SharedLib ||
+           project.type == StaticLib)
         {
-            std::string input = fixPath(buildPch, root);
-            std::string pch = fixPath(root / "pch" / buildPch, root).string() + ".pch";
-
-            ninja.build({ pch }, "cpp", { input }, {}, {}, {{"flags", "-x c++-header -Xclang -emit-pch " + cppFlags}});
-            if(!windows)
+            const ToolchainProvider* toolchain = resolved[Toolchain];
+            if(!toolchain)
             {
-                ninja.build({pch + "mm"}, "cpp", { input }, {}, {}, {{"flags", "-x objective-c++-header -Xclang -emit-pch " + mmFlags}});
-            }
-        }
-
-        if(!importPch.empty())
-        {
-            std::string pch = fixPath(root / "pch" / importPch, root).string() + ".pch";
-            cppFlags += " -Xclang -include-pch -Xclang " + pch;
-            mmFlags += " -Xclang -include-pch -Xclang " + pch + "mm";
-            implicitInputs.push_back(pch);
-            implicitInputs.push_back(pch + "mm");
-        }
-        
-        ninja.variable("cpp_flags", cppFlags);
-        ninja.variable("mm_flags", mmFlags);
-
-        std::vector<std::string> objs;
-        for(auto& file : resolved[Files])
-        {
-            auto ext = fs::path(file).extension().string();
-            auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
-            if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-
-            auto obj = (fs::path("obj") / project.name / file).string() + ".o";
-            ninja.build({ obj }, "cpp", { fixPath(file, root) }, implicitInputs, {}, {{"flags", ext == ".mm" ? "$mm_flags" : "$cpp_flags"}});
-            objs.push_back(obj);
-        }
-
-        if(project.type == StaticLib)
-        {
-            if(objs.empty())
-            {
-                throw std::runtime_error("Static Library project '" + project.name + "' has no input files.");
+                // TODO: Will be set up elsewhere later
+                static GccLikeToolchainProvider defaultToolchainProvider;
+                toolchain = &defaultToolchainProvider; 
             }
 
-            std::string libFlags = getLibFlags(root, resolved.options);
-            auto outputFile = project.calcOutputPath(resolved);
-            outputs.push_back(outputFile);
-            ninja.build({ fixPath(outputFile, root).string() }, "lib", objs, {}, {}, {{"flags", libFlags}});
+            auto compiler = toolchain->getCompiler(project, resolved, root);
+            auto compilerFlags = toolchain->getCommonCompilerFlags(project, resolved, root);
+            auto linker = toolchain->getLinker(project, resolved, root);
+            auto linkerFlags = toolchain->getCommonLinkerFlags(project, resolved, root);
 
-            project[Public / config][LinkedOutputs] += outputs;
-        }
-        else if(project.type == SharedLib)
-        {
-            for(auto& output : resolved[LinkedOutputs])
+            ninja.rule("compile", compiler + compilerFlags + " $flags", "$depfile", {}, "$desc");
+            ninja.rule("link", linker + linkerFlags + " $flags", {}, {}, "$desc");
+
+            std::vector<std::string> linkerInputs;
+            for(auto& file : resolved[Files])
             {
-                objs.push_back(fixPath(output, root));
+                auto ext = fs::path(file).extension().string();
+                auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
+                if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
+
+                auto inputStr = fs::proximate(file, root).string();
+                auto outputStr = (fs::path("obj") / (file.string() + ".o")).string();
+
+                auto description = "Compiling " + project.name + ": " + file.string();
+                auto flags = toolchain->getCompilerFlags(project, resolved, root, inputStr, outputStr);
+
+                ninja.build({ outputStr }, "compile", { inputStr }, {}, {}, {{"flags", flags}, {"desc", description}, {"depfile", outputStr + ".d"}});
+
+                linkerInputs.push_back(outputStr);
             }
 
-            if(objs.empty())
+            if(!linker.empty())
             {
-                throw std::runtime_error("Shared Library project '" + project.name + "' has no input files or libraries.");
-            }
-
-            std::string linkFlags = getSharedLinkFlags(root, resolved.options);
-            auto outputFile = project.calcOutputPath(resolved);
-            outputs.push_back(outputFile);
-            ninja.build({ fixPath(outputFile, root).string() }, "link", objs, {}, {}, {{"flags", linkFlags}});
-            
-            // TODO: Actually use this
-            project[config][BundleContents] += { fixPath(outputFile, root), fs::path("Contents/MacOS") / project.name };
-        }
-        else if(project.type == Executable)
-        {
-            for(auto& output : resolved[LinkedOutputs])
-            {
-                objs.push_back(fixPath(output, root));
-            }
-
-            if(objs.empty())
-            {
-                throw std::runtime_error("Executable project '" + project.name + "' has no input files or libraries.");
-            }
-
-            std::string linkFlags = getAppLinkFlags(root, resolved.options);
-            auto outputFile = project.calcOutputPath(resolved);
-            outputs.push_back(outputFile);
-            ninja.build({ fixPath(outputFile, root).string() }, "link", objs, {}, {}, {{"flags", linkFlags}});
-
-            // TODO: Actually use this
-            project[config][BundleContents] += { fixPath(outputFile, root), fs::path("Contents/MacOS") / project.name };
-        }
-        else if(project.type == Command)
-        {
-            auto& commands = resolved[Commands];
-            if(commands.empty())
-            {
-                throw std::runtime_error("Command project '" + project.name + "' has no commands.");
-            }
-
-            int index = 1;
-            for(auto& command : commands)
-            {
-                auto ruleName = "command_" + std::to_string(index++);
-                std::string prologue;
-                if(windows)
+                for(auto& output : resolved[LinkedOutputs])
                 {
-                    prologue += "cmd /c ";
-                }
-                fs::path cwd = command.workingDirectory;
-                if(cwd.empty())
-                {
-                    cwd = ".";
-                }
-                prologue += "cd \"" + fixPath(cwd, root).string() + "\" && ";
-                ninja.rule(ruleName, prologue + command.command);
-                std::vector<std::string> strOutputs;
-                strOutputs.reserve(command.outputs.size());
-                for(auto& path : command.outputs)
-                {
-                    strOutputs.push_back(fixPath(path, root).string());
+                    linkerInputs.push_back(output);
                 }
 
-                std::vector<std::pair<std::string_view, std::string_view>> variables;
-                if(command.generator)
+                auto output = project.calcOutputPath(resolved);
+                auto outputStr = fs::proximate(output, root).string();
+
+                auto description = "Linking " + project.name + ": " + output.string();
+                auto flags = toolchain->getLinkerFlags(project, resolved, root, linkerInputs, outputStr);
+
+                ninja.build({ outputStr }, "link", linkerInputs, {}, {}, {{"flags", flags}, {"desc", description}});
+
+                projectOutputs.push_back(outputStr);
+
+                if(project.type == StaticLib)
                 {
-                    variables.push_back({"generator", "1"});
+                    project[Public / config][LinkedOutputs] += outputStr;
                 }
-                ninja.build(strOutputs, ruleName, {}, implicitInputs, {}, variables);
             }
         }
 
-        std::vector<std::string> offsetOutputs;
-        for(auto& outputPath : outputs)
+        std::string prologue;
+        if(windows)
         {
-            offsetOutputs += fixPath(outputPath, root).string();
+            prologue += "cmd /c ";
+        }
+        prologue += "cd \"$cwd\" && ";
+        ninja.rule("command", prologue + "$cmd", "$depfile", "", "$desc");
+
+        for(auto& command : commands)
+        {
+            fs::path cwd = command.workingDirectory;
+            if(cwd.empty())
+            {
+                cwd = ".";
+            }
+            std::string cwdStr = fixPath(cwd, root).string();
+
+            std::vector<std::string> inputStrs;
+            inputStrs.reserve(command.inputs.size());
+            for(auto& path : command.inputs)
+            {
+                inputStrs.push_back(fixPath(path, root).string());
+            }
+
+            std::vector<std::string> outputStrs;
+            outputStrs.reserve(command.outputs.size());
+            for(auto& path : command.outputs)
+            {
+                outputStrs.push_back(fixPath(path, root).string());
+            }
+
+            projectOutputs += outputStrs;
+
+            std::string depfileStr;
+            if(!command.depFile.empty())
+            {
+                depfileStr = fixPath(command.depFile, root).string();
+            }
+
+            std::vector<std::pair<std::string_view, std::string_view>> variables;
+            variables.push_back({"cmd", command.command});
+            variables.push_back({"cwd", cwdStr});
+            variables.push_back({"depfile", depfileStr});
+            if(!command.description.empty())
+            {
+                variables.push_back({"desc", command.description});
+            }
+            ninja.build(outputStrs, "command", inputStrs, {}, {}, variables);
         }
 
-        ninja.build({ project.name }, "phony", offsetOutputs);
+        if(!projectOutputs.empty())
+        {
+            ninja.build({ project.name }, "phony", projectOutputs);
+        }
 
         return ninjaName;
     }
@@ -994,7 +987,7 @@ private:
         _stream << name << " = " << value << "\n";
     }
 
-    void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {})
+    void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {})
     {
         _stream << "rule " << name << "\n";
         _stream << "  command = " << command << "\n";
@@ -1005,6 +998,10 @@ private:
         if(!deps.empty())
         {
             _stream << "  deps = " << deps << "\n";
+        }
+        if(!description.empty())
+        {
+            _stream << "  description = " << description << "\n";
         }
         _stream << "\n";
     }
