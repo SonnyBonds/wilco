@@ -191,13 +191,13 @@ constexpr ConfigSelector operator/(std::string_view a, ConfigSelector b)
 
 struct ToolchainProvider
 {
-    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
-    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
-    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::string& input, const std::string& output) const = 0;
+    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
+    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
+    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::string& input, const std::string& output) const = 0;
 
-    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
-    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const = 0;
-    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::vector<std::string>& inputs, const std::string& output) const = 0;
+    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
+    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
+    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const = 0;
 };
 
 Option<std::string> Platform{"Platform"};
@@ -625,12 +625,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     {
     }
 
-    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override 
+    virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const override 
     {
         return compiler;
     }
 
-    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const override
     {
         std::string flags;
 
@@ -640,7 +640,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         }
         for(auto& path : resolvedConfig[IncludePaths])
         {
-            flags += " -I\"" + fs::proximate(path, root).string() + "\"";
+            flags += " -I\"" + (pathOffset / path).string() + "\"";
         }
         if(resolvedConfig[Platform] == "x64")
         {
@@ -665,12 +665,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::string& input, const std::string& output) const override
+    virtual std::string getCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::string& input, const std::string& output) const override
     {
         return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
     }
 
-    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const override
     {
         if(project.type == StaticLib)
         {
@@ -682,7 +682,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         }
     }
 
-    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
+    virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const override
     {
         std::string flags;
 
@@ -697,7 +697,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         case SharedLib:
             for(auto& path : resolvedConfig[Libs])
             {
-                flags += " " + fs::proximate(path, root).string();
+                flags += " " + (pathOffset / path).string();
             }
 
             for(auto& framework : resolvedConfig[Frameworks])
@@ -723,7 +723,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root, const std::vector<std::string>& inputs, const std::string& output) const override
+    virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const override
     {
         std::string flags;
 
@@ -811,16 +811,6 @@ public:
     }
 
 private:
-    static fs::path fixPath(fs::path path, fs::path root)
-    {
-        if(path.is_absolute())
-        {
-            return path;
-        }
-
-        return fs::proximate(path, root);
-    }
-
     static std::string emitProject(fs::path& root, Project& project, std::string_view config)
     {
         Option<std::vector<std::string>> LinkedOutputs{"_Ninja_LinkedOutputs"};
@@ -852,6 +842,8 @@ private:
         auto ninjaName = project.name + ".ninja";
         NinjaEmitter ninja(root / ninjaName);
 
+        fs::path pathOffset = fs::proximate(fs::current_path(), root);
+
         auto& commands = resolved[Commands];
         if(project.type == Command && commands.empty())
         {
@@ -872,10 +864,10 @@ private:
                 toolchain = &defaultToolchainProvider; 
             }
 
-            auto compiler = toolchain->getCompiler(project, resolved, root);
-            auto compilerFlags = toolchain->getCommonCompilerFlags(project, resolved, root);
-            auto linker = toolchain->getLinker(project, resolved, root);
-            auto linkerFlags = toolchain->getCommonLinkerFlags(project, resolved, root);
+            auto compiler = toolchain->getCompiler(project, resolved, pathOffset);
+            auto compilerFlags = toolchain->getCommonCompilerFlags(project, resolved, pathOffset);
+            auto linker = toolchain->getLinker(project, resolved, pathOffset);
+            auto linkerFlags = toolchain->getCommonLinkerFlags(project, resolved, pathOffset);
 
             ninja.rule("compile", compiler + compilerFlags + " $flags", "$depfile", {}, "$desc");
             ninja.rule("link", linker + linkerFlags + " $flags", {}, {}, "$desc");
@@ -887,11 +879,11 @@ private:
                 auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
                 if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
 
-                auto inputStr = fs::proximate(file, root).string();
+                auto inputStr = (pathOffset / file).string();
                 auto outputStr = (fs::path("obj") / (file.string() + ".o")).string();
 
                 auto description = "Compiling " + project.name + ": " + file.string();
-                auto flags = toolchain->getCompilerFlags(project, resolved, root, inputStr, outputStr);
+                auto flags = toolchain->getCompilerFlags(project, resolved, pathOffset, inputStr, outputStr);
 
                 ninja.build({ outputStr }, "compile", { inputStr }, {}, {}, {{"flags", flags}, {"desc", description}, {"depfile", outputStr + ".d"}});
 
@@ -906,10 +898,10 @@ private:
                 }
 
                 auto output = project.calcOutputPath(resolved);
-                auto outputStr = fs::proximate(output, root).string();
+                auto outputStr = (pathOffset / output).string();
 
                 auto description = "Linking " + project.name + ": " + output.string();
-                auto flags = toolchain->getLinkerFlags(project, resolved, root, linkerInputs, outputStr);
+                auto flags = toolchain->getLinkerFlags(project, resolved, pathOffset, linkerInputs, outputStr);
 
                 ninja.build({ outputStr }, "link", linkerInputs, {}, {}, {{"flags", flags}, {"desc", description}});
 
@@ -937,20 +929,20 @@ private:
             {
                 cwd = ".";
             }
-            std::string cwdStr = fixPath(cwd, root).string();
+            std::string cwdStr = (pathOffset / cwd).string();
 
             std::vector<std::string> inputStrs;
             inputStrs.reserve(command.inputs.size());
             for(auto& path : command.inputs)
             {
-                inputStrs.push_back(fixPath(path, root).string());
+                inputStrs.push_back((pathOffset / path).string());
             }
 
             std::vector<std::string> outputStrs;
             outputStrs.reserve(command.outputs.size());
             for(auto& path : command.outputs)
             {
-                outputStrs.push_back(fixPath(path, root).string());
+                outputStrs.push_back((pathOffset / path).string());
             }
 
             projectOutputs += outputStrs;
@@ -958,7 +950,7 @@ private:
             std::string depfileStr;
             if(!command.depFile.empty())
             {
-                depfileStr = fixPath(command.depFile, root).string();
+                depfileStr = (pathOffset / command.depFile).string();
             }
 
             std::vector<std::pair<std::string_view, std::string_view>> variables;
