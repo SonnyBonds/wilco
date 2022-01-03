@@ -614,9 +614,20 @@ private:
 
 struct GccLikeToolchainProvider : public ToolchainProvider
 {
+    std::string compiler;
+    std::string linker;
+    std::string archiver;
+
+    GccLikeToolchainProvider(std::string compiler, std::string linker, std::string archiver)
+        : compiler(compiler)
+        , linker(linker)
+        , archiver(archiver)
+    {
+    }
+
     virtual std::string getCompiler(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override 
     {
-        return "clang++";
+        return compiler;
     }
 
     virtual std::string getCommonCompilerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path root) const override
@@ -663,11 +674,11 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     {
         if(project.type == StaticLib)
         {
-            return "ar";
+            return archiver;
         }
         else
         {
-            return "clang++";
+            return linker;
         }
     }
 
@@ -857,7 +868,7 @@ private:
             if(!toolchain)
             {
                 // TODO: Will be set up elsewhere later
-                static GccLikeToolchainProvider defaultToolchainProvider;
+                static GccLikeToolchainProvider defaultToolchainProvider("g++", "g++", "ar");
                 toolchain = &defaultToolchainProvider; 
             }
 
