@@ -221,94 +221,35 @@ Option<std::vector<PostProcessor>> PostProcess{"PostProcess"};
 Option<std::vector<CommandEntry>> Commands{"Commands"};
 Option<ToolchainProvider*> Toolchain{"Toolchain"};
 
-// TODO: This whole thing can probably be templated and move better but I got lost in overload ambiguities and whatnot
-
-std::vector<std::string>& operator +=(std::vector<std::string>& s, std::string other) {
+template<typename T>
+std::vector<T>& operator +=(std::vector<T>& s, T other) {
     s.push_back(std::move(other));
     return s;
 }
-std::vector<std::string>& operator +=(std::vector<std::string>& s, std::initializer_list<std::string> other) {
+template<typename T>
+std::vector<T>& operator +=(std::vector<T>& s, std::initializer_list<T> other) {
     s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
     return s;
 }
-std::vector<std::string>& operator +=(std::vector<std::string>& s, std::vector<std::string> other) {
+template<typename T>
+std::vector<T>& operator +=(std::vector<T>& s, std::vector<T> other) {
     s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
     return s;
 }
 
-
-std::vector<Project*>& operator +=(std::vector<Project*>& s, Project* other) {
-    s.push_back(other);
-    return s;
-}
-std::vector<Project*>& operator +=(std::vector<Project*>& s, std::initializer_list<Project*> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-std::vector<Project*>& operator +=(std::vector<Project*>& s, std::vector<Project*> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-
-
-std::vector<PostProcessor>& operator +=(std::vector<PostProcessor>& s, PostProcessor other) {
-    s.push_back(other);
-    return s;
-}
-std::vector<PostProcessor>& operator +=(std::vector<PostProcessor>& s, std::initializer_list<PostProcessor> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-std::vector<PostProcessor>& operator +=(std::vector<PostProcessor>& s, std::vector<PostProcessor> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-
-
-std::vector<fs::path>& operator +=(std::vector<fs::path>& s, fs::path other) {
+template<typename T, typename U>
+std::vector<T>& operator +=(std::vector<T>& s, U other) {
     s.push_back(std::move(other));
     return s;
 }
-std::vector<fs::path>& operator +=(std::vector<fs::path>& s, std::initializer_list<fs::path> other) {
+template<typename T, typename U>
+std::vector<T>& operator +=(std::vector<T>& s, std::initializer_list<U> other) {
     s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
     return s;
 }
-std::vector<fs::path>& operator +=(std::vector<fs::path>& s, std::vector<fs::path> other) {
+template<typename T, typename U>
+std::vector<T>& operator +=(std::vector<T>& s, std::vector<U> other) {
     s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
-    return s;
-}
-std::vector<fs::path>& operator +=(std::vector<fs::path>& s, std::initializer_list<std::string> other) {
-    s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
-    return s;
-}
-std::vector<fs::path>& operator +=(std::vector<fs::path>& s, std::vector<std::string> other) {
-    s.insert(s.end(), std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
-    return s;
-}
-
-std::vector<BundleEntry>& operator +=(std::vector<BundleEntry>& s, BundleEntry other) {
-    s.push_back(other);
-    return s;
-}
-std::vector<BundleEntry>& operator +=(std::vector<BundleEntry>& s, std::initializer_list<BundleEntry> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-std::vector<BundleEntry>& operator +=(std::vector<BundleEntry>& s, std::vector<BundleEntry> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-
-std::vector<CommandEntry>& operator +=(std::vector<CommandEntry>& s, CommandEntry other) {
-    s.push_back(other);
-    return s;
-}
-std::vector<CommandEntry>& operator +=(std::vector<CommandEntry>& s, std::initializer_list<CommandEntry> other) {
-    s.insert(s.end(), other.begin(), other.end());
-    return s;
-}
-std::vector<CommandEntry>& operator +=(std::vector<CommandEntry>& s, std::vector<CommandEntry> other) {
-    s.insert(s.end(), other.begin(), other.end());
     return s;
 }
 
