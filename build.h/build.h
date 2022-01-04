@@ -31,6 +31,44 @@ struct ProjectConfig;
 using PostProcessor = void(*)(Project& project, ProjectConfig& resolvedConfig);
 
 
+// Launders strings into directly comparable const char* pointers
+struct StringPool
+{
+    static const char* get(const char* str)
+    {
+        static std::unordered_set<std::string> storage;
+        return storage.insert(str).first->c_str();
+    }
+
+    static const char* get(const std::string& string)
+    {
+        return get(string.c_str());
+    }
+};
+
+struct Id
+{
+    const char* const id;
+
+    Id(const char* id) : id(StringPool::get(id)) {}
+    Id(const std::string& id) : id(StringPool::get(id)) {}
+
+    operator const char*() const
+    {
+        return id;
+    }
+};
+
+struct NamedIdentifier
+{
+    const Id name;
+
+    operator const char*() const
+    {
+        return name;
+    }
+};
+
 struct BundleEntry
 {
     fs::path source;
@@ -112,15 +150,9 @@ enum ProjectType
 };
 
 template<typename T>
-struct Option
+struct Option : public NamedIdentifier
 {
     typedef T Type;
-    const char* id;
-
-    bool operator <(const Option<T>& other) const
-    {
-        return id < other.id;
-    }
 };
 
 enum Transitivity
@@ -391,7 +423,7 @@ struct OptionCollection
     template<typename T>
     T& operator[](Option<T> option)
     {
-        return _storage[option.id].template get<T>();
+        return _storage[option].template get<T>();
     }
 
     void combine(OptionCollection& other)
