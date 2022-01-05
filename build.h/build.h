@@ -230,6 +230,8 @@ struct ToolchainProvider
     virtual std::string getLinker(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
     virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
     virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const = 0;
+
+    virtual std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, std::string_view config, const fs::path& workingDir, const fs::path& dataDir) const = 0;
 };
 
 Option<std::string> Platform{"Platform"};
@@ -723,6 +725,85 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         return flags;
     }
+
+    std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, std::string_view config, const fs::path& workingDir, const fs::path& dataDir) const override
+    {
+        Option<std::vector<fs::path>> LinkedOutputs{"_LinkedOutputs"};
+        fs::path pathOffset = fs::proximate(fs::current_path(), workingDir);
+
+        if(project.type != Executable &&
+           project.type != SharedLib &&
+           project.type != StaticLib)
+        {
+            return {};
+        }
+
+        std::vector<fs::path> outputs;
+
+        auto compiler = getCompiler(project, resolvedConfig, pathOffset);
+        auto commonCompilerFlags = getCommonCompilerFlags(project, resolvedConfig, pathOffset);
+        auto linker = getLinker(project, resolvedConfig, pathOffset);
+        auto commonLinkerFlags = getCommonLinkerFlags(project, resolvedConfig, pathOffset);
+
+        std::vector<fs::path> linkerInputs;
+        for(auto& input : resolvedConfig[Files])
+        {
+            auto ext = fs::path(input).extension().string();
+            auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
+            if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
+
+            auto inputStr = (pathOffset / input).string();
+            auto output = dataDir / fs::path("obj") / project.name / (input.string() + ".o");
+            auto outputStr = (pathOffset / output).string();
+
+            CommandEntry command;
+            command.command = compiler + commonCompilerFlags + getCompilerFlags(project, resolvedConfig, pathOffset, inputStr, outputStr);
+            command.inputs = { input };
+            command.outputs = { output };
+            command.workingDirectory = workingDir;
+            command.depFile = output.string() + ".d";
+            command.description = "Compiling " + project.name + ": " + input.string();
+            resolvedConfig[Commands] += std::move(command);
+
+            linkerInputs.push_back(output);
+        }
+
+        if(!linker.empty())
+        {
+            for(auto& output : resolvedConfig[LinkedOutputs])
+            {
+                linkerInputs.push_back(output);
+            }
+
+            std::vector<std::string> linkerInputStrs;
+            linkerInputStrs.reserve(linkerInputs.size());
+            for(auto& input : linkerInputs)
+            {
+                linkerInputStrs.push_back((pathOffset / input).string());
+            }
+
+            auto output = project.calcOutputPath(resolvedConfig);
+            auto outputStr = (pathOffset / output).string();
+
+            CommandEntry command;
+            command.command = linker + commonLinkerFlags + getLinkerFlags(project, resolvedConfig, pathOffset, linkerInputStrs, outputStr);
+            command.inputs = std::move(linkerInputs);
+            command.outputs = { output };
+            command.workingDirectory = workingDir;
+            command.depFile = output.string() + ".d";
+            command.description = "Linking " + project.name + ": " + output.string();
+            resolvedConfig[Commands] += std::move(command);
+
+            outputs.push_back(output);
+
+            if(project.type == StaticLib)
+            {
+                project[Public / config][LinkedOutputs] += output;
+            }
+        }
+
+        return outputs;
+    }
 };
 
 class NinjaEmitter
@@ -786,8 +867,6 @@ public:
 private:
     static std::string emitProject(fs::path& root, Project& project, std::string_view config)
     {
-        Option<std::vector<std::string>> LinkedOutputs{"_Ninja_LinkedOutputs"};
-
         auto resolved = project.resolve(project.type, config);
 
         for(auto& processor : resolved[PostProcess])
@@ -825,66 +904,18 @@ private:
 
         std::vector<std::string> projectOutputs;
 
-        if(project.type == Executable ||
-           project.type == SharedLib ||
-           project.type == StaticLib)
+        const ToolchainProvider* toolchain = resolved[Toolchain];
+        if(!toolchain)
         {
-            const ToolchainProvider* toolchain = resolved[Toolchain];
-            if(!toolchain)
-            {
-                // TODO: Will be set up elsewhere later
-                static GccLikeToolchainProvider defaultToolchainProvider("g++", "g++", "ar");
-                toolchain = &defaultToolchainProvider; 
-            }
+            // TODO: Will be set up elsewhere later
+            static GccLikeToolchainProvider defaultToolchainProvider("g++", "g++", "ar");
+            toolchain = &defaultToolchainProvider; 
+        }
 
-            auto compiler = toolchain->getCompiler(project, resolved, pathOffset);
-            auto compilerFlags = toolchain->getCommonCompilerFlags(project, resolved, pathOffset);
-            auto linker = toolchain->getLinker(project, resolved, pathOffset);
-            auto linkerFlags = toolchain->getCommonLinkerFlags(project, resolved, pathOffset);
-
-            ninja.rule("compile", compiler + compilerFlags + " $flags", "$depfile", {}, "$desc");
-            ninja.rule("link", linker + linkerFlags + " $flags", {}, {}, "$desc");
-
-            std::vector<std::string> linkerInputs;
-            for(auto& file : resolved[Files])
-            {
-                auto ext = fs::path(file).extension().string();
-                auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
-                if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-
-                auto inputStr = (pathOffset / file).string();
-                auto outputStr = (fs::path("obj") / (file.string() + ".o")).string();
-
-                auto description = "Compiling " + project.name + ": " + file.string();
-                auto flags = toolchain->getCompilerFlags(project, resolved, pathOffset, inputStr, outputStr);
-
-                ninja.build({ outputStr }, "compile", { inputStr }, {}, {}, {{"flags", flags}, {"desc", description}, {"depfile", outputStr + ".d"}});
-
-                linkerInputs.push_back(outputStr);
-            }
-
-            if(!linker.empty())
-            {
-                for(auto& output : resolved[LinkedOutputs])
-                {
-                    linkerInputs.push_back(output);
-                }
-
-                auto output = project.calcOutputPath(resolved);
-                auto outputStr = (pathOffset / output).string();
-
-                auto description = "Linking " + project.name + ": " + output.string();
-                auto flags = toolchain->getLinkerFlags(project, resolved, pathOffset, linkerInputs, outputStr);
-
-                ninja.build({ outputStr }, "link", linkerInputs, {}, {}, {{"flags", flags}, {"desc", description}});
-
-                projectOutputs.push_back(outputStr);
-
-                if(project.type == StaticLib)
-                {
-                    project[Public / config][LinkedOutputs] += outputStr;
-                }
-            }
+        auto toolchainOutputs = toolchain->process(project, resolved, config, root, root);
+        for(auto& output : toolchainOutputs)
+        {
+            projectOutputs.push_back((pathOffset / output).string());
         }
 
         std::string prologue;
