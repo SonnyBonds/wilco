@@ -477,6 +477,12 @@ struct ProjectConfig
     {
         return options[option];
     }
+
+    ProjectConfig& operator +=(const OptionCollection& collection)
+    {
+        options.combine(collection);
+        return *this;
+    }
 };
 
 struct Project : public ProjectConfig
