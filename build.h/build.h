@@ -152,7 +152,7 @@ enum ProjectType
 template<typename T>
 struct Option : public NamedIdentifier
 {
-    typedef T Type;
+    using ValueType = T;
 };
 
 enum Transitivity
@@ -307,7 +307,7 @@ struct OptionHash<fs::path>
 
 struct OptionStorage
 {
-    typedef std::unique_ptr<void, void(*)(const void*)> Data;
+    using Data = std::unique_ptr<void, void(*)(const void*)>;
 
     OptionStorage()
         : _data{nullptr, &OptionStorage::nullDeleter}
