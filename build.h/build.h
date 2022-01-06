@@ -315,7 +315,18 @@ struct OptionStorage
     }
 
     template<typename T> 
-    T& get()
+    const T& get() const
+    {
+        if(!_data)
+        {
+            static T empty;
+            return empty;
+        }
+        return *static_cast<T*>(_data.get());
+    }
+
+    template<typename T> 
+    T& getOrAdd()
     {
         if(!_data)
         {
@@ -325,17 +336,17 @@ struct OptionStorage
             };
             _data = Data(new T{}, deleter);
 
-            static auto cloner = [](OptionStorage& b)
+            static auto cloner = [](const OptionStorage& b)
             {
                 OptionStorage clone;
-                clone.get<T>() = b.get<T>();
+                clone.getOrAdd<T>() = b.get<T>();
                 return clone;
             };
             _cloner = cloner;
 
-            static auto combiner = [](OptionStorage& a, OptionStorage& b)
+            static auto combiner = [](OptionStorage& a, const OptionStorage& b)
             {
-                combineValues(a.get<T>(), b.get<T>());
+                combineValues(a.getOrAdd<T>(), b.get<T>());
             };
             _combiner = combiner;
 
@@ -348,7 +359,7 @@ struct OptionStorage
         return *static_cast<T*>(_data.get());
     }
 
-    void combine(OptionStorage& other)
+    void combine(const OptionStorage& other)
     {
         _combiner(*this, other);
     }
@@ -358,7 +369,7 @@ struct OptionStorage
         _deduplicator(*this);
     }
 
-    OptionStorage clone()
+    OptionStorage clone() const
     {
         return _cloner(*this);
     }
@@ -414,8 +425,8 @@ private:
 
     static void nullDeleter(const void*) {}
 
-    std::function<OptionStorage(OptionStorage&)> _cloner;
-    std::function<void(OptionStorage&, OptionStorage&)> _combiner;
+    std::function<OptionStorage(const OptionStorage&)> _cloner;
+    std::function<void(OptionStorage&, const OptionStorage&)> _combiner;
     std::function<void(OptionStorage&)> _deduplicator;
     Data _data;
 };
@@ -425,10 +436,10 @@ struct OptionCollection
     template<typename T>
     T& operator[](Option<T> option)
     {
-        return _storage[option].template get<T>();
+        return _storage[option].template getOrAdd<T>();
     }
 
-    void combine(OptionCollection& other)
+    void combine(const OptionCollection& other)
     {
         for(auto& entry : other._storage)
         {
