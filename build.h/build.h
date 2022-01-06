@@ -237,7 +237,7 @@ struct ToolchainProvider
 Option<std::string> Platform{"Platform"};
 Option<std::vector<fs::path>> IncludePaths{"IncludePaths"};
 Option<std::vector<fs::path>> Files{"Files"};
-Option<std::vector<fs::path>> Dependencies{"Dependencies"};
+Option<std::vector<fs::path>> GeneratorDependencies{"GeneratorDependencies"};
 Option<std::vector<fs::path>> Libs{"Libs"};
 Option<std::vector<std::string>> Defines{"Defines"};
 Option<std::vector<std::string>> Features{"Features"};
@@ -843,12 +843,10 @@ public:
         std::vector<fs::path> generatorDependencies;
         for(auto& project : orderedProjects)
         {
-            for(auto& file : (*project)[Files])
+            generatorDependencies += (*project)[GeneratorDependencies];
+            for(auto& entry : project->configs)
             {
-                if(fs::is_directory(file))
-                {
-                    generatorDependencies.push_back(file);
-                }
+                generatorDependencies += (*project)[GeneratorDependencies];
             }
         }
 
@@ -1396,24 +1394,26 @@ std::vector<std::string> parsePositionalArguments(const std::vector<std::string>
     return result;
 }
 
-std::vector<fs::path> sourceList(fs::path path, bool recurse = true)
+OptionCollection sourceList(fs::path path, bool recurse = true)
 {
-    std::vector<fs::path> result;
     if(!fs::exists(path) || !fs::is_directory(path))
     {
         throw std::runtime_error("Source directory '" + path.string() + "' does not exist.");
-        return {};
     }
 
+    OptionCollection result;
+    auto& files = result[Files];
+    auto generatorDeps = result[GeneratorDependencies];
+
     // Add the directory as a dependency to rescan if the contents change
-    result.push_back(path);
+    generatorDeps += path;
 
     for(auto entry : fs::recursive_directory_iterator(path))
     {
         if(entry.is_directory())
         {
             // Add subdirectories as dependencies to rescan if the contents change
-            result.push_back(path);
+            generatorDeps += path;
             continue;
         }
         if(!entry.is_regular_file()) continue;
@@ -1422,7 +1422,7 @@ std::vector<fs::path> sourceList(fs::path path, bool recurse = true)
         auto ext = entry.path().extension().string();
         if(std::find(exts.begin(), exts.end(), ext) != exts.end())
         {
-            result += entry.path();
+            files += entry.path();
         }
     }
 

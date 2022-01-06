@@ -13,12 +13,12 @@ void generate(fs::path startPath, std::vector<std::string> args)
 
     Project helloPrinter("HelloLibrary", StaticLib);
     helloPrinter.links = { &config };
-    helloPrinter[Files] += sourceList("hellolib");
+    helloPrinter += sourceList("hellolib");
     helloPrinter[Public][IncludePaths] += "hellolib";
 
     Project hello("Hello", Executable);
     hello.links = { &helloPrinter };
-    hello[Files] += sourceList("helloapp");
+    hello += sourceList("helloapp");
 
     parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
 }
