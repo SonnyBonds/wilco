@@ -755,12 +755,40 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             return {};
         }
 
-        std::vector<fs::path> outputs;
-
         auto compiler = getCompiler(project, resolvedConfig, pathOffset);
         auto commonCompilerFlags = getCommonCompilerFlags(project, resolvedConfig, pathOffset);
         auto linker = getLinker(project, resolvedConfig, pathOffset);
         auto commonLinkerFlags = getCommonLinkerFlags(project, resolvedConfig, pathOffset);
+
+        auto buildPch = resolvedConfig[BuildPch];
+        auto importPch = resolvedConfig[ImportPch];
+
+        if(!buildPch.empty())
+        {
+            auto input = buildPch;
+            auto inputStr = (pathOffset / input).string();
+            auto output = dataDir / fs::path("pch") / (input.string() + ".pch");
+            auto outputStr = (pathOffset / output).string();
+
+            CommandEntry command;
+            command.command = compiler + commonCompilerFlags + " -x c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedConfig, pathOffset, inputStr, outputStr);
+            command.inputs = { input };
+            command.outputs = { output };
+            command.workingDirectory = workingDir;
+            command.depFile = output.string() + ".d";
+            command.description = "Compiling " + project.name + " PCH: " + input.string();
+            resolvedConfig[Commands] += std::move(command);
+        }
+
+        std::vector<fs::path> pchInputs;
+        if(!importPch.empty())
+        {
+            auto input = dataDir / fs::path("pch") / (importPch.string() + ".pch");
+            auto inputStr = (pathOffset / input).string();
+            commonCompilerFlags += " -Xclang -include-pch -Xclang " + inputStr;
+
+            pchInputs.push_back(input);
+        }
 
         std::vector<fs::path> linkerInputs;
         for(auto& input : resolvedConfig[Files])
@@ -776,6 +804,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             CommandEntry command;
             command.command = compiler + commonCompilerFlags + getCompilerFlags(project, resolvedConfig, pathOffset, inputStr, outputStr);
             command.inputs = { input };
+            command.inputs += pchInputs;
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.depFile = output.string() + ".d";
@@ -784,6 +813,8 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
             linkerInputs.push_back(output);
         }
+
+        std::vector<fs::path> outputs;
 
         if(!linker.empty())
         {
