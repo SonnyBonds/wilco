@@ -1171,6 +1171,13 @@ std::string readFile(fs::path path)
     return buffer.str();
 }
 
+void writeFile(fs::path path, const std::string& data)
+{
+    fs::create_directories(path.parent_path());
+    std::ofstream stream(path);
+    stream.write(data.data(), data.size());
+}
+
 std::pair<std::string, std::string> splitString(std::string_view str, char delimiter)
 {
     auto pos = str.find(delimiter);
@@ -1346,6 +1353,21 @@ namespace commands
     }
 }
 
+namespace util
+{
+    std::string generatePlist(Project& project, ProjectConfig& resolvedConfig)
+    {
+        std::string result;
+        result += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        result += "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n";
+        result += "<plist version=\"1.0\">\n";
+        result += "<dict>\n";
+        result += "</dict>\n";
+        result += "</plist>\n";
+        return result;
+    }
+}
+
 namespace postprocess
 {
     PostProcessor bundle(std::string bundleExtension = ".bundle")
@@ -1358,7 +1380,12 @@ namespace postprocess
             auto bundleBinary = projectOutput.filename();
             bundleBinary.replace_extension("");
 
-            resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents" / "MacOS" / bundleBinary);
+            auto dataDir = resolvedConfig[DataDir];
+            auto plistPath = dataDir / project.name / "Info.plist";
+            writeFile(plistPath, util::generatePlist(project, resolvedConfig));
+
+            resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
+            resolvedConfig[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
         };
 
         PostProcessor postProcessor;
