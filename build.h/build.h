@@ -256,7 +256,7 @@ struct ToolchainProvider
     virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
     virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const = 0;
 
-    virtual std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir, const fs::path& dataDir) const = 0;
+    virtual std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir) const = 0;
 };
 
 Option<std::string> Platform{"Platform"};
@@ -279,6 +279,7 @@ Option<fs::path> ImportPch{"ImportPch"};
 Option<std::vector<PostProcessor>> PostProcess{"PostProcess"};
 Option<std::vector<CommandEntry>> Commands{"Commands"};
 Option<ToolchainProvider*> Toolchain{"Toolchain"};
+Option<fs::path> DataDir{"DataDir"};
 
 template<typename T>
 std::vector<T>& operator +=(std::vector<T>& s, T other) {
@@ -768,7 +769,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir, const fs::path& dataDir) const override
+    std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir) const override
     {
         Option<std::vector<fs::path>> LinkedOutputs{"_LinkedOutputs"};
         fs::path pathOffset = fs::proximate(fs::current_path(), workingDir);
@@ -779,6 +780,8 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         {
             return {};
         }
+
+        auto dataDir = resolvedConfig[DataDir];
 
         auto compiler = getCompiler(project, resolvedConfig, pathOffset);
         auto commonCompilerFlags = getCommonCompilerFlags(project, resolvedConfig, pathOffset);
@@ -938,6 +941,7 @@ private:
     static std::string emitProject(fs::path& root, Project& project, StringId config)
     {
         auto resolved = project.resolve(project.type, config);
+        resolved[DataDir] = root;
 
         for(auto& processor : resolved[PostProcess])
         {
@@ -982,7 +986,7 @@ private:
             toolchain = &defaultToolchainProvider; 
         }
 
-        auto toolchainOutputs = toolchain->process(project, resolved, config, root, root);
+        auto toolchainOutputs = toolchain->process(project, resolved, config, root);
         for(auto& output : toolchainOutputs)
         {
             projectOutputs.push_back((pathOffset / output).string());
