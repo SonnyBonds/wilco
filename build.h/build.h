@@ -1323,3 +1323,46 @@ int main(int argc, const char** argv)
         return -1;
     }
 }
+
+namespace commands
+{
+    CommandEntry copy(fs::path from, fs::path to)
+    {
+        CommandEntry commandEntry;
+        commandEntry.inputs = { from };
+        commandEntry.outputs = { to };
+        commandEntry.command = "mkdir -p \"" + from.parent_path().string() + "\" && cp \"" + from.string() + "\" \"" + to.string() + "\"";
+        commandEntry.description += "Copying '" + from.string() + "' -> '" + to.string() + "'";
+        return commandEntry;
+    }
+
+    CommandEntry mkdir(fs::path dir)
+    {
+        CommandEntry commandEntry;
+        commandEntry.outputs = { dir };
+        commandEntry.command = "mkdir -p \"" + dir.string() + "\"";
+        commandEntry.description += "Creating directory '" + dir.string() + "'";
+        return commandEntry;
+    }
+}
+
+namespace postprocess
+{
+    PostProcessor bundle(std::string bundleExtension = ".bundle")
+    {
+        auto bundleFunc = [bundleExtension](Project& project, ProjectConfig& resolvedConfig)
+        {
+            auto projectOutput = project.calcOutputPath(resolvedConfig);
+            auto bundleOutput = projectOutput;
+            bundleOutput.replace_extension(bundleExtension);
+            auto bundleBinary = projectOutput.filename();
+            bundleBinary.replace_extension("");
+
+            resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents" / "MacOS" / bundleBinary);
+        };
+
+        PostProcessor postProcessor;
+        postProcessor.func = std::function(bundleFunc);
+        return postProcessor;
+    }
+}

@@ -19,6 +19,7 @@ void generate(fs::path startPath, std::vector<std::string> args)
     Project hello("Hello", Executable);
     hello.links = { &helloPrinter };
     hello += sourceList("helloapp");
+    hello[PostProcess] += postprocess::bundle();
 
     parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
 }
