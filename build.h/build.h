@@ -28,7 +28,36 @@ static bool windows = false;
 struct Project;
 struct ProjectConfig;
 
-using PostProcessor = void(*)(Project& project, ProjectConfig& resolvedConfig);
+// UINT_MAX ids ought to be enough for anybody...
+using Id = unsigned int;
+
+static Id getUniqueId()
+{
+    static std::atomic_uint idCounter = 0;
+    return idCounter.fetch_add(1);
+}
+
+struct PostProcessor
+{
+    std::function<void(Project& project, ProjectConfig& resolvedConfig)> func;
+
+    void operator ()(Project& project, ProjectConfig& resolvedConfig)
+    {
+        func(project, resolvedConfig);
+    }
+
+    bool operator ==(const PostProcessor& other) const
+    {
+        return id == other.id;
+    }
+
+    bool operator <(const PostProcessor& other) const
+    {
+        return id < other.id;
+    }
+private:
+    Id id = getUniqueId();
+};
 
 // Launders strings into directly comparable pointers
 struct StringId
