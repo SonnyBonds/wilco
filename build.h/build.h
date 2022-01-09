@@ -407,6 +407,12 @@ private:
         a = b;
     }
 
+    template<typename U, typename V>
+    static void combineValues(std::map<U, V>& a, std::map<U, V> b)
+    {
+        a.merge(b);
+    }
+
     template<typename U>
     static void combineValues(std::vector<U>& a, std::vector<U> b)
     {
