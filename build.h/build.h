@@ -101,39 +101,6 @@ private:
     }
 };
 
-struct BundleEntry
-{
-    fs::path source;
-    fs::path target;
-
-    bool operator <(const BundleEntry& other) const
-    {
-        {
-            int v = source.compare(other.source);
-            if(v != 0) return v < 0;
-        }
-
-        return target < other.target;
-    }
-
-    bool operator ==(const BundleEntry& other) const
-    {
-        return source == other.source &&
-               target == other.target;
-    }
-};
-
-template<>
-struct std::hash<BundleEntry>
-{
-    std::size_t operator()(BundleEntry const& entry) const
-    {
-        std::size_t h = std::hash<std::string>{}(entry.source);
-        h = h ^ (std::hash<std::string>{}(entry.target) << 1);
-        return h;
-    }
-};
-
 struct CommandEntry
 {
     std::string command;
@@ -267,7 +234,6 @@ Option<std::vector<fs::path>> Libs{"Libs"};
 Option<std::vector<std::string>> Defines{"Defines"};
 Option<std::vector<std::string>> Features{"Features"};
 Option<std::vector<std::string>> Frameworks{"Frameworks"};
-Option<std::vector<BundleEntry>> BundleContents{"BundleContents"};
 Option<fs::path> OutputDir{"OutputDir"};
 Option<std::string> OutputStem{"OutputStem"};
 Option<std::string> OutputExtension{"OutputExtension"};
@@ -1356,46 +1322,5 @@ namespace commands
         commandEntry.command = "mkdir -p \"" + dir.string() + "\"";
         commandEntry.description += "Creating directory '" + dir.string() + "'";
         return commandEntry;
-    }
-}
-
-namespace util
-{
-    std::string generatePlist(Project& project, ProjectConfig& resolvedConfig)
-    {
-        std::string result;
-        result += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        result += "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n";
-        result += "<plist version=\"1.0\">\n";
-        result += "<dict>\n";
-        result += "</dict>\n";
-        result += "</plist>\n";
-        return result;
-    }
-}
-
-namespace postprocess
-{
-    PostProcessor bundle(std::string bundleExtension = ".bundle")
-    {
-        auto bundleFunc = [bundleExtension](Project& project, ProjectConfig& resolvedConfig)
-        {
-            auto projectOutput = project.calcOutputPath(resolvedConfig);
-            auto bundleOutput = projectOutput;
-            bundleOutput.replace_extension(bundleExtension);
-            auto bundleBinary = projectOutput.filename();
-            bundleBinary.replace_extension("");
-
-            auto dataDir = resolvedConfig[DataDir];
-            auto plistPath = dataDir / project.name / "Info.plist";
-            writeFile(plistPath, util::generatePlist(project, resolvedConfig));
-
-            resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
-            resolvedConfig[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
-        };
-
-        PostProcessor postProcessor;
-        postProcessor.func = std::function(bundleFunc);
-        return postProcessor;
     }
 }
