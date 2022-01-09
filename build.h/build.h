@@ -425,9 +425,9 @@ private:
 
     static void nullDeleter(const void*) {}
 
-    std::function<OptionStorage(const OptionStorage&)> _cloner;
-    std::function<void(OptionStorage&, const OptionStorage&)> _combiner;
-    std::function<void(OptionStorage&)> _deduplicator;
+    OptionStorage(*_cloner)(const OptionStorage&);
+    void(*_combiner)(OptionStorage&, const OptionStorage&);
+    void(*_deduplicator)(OptionStorage&);
     Data _data;
 };
 
