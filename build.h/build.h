@@ -30,42 +30,45 @@ struct ProjectConfig;
 
 using PostProcessor = void(*)(Project& project, ProjectConfig& resolvedConfig);
 
-
-// Launders strings into directly comparable const char* pointers
-struct StringPool
+// Launders strings into directly comparable pointers
+struct StringId
 {
-    static const char* get(const char* str)
+    StringId() : _cstr("") {}
+    StringId(const StringId& id) = default;
+    StringId(const char* id) : StringId(get(id)) {}
+    StringId(const std::string& id) : StringId(get(id.c_str())) {}
+
+    bool empty() const
     {
+        return _cstr == nullptr || _cstr[0] == 0;
+    }
+
+    const char* cstr() const
+    {
+        return _cstr;
+    }
+
+    operator const char*() const
+    {
+        return _cstr;
+    }
+
+private:
+    const char* _cstr;
+
+    static StringId get(const char* str)
+    {
+        if(str == nullptr || str[0] == 0)
+        {
+            return StringId();
+        }
+        
         static std::unordered_set<std::string> storage;
-        return storage.insert(str).first->c_str();
-    }
+        auto entry = storage.insert(str).first;
 
-    static const char* get(const std::string& string)
-    {
-        return get(string.c_str());
-    }
-};
-
-struct Id
-{
-    const char* const id;
-
-    Id(const char* id) : id(StringPool::get(id)) {}
-    Id(const std::string& id) : id(StringPool::get(id)) {}
-
-    operator const char*() const
-    {
-        return id;
-    }
-};
-
-struct NamedIdentifier
-{
-    const Id name;
-
-    operator const char*() const
-    {
-        return name;
+        StringId result;
+        result._cstr = entry->c_str();
+        return result;
     }
 };
 
@@ -150,7 +153,7 @@ enum ProjectType
 };
 
 template<typename T>
-struct Option : public NamedIdentifier
+struct Option : public StringId
 {
     using ValueType = T;
 };
