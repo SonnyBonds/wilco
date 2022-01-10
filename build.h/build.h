@@ -167,24 +167,20 @@ enum Transitivity
 
 struct ConfigSelector
 {
-    constexpr ConfigSelector(std::string_view name)
+    ConfigSelector(StringId name)
         : name(name)
     {}
 
-    constexpr ConfigSelector(const char* name)
-        : name(name)
-    {}
-
-    constexpr ConfigSelector(Transitivity transitivity)
+    ConfigSelector(Transitivity transitivity)
         : transitivity(transitivity)
     {}
 
-    constexpr ConfigSelector(ProjectType projectType)
+    ConfigSelector(ProjectType projectType)
         : projectType(projectType)
     {}
 
     std::optional<Transitivity> transitivity;
-    std::optional<std::string_view> name;
+    std::optional<StringId> name;
     std::optional<ProjectType> projectType;
 
     bool operator <(const ConfigSelector& other) const
@@ -197,29 +193,26 @@ struct ConfigSelector
     }
 };
 
-constexpr ConfigSelector operator/(Transitivity a, ConfigSelector b)
+ConfigSelector operator/(Transitivity a, ConfigSelector b)
 {
-    // Can these throw compile time?
     if(b.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
     b.transitivity = a;
 
     return b;
 }
 
-constexpr ConfigSelector operator/(ProjectType a, ConfigSelector b)
+ConfigSelector operator/(ProjectType a, ConfigSelector b)
 {
-    // Can these throw compile time?
     if(b.projectType) throw std::invalid_argument("Project type was specified twice.");
     b.projectType = a;
 
     return b;
 }
 
-constexpr ConfigSelector operator/(std::string_view a, ConfigSelector b)
+ConfigSelector operator/(StringId a, ConfigSelector b)
 {
-    // Can these throw compile time?
     if(b.name) throw std::invalid_argument("Configuration name was specified twice.");
-    b.name = std::move(a);
+    b.name = a;
 
     return b;
 }
@@ -234,7 +227,7 @@ struct ToolchainProvider
     virtual std::string getCommonLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset) const = 0;
     virtual std::string getLinkerFlags(Project& project, ProjectConfig& resolvedConfig, fs::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const = 0;
 
-    virtual std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, std::string_view config, const fs::path& workingDir, const fs::path& dataDir) const = 0;
+    virtual std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir, const fs::path& dataDir) const = 0;
 };
 
 Option<std::string> Platform{"Platform"};
@@ -499,7 +492,7 @@ struct Project : public ProjectConfig
     {
     }
 
-    ProjectConfig resolve(std::optional<ProjectType> projectType, std::string_view configName)
+    ProjectConfig resolve(std::optional<ProjectType> projectType, StringId configName)
     {
         auto config = internalResolve(projectType, configName, true);
         config.options.deduplicate();
@@ -548,7 +541,7 @@ struct Project : public ProjectConfig
     }
 
 private:
-    ProjectConfig internalResolve(std::optional<ProjectType> projectType, std::string_view configName, bool local)
+    ProjectConfig internalResolve(std::optional<ProjectType> projectType, StringId configName, bool local)
     {
         std::vector<ProjectConfig*> resolveConfigs;
 
@@ -746,7 +739,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, std::string_view config, const fs::path& workingDir, const fs::path& dataDir) const override
+    std::vector<fs::path> process(Project& project, ProjectConfig& resolvedConfig, StringId config, const fs::path& workingDir, const fs::path& dataDir) const override
     {
         Option<std::vector<fs::path>> LinkedOutputs{"_LinkedOutputs"};
         fs::path pathOffset = fs::proximate(fs::current_path(), workingDir);
@@ -860,7 +853,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 class NinjaEmitter
 {
 public:
-    static void emit(fs::path targetPath, std::set<Project*> projects, const std::string& config = {})
+    static void emit(fs::path targetPath, std::set<Project*> projects, StringId config = {})
     {
         fs::create_directories(targetPath);
 
@@ -914,7 +907,7 @@ public:
     }
 
 private:
-    static std::string emitProject(fs::path& root, Project& project, std::string_view config)
+    static std::string emitProject(fs::path& root, Project& project, StringId config)
     {
         auto resolved = project.resolve(project.type, config);
 
@@ -1224,7 +1217,7 @@ OptionCollection sourceList(fs::path path, bool recurse = true)
     return result;
 }
 
-void parseCommandLineAndEmit(fs::path startPath, const std::vector<std::string> arguments, std::set<Project*> projects, std::set<std::string> configs)
+void parseCommandLineAndEmit(fs::path startPath, const std::vector<std::string> arguments, std::set<Project*> projects, std::set<StringId> configs)
 {
     auto optionArgs = parseOptionArguments(arguments);
     auto positionalArgs = parsePositionalArguments(arguments);
@@ -1268,7 +1261,7 @@ void parseCommandLineAndEmit(fs::path startPath, const std::vector<std::string> 
         {
             for(auto& config : configs)
             {
-                auto outputPath = emitter.second / config;
+                auto outputPath = emitter.second / config.cstr();
                 if(!outputPath.is_absolute())
                 {
                     outputPath = startPath / outputPath;

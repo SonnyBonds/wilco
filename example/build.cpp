@@ -1,7 +1,7 @@
 #include "build.h"
 
-static const char* debug = "debug";
-static const char* release = "release";
+static StringId debug = "debug";
+static StringId release = "release";
 
 void generate(fs::path startPath, std::vector<std::string> args)
 {
