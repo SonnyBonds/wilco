@@ -834,7 +834,6 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             command.inputs = std::move(linkerInputs);
             command.outputs = { output };
             command.workingDirectory = workingDir;
-            command.depFile = output.string() + ".d";
             command.description = "Linking " + project.name + ": " + output.string();
             resolvedConfig[Commands] += std::move(command);
 
