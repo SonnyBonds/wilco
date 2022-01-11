@@ -967,6 +967,9 @@ private:
         prologue += "cd \"$cwd\" && ";
         ninja.rule("command", prologue + "$cmd", "$depfile", "", "$desc");
 
+        std::vector<std::string> generatorDep = { "_generator" };
+        std::vector<std::string> emptyDep = {};
+
         for(auto& command : commands)
         {
             fs::path cwd = command.workingDirectory;
@@ -1006,7 +1009,7 @@ private:
             {
                 variables.push_back({"desc", command.description});
             }
-            ninja.build(outputStrs, "command", inputStrs, {}, {}, variables);
+            ninja.build(outputStrs, "command", inputStrs, {}, project.name == "_generator" ? emptyDep : generatorDep, variables);
         }
 
         if(!projectOutputs.empty())
