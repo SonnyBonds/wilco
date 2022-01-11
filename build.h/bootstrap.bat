@@ -1,0 +1,1 @@
+powershell -executionpolicy bypass -command "%~dp0\bootstrap.ps1" %*

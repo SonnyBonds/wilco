@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <assert.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

@@ -5,25 +5,25 @@
 
 #include "core/project.h"
 #include "modules/command.h"
-#include "modules/toolchain.h"
 #include "modules/feature.h"
+#include "modules/toolchain.h"
 #include "util/string.h"
 
-Option<std::vector<StringId>> GccCompilerFlags{"GccCompilerFlags"};
-Option<std::vector<StringId>> GccLinkerFlags{"GccLinkerFlags"};
-Option<std::vector<StringId>> GccArchiverFlags{"GccArchiverFlags"};
-
-struct GccLikeToolchainProvider : public ToolchainProvider
+struct ClToolchainProvider : public ToolchainProvider
 {
-    std::string compiler;
-    std::string linker;
-    std::string archiver;
+    const std::string compiler;
+    const std::string linker;
+    const std::string archiver;
+    const std::vector<std::filesystem::path> sysIncludePaths;
+    const std::vector<std::filesystem::path> sysLibPaths;
 
-    GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver)
-        : ToolchainProvider(name) 
-        , compiler(compiler)
-        , linker(linker)
-        , archiver(archiver)
+    ClToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths)
+        : ToolchainProvider(name)
+        , compiler(std::move(compiler))
+        , linker(std::move(linker))
+        , archiver(std::move(archiver))
+        , sysIncludePaths(std::move(sysIncludePaths))
+        , sysLibPaths(std::move(sysLibPaths))
     {
     }
 
@@ -36,31 +36,33 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     {
         std::string flags;
 
+        flags += " /nologo";
+
         for(auto& define : resolvedOptions[Defines])
         {
-            flags += " -D\"" + define + "\"";
+            flags += " /D\"" + define + "\"";
+        }
+        for(auto& path : sysIncludePaths)
+        {
+            flags += " /I\"" + path.string() + "\"";
         }
         for(auto& path : resolvedOptions[IncludePaths])
         {
-            flags += " -I\"" + (pathOffset / path).string() + "\"";
-        }
-        if(resolvedOptions[Platform] == "x64")
-        {
-            flags += " -m64 -arch x86_64";
+            flags += " /I\"" + (pathOffset / path).string() + "\"";
         }
 
         std::map<Feature, std::string> featureMap = {
-            { feature::Cpp11, " -std=c++11"},
-            { feature::Cpp14, " -std=c++14"},
-            { feature::Cpp17, " -std=c++17"},
-            { feature::Cpp20, " -std=c++20"},
-            { feature::Cpp23, " -std=c++23"},
-            { feature::Optimize, " -O2"},
-            { feature::OptimizeSize, " -Os"},
-            { feature::DebugSymbols, " -g"},
-            { feature::WarningsAsErrors, " -Werror"},
-            { feature::FastMath, " -ffast-math"},
-            { feature::Exceptions, " -fexceptions"},
+            { feature::Cpp11, " /std:c++11"},
+            { feature::Cpp14, " /std:c++14"},
+            { feature::Cpp17, " /std:c++17"},
+            { feature::Cpp20, " /std:c++20"},
+            { feature::Cpp23, " /std:c++23"},
+            { feature::Optimize, " /Ox"},
+            { feature::OptimizeSize, " /Os"},
+            { feature::DebugSymbols, " /Zi"},
+            { feature::WarningsAsErrors, " /WX"},
+            { feature::FastMath, " /fp:fast"},
+            { feature::Exceptions, " /EHsc"},
         };
         for(auto& feature : resolvedOptions[Features])
         {
@@ -71,17 +73,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             }
         }
 
-        for(auto& flag : resolvedOptions[GccCompilerFlags])
-        {
-            flags += " " + std::string(flag);
-        }
-
         return flags;
     }
 
     virtual std::string getCompilerFlags(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset, const std::string& input, const std::string& output) const override
     {
-        return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
+        return " /sourceDependencies \"" + output + ".d\" /c /Fd:\"" + output + "\".pdb /Fo:\"" + output + "\" " + str::quote(input);
     }
 
     virtual std::string getLinker(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset) const override
@@ -100,53 +97,25 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     {
         std::string flags;
 
+        flags += " /nologo";
+
         switch(*project.type)
         {
         default:
             throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
         case StaticLib:
-            flags += " -rcs";
-            for(auto& flag : resolvedOptions[GccArchiverFlags])
-            {
-                flags += " " + std::string(flag);
-            }
+            flags += "";
             break;
         case Executable:
         case SharedLib:
-            flags += " -L\"" + pathOffset.string() + "\"";
-            for(auto& path : resolvedOptions[LibPaths])
+            for(auto& path : sysLibPaths)
             {
-                flags += " -L\"" + (pathOffset / path).string() + "\"";
+                flags += " /LIBPATH:\"" + path.string() + "\"";
             }
-
             for(auto& path : resolvedOptions[Libs])
             {
-                flags += " -l" + path.string();
+                flags += " " + (pathOffset / path).string();
             }
-
-            for(auto& framework : resolvedOptions[Frameworks])
-            {
-                flags += " -framework " + framework;
-            }
-
-            if(project.type == SharedLib)
-            {
-                auto features = resolvedOptions[Features];
-                if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
-                {
-                    flags += " -bundle";
-                }
-                else
-                {
-                    flags += " -shared";
-                }
-            }
-
-            for(auto& flag : resolvedOptions[GccLinkerFlags])
-            {
-                flags += " " + std::string(flag);
-            }
-
             break;
         }
 
@@ -162,7 +131,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         default:
             throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
         case StaticLib:
-            flags += " \"" + output + "\"";
+            flags += " /OUT:\"" + output + "\"";
             for(auto& input : inputs)
             {
                 flags += " \"" + input + "\"";
@@ -170,7 +139,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             break;
         case Executable:
         case SharedLib:
-            flags += " -o \"" + output + "\"";
+            flags += " /OUT:\"" + output + "\"";
             for(auto& input : inputs)
             {
                 flags += " \"" + input + "\"";
@@ -183,7 +152,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
     std::vector<std::filesystem::path> process(Project& project, OptionCollection& resolvedOptions, StringId config, const std::filesystem::path& workingDir) const override
     {
-        Option<std::vector<std::filesystem::path>> LinkedOutputs{"_LinkedGCCOutputs"};
+        Option<std::vector<std::filesystem::path>> LinkedOutputs{"_LinkedCLOutputs"};
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
         if(project.type != Executable &&
@@ -197,86 +166,27 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         auto compiler = str::quote(getCompiler(project, resolvedOptions, pathOffset));
         auto commonCompilerFlags = getCommonCompilerFlags(project, resolvedOptions, pathOffset);
-        auto commonCompilerFlagsObjC = commonCompilerFlags;
         auto linker = str::quote(getLinker(project, resolvedOptions, pathOffset));
         auto commonLinkerFlags = getCommonLinkerFlags(project, resolvedOptions, pathOffset);
 
         auto buildPch = resolvedOptions[BuildPch];
         auto importPch = resolvedOptions[ImportPch];
-
-        if(!buildPch.empty())
-        {
-            auto input = buildPch;
-            auto inputStr = (pathOffset / input).string();
-
-            auto output = dataDir / std::filesystem::path("pch") / (input.string() + ".pch");
-            auto outputStr = (pathOffset / output).string();
-
-            auto outputObjC = dataDir / std::filesystem::path("pch") / (input.string() + ".pchmm");
-            auto outputObjCStr = (pathOffset / outputObjC).string();
-
-            {
-                CommandEntry command;
-                command.command = compiler + commonCompilerFlags + " -x c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
-                command.inputs = { input };
-                command.outputs = { output };
-                command.workingDirectory = workingDir;
-                command.depFile = output.string() + ".d";
-                command.description = "Compiling " + project.name + " PCH: " + input.string();
-                resolvedOptions[Commands] += std::move(command);
-            }
-
-            {
-                CommandEntry command;
-                command.command = compiler + commonCompilerFlags + " -x objective-c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputObjCStr);
-                command.inputs = { input };
-                command.outputs = { outputObjC };
-                command.workingDirectory = workingDir;
-                command.depFile = outputObjC.string() + ".d";
-                command.description = "Compiling " + project.name + " PCH (Objective-C++): " + input.string();
-                resolvedOptions[Commands] += std::move(command);
-            }
-        }
-
-        std::vector<std::filesystem::path> pchInputs;
-        if(!importPch.empty())
-        {
-            auto input = dataDir / std::filesystem::path("pch") / (importPch.string() + ".pch");
-            auto inputStr = (pathOffset / input).string();
-            commonCompilerFlags += " -Xclang -include-pch -Xclang " + inputStr;
-            pchInputs.push_back(input);
-
-            auto inputObjC = dataDir / std::filesystem::path("pch") / (importPch.string() + ".pchmm");
-            auto inputObjCStr = (pathOffset / inputObjC).string();
-            commonCompilerFlagsObjC += " -Xclang -include-pch -Xclang " + inputObjCStr;
-            pchInputs.push_back(inputObjC);
-        }
+        // TODO: PCH
 
         std::vector<std::filesystem::path> linkerInputs;
         for(auto& input : resolvedOptions[Files])
         {
             auto ext = std::filesystem::path(input).extension().string();
-            auto exts = { ".c", ".cxx", ".cc", ".cpp", ".m", ".mm" }; // TODO: Not hardcode these maybe
+            auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
             if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-
-            std::string langFlag;
-            if(ext == ".c")
-            {
-                langFlag = " -x c";
-            }
-            else if(ext == ".m")
-            {
-                langFlag = " -x objective-c";
-            }
 
             auto inputStr = (pathOffset / input).string();
             auto output = dataDir / std::filesystem::path("obj") / project.name / (input.string() + ".o");
             auto outputStr = (pathOffset / output).string();
 
             CommandEntry command;
-            command.command = compiler + (ext == ".mm" ? commonCompilerFlagsObjC : commonCompilerFlags) + langFlag + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
+            command.command = compiler + commonCompilerFlags + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
             command.inputs = { input };
-            command.inputs += pchInputs;
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.depFile = output.string() + ".d";
@@ -290,12 +200,9 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         if(!linker.empty())
         {
-            if(project.type != StaticLib)
+            for(auto& output : resolvedOptions[LinkedOutputs])
             {
-                for(auto& output : resolvedOptions[LinkedOutputs])
-                {
-                    linkerInputs.push_back(output);
-                }
+                linkerInputs.push_back(output);
             }
 
             std::vector<std::string> linkerInputStrs;
@@ -321,6 +228,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             command.inputs = std::move(linkerInputs);
             command.outputs = { output };
             command.workingDirectory = workingDir;
+            command.depFile = output.string() + ".d";
             command.description = "Linking " + project.name + ": " + output.string();
             resolvedOptions[Commands] += std::move(command);
 
@@ -328,10 +236,25 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
             if(project.type == StaticLib)
             {
-                project[PublicOnly / config][LinkedOutputs] += output;
+                project[Public / config][LinkedOutputs] += output;
             }
         }
 
         return outputs;
     }
 };
+
+#if 0
+struct ClToolchainProvider : public ClToolchainProviderBase
+{
+    using ClToolchainProviderBase::ClToolchainProviderBase;
+    static ClToolchainProvider* getInstance()
+    {
+        static ClToolchainProvider instance("msvc", "cl", "link", "lib", {}, {});
+        return &instance;
+    }
+    static Toolchains::Token installToken;
+};
+
+Toolchains::Token ClToolchainProvider::installToken = Toolchains::install(ClToolchainProvider::getInstance());
+#endif

@@ -11,6 +11,7 @@ void generate(cli::Context& cliContext)
 
     Project config;
     config[Public / debug][OutputSuffix] = "Debug";
+    config[Public][Features] += feature::Exceptions;
     config[Public / debug][Features] += feature::DebugSymbols;
     config[Public / release][Features] += feature::Optimize;
 

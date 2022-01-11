@@ -6,6 +6,9 @@
 #include <string>
 
 #if _WIN32
+#define NOMINMAX
+#include <Shlobj.h>
+#include <io.h>
 #else
 #include <dlfcn.h>
 #include <unistd.h>
@@ -15,9 +18,19 @@ namespace process
 {
 
 #if _WIN32
-// TODO: Windows implementation
+static std::filesystem::path findCurrentModulePath()
+{
+	wchar_t moduleFileName[2048];
+
+    HMODULE hMod = NULL;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&findCurrentModulePath),
+                       &hMod);
+	GetModuleFileNameW(hMod, moduleFileName, (DWORD)2048);
+	return moduleFileName;
+}
 #else
-static std::string findCurrentModulePath()
+static std::filesystem::path findCurrentModulePath()
 {
     Dl_info info;
 	dladdr((void*)&findCurrentModulePath, &info);

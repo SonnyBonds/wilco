@@ -1,7 +1,8 @@
 #define CATCH_CONFIG_MAIN
 #define CUSTOM_BUILD_H_MAIN
-#include "catch2/catch.hpp"
 #include "build.h"
+#undef INPUT
+#include "catch2/catch.hpp"
 
 TEST_CASE( "String utils" ) {
     CHECK(str::padLeft("test", 4) == "    test");
@@ -16,6 +17,10 @@ TEST_CASE( "String utils" ) {
 }
 
 TEST_CASE( "StringId" ) {
+    SECTION("hashes") {
+        REQUIRE(std::hash<std::string>()("test1") == std::hash<std::string_view>()("test1"));
+    }
+
     SECTION("use new id") {
         size_t referenceStorageSize = StringId::getStorageSize();
         StringId("asdf1");

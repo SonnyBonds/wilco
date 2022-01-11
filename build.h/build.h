@@ -15,6 +15,7 @@
 #include "modules/standardoptions.h"
 #include "modules/toolchain.h"
 
+#include "toolchains/cl.h"
 #include "toolchains/gcclike.h"
 #include "toolchains/detected.h"
 
