@@ -32,6 +32,15 @@ struct ProcessResult
     std::string output;
 };
 
+// TODO: Maybe a fully separate OpenProcess or ShellExecute implementation on Windows
+#if _WIN32
+#define popen _popen
+#define pclose _pclose
+#define read _read
+#define fileno _fileno
+#define WEXITSTATUS
+#endif
+
 ProcessResult run(std::string command, bool echoOutput = false)
 {
     ProcessResult result;
@@ -66,5 +75,13 @@ ProcessResult run(std::string command, bool echoOutput = false)
 
     return result;
 }
+
+#if _WIN32
+#undef popen
+#undef pclose
+#undef read
+#undef fileno
+#undef WEXITSTATUS
+#endif
 
 }
