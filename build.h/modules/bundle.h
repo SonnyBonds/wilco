@@ -37,8 +37,8 @@ struct std::hash<BundleEntry>
 {
     std::size_t operator()(BundleEntry const& entry) const
     {
-        std::size_t h = std::hash<std::string>{}(entry.source);
-        h = h ^ (std::hash<std::string>{}(entry.target) << 1);
+        std::size_t h = std::filesystem::hash_value(entry.source);
+        h = h ^ (std::filesystem::hash_value(entry.target) << 1);
         return h;
     }
 };
