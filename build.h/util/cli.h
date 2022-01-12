@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "core/emitter.h"
 #include "util/string.h"
 
 namespace cli
@@ -45,7 +46,7 @@ std::vector<std::string> parsePositionalArguments(const std::vector<std::string>
     return result;
 }
 
-void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::set<Project*> projects, std::set<StringId> configs)
+void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::vector<Project*> projects, std::set<StringId> configs)
 {
     auto optionArgs = parseOptionArguments(arguments);
     auto positionalArgs = parsePositionalArguments(arguments);
@@ -55,29 +56,36 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
         throw std::runtime_error("No configurations available.");
     }
 
-    std::vector<std::string> availableEmitters = { "ninja" };
-    std::vector<std::pair<std::string, std::filesystem::path>> emitters;
+    auto& availableEmitters = Emitters::list();
+
+    if(availableEmitters.empty())
+    {
+        throw std::runtime_error("No emitters available.");
+    }
+
+    std::vector<std::pair<Emitter, std::filesystem::path>> emitters;
     for(auto& arg : optionArgs)
     {
-        if(std::find(availableEmitters.begin(), availableEmitters.end(), arg.first) != availableEmitters.end())
+        auto emitterIt = std::find_if(availableEmitters.begin(), availableEmitters.end(), [&arg](auto& v){ return v.name == arg.first; });
+        if(emitterIt != availableEmitters.end())
         {
             auto targetDir = arg.second;
             if(targetDir.empty())
             {
                 targetDir = arg.first + "build";
             }
-            emitters.push_back({arg.first, targetDir});
+            emitters.push_back({ *emitterIt, targetDir });
         }
     }
 
     if(emitters.empty())
     {
         std::cout << "Usage: " << arguments[0] << " --emitter[=†argetDir]\n";
-        std::cout << "Example: " << arguments[0] << " --ninja=ninjabuild\n\n";
+        std::cout << "Example: " << arguments[0] << " --" << availableEmitters[0].name << "[=" << availableEmitters[0].name << "build]\n\n";
         std::cout << "Available emitters: \n";
         for(auto& emitter : availableEmitters)
         {
-            std::cout << "  --" << emitter << "\n";
+            std::cout << "  --" << emitter.name << "\n";
         }
         std::cout << "\n\n";
         throw std::runtime_error("No emitters specified.");
@@ -85,17 +93,18 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
 
     for(auto& emitter : emitters)
     {
-        if(emitter.first == "ninja")
+        for(auto& config : configs)
         {
-            for(auto& config : configs)
+            auto outputPath = emitter.second / config.cstr();
+            if(!outputPath.is_absolute())
             {
-                auto outputPath = emitter.second / config.cstr();
-                if(!outputPath.is_absolute())
-                {
-                    outputPath = startPath / outputPath;
-                }
-                NinjaEmitter::emit(outputPath, projects, config);
+                outputPath = startPath / outputPath;
             }
+            EmitterArgs args;
+            args.targetPath = outputPath;
+            args.projects = projects;
+            args.config = config;
+            emitter.first(args);
         }
     }
 }

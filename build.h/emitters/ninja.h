@@ -7,8 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "core/stringid.h"
+#include "core/emitter.h"
 #include "core/project.h"
+#include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/postprocess.h"
 #include "modules/toolchain.h"
@@ -20,22 +21,16 @@
 class NinjaEmitter
 {
 public:
-    static void emit(std::filesystem::path targetPath, std::set<Project*> projects, StringId config = {})
+    static void emit(const EmitterArgs& args)
     {
-        std::filesystem::create_directories(targetPath);
+        std::filesystem::create_directories(args.targetPath);
 
-        auto outputFile = targetPath / "build.ninja";
+        auto outputFile = args.targetPath / "build.ninja";
         NinjaEmitter ninja(outputFile);
 
-        std::vector<Project*> orderedProjects;
-        std::set<Project*> discoveredProjects;
-        for(auto project : projects)
-        {
-            project->discover(discoveredProjects, orderedProjects);
-        }
-
+        auto projects = args.projects;
         std::vector<std::filesystem::path> generatorDependencies;
-        for(auto& project : orderedProjects)
+        for(auto& project : projects)
         {
             generatorDependencies += (*project)[GeneratorDependencies];
             for(auto& entry : project->configs)
@@ -61,11 +56,11 @@ public:
         generatorDependencies += buildOutput;
         generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" " BUILD_ARGS, generatorDependencies, { outputFile }, START_DIR, {}, "Running build generator." };
 
-        orderedProjects.push_back(&generator);
+        projects.push_back(&generator);
 
-        for(auto project : orderedProjects)
+        for(auto project : projects)
         {
-            auto outputName = emitProject(targetPath, *project, config);
+            auto outputName = emitProject(args.targetPath, *project, args.config);
             if(!outputName.empty())
             {
                 ninja.subninja(outputName);
@@ -74,7 +69,7 @@ public:
     }
 
 private:
-    static std::string emitProject(std::filesystem::path& root, Project& project, StringId config)
+    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config)
     {
         auto resolved = project.resolve(project.type, config);
         resolved[DataDir] = root;
@@ -266,4 +261,8 @@ private:
 
         _stream << "\n";
     }
+
+private:
+    static Emitters::Token installToken;
 };
+static Emitters::Token installToken = Emitters::install({ "ninja", &NinjaEmitter::emit });

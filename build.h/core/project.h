@@ -127,19 +127,6 @@ struct Project : public ProjectConfig
         return options[option];
     }
 
-    void discover(std::set<Project*>& discoveredProjects, std::vector<Project*>& orderedProjects)
-    {
-        for(auto& link : links)
-        {
-            link->discover(discoveredProjects, orderedProjects);
-        }
-
-        if(discoveredProjects.insert(this).second)
-        {
-            orderedProjects.push_back(this);
-        }
-    }
-
     std::filesystem::path calcOutputPath(ProjectConfig& resolvedConfig)
     {
         auto path = resolvedConfig[OutputPath];
