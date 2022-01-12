@@ -15,9 +15,6 @@
 #include "modules/toolchain.h"
 #include "util/operators.h"
 
-// TODO: Not depend on this specifically
-#include "toolchains/gcclike.h"
-
 class NinjaEmitter
 {
 public:
@@ -112,9 +109,12 @@ private:
         const ToolchainProvider* toolchain = resolved[Toolchain];
         if(!toolchain)
         {
-            // TODO: Will be set up elsewhere later
-            static GccLikeToolchainProvider defaultToolchainProvider("g++", "g++", "ar");
-            toolchain = &defaultToolchainProvider; 
+            auto& toolchains = Toolchains::list();
+            if(toolchains.empty())
+            {
+                throw std::runtime_error("Project '" + project.name + "' has no toolchain specified and no default is available.");
+            }
+            toolchain = toolchains[0];
         }
 
         auto toolchainOutputs = toolchain->process(project, resolved, config, root);

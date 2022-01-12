@@ -13,8 +13,9 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     std::string linker;
     std::string archiver;
 
-    GccLikeToolchainProvider(std::string compiler, std::string linker, std::string archiver)
-        : compiler(compiler)
+    GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver)
+        : ToolchainProvider(name) 
+        , compiler(compiler)
         , linker(linker)
         , archiver(archiver)
     {
@@ -257,3 +258,16 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return outputs;
     }
 };
+
+struct GccToolchainProvider : public GccLikeToolchainProvider
+{
+    using GccLikeToolchainProvider::GccLikeToolchainProvider;
+    static GccToolchainProvider* getInstance()
+    {
+        static GccToolchainProvider instance("gcc", "g++", "g++", "ar");
+        return &instance;
+    }
+    static Toolchains::Token installToken;
+};
+
+Toolchains::Token GccToolchainProvider::installToken = Toolchains::install(GccToolchainProvider::getInstance());
