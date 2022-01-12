@@ -1,5 +1,6 @@
 #include "build.h"
-#include "bundle.h"
+
+namespace fs = std::filesystem;
 
 static StringId debug = "debug";
 static StringId release = "release";
@@ -14,13 +15,13 @@ void generate(fs::path startPath, std::vector<std::string> args)
 
     Project helloPrinter("HelloLibrary", StaticLib);
     helloPrinter.links = { &config };
-    helloPrinter += sourceList("hellolib");
+    helloPrinter += glob::sources("hellolib");
     helloPrinter[Public][IncludePaths] += "hellolib";
 
     Project hello("Hello", Executable);
     hello.links = { &helloPrinter };
-    hello += sourceList("helloapp");
+    hello += glob::sources("helloapp");
     hello += bundle();
 
-    parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
+    cli::parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
 }

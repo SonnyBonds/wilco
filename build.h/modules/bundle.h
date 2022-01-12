@@ -1,12 +1,19 @@
 #pragma once
 
-#include "build.h"
+#include <functional>
+#include <string>
 #include <variant>
+
+#include "core/option.h"
+#include "core/project.h"
+#include "modules/postprocess.h"
+#include "util/commands.h"
+#include "util/file.h"
 
 struct BundleEntry
 {
-    fs::path source;
-    fs::path target;
+    std::filesystem::path source;
+    std::filesystem::path target;
 
     bool operator <(const BundleEntry& other) const
     {
@@ -116,7 +123,7 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
 
         auto dataDir = resolvedConfig[DataDir];
         auto plistPath = dataDir / project.name / "Info.plist";
-        writeFile(plistPath, generatePlist(project, resolvedConfig));
+        file::write(plistPath, generatePlist(project, resolvedConfig));
 
         resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
         resolvedConfig[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");

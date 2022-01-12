@@ -132,4 +132,3 @@ This is so far mostly a proof of concept and many real life requirements for it 
 * Possibly more selector criteria, e.g. platform (windows/mac)
 * I'm not in love with the `project[Foo / Bar][Option]` syntax but it's not terrible. Operator overloading could make more esoteric things like `project/Foo/Bar > Files += "test.cpp";` possible but I haven't really come up with something I like better.
 * The code isn't amazing and can be improved in both style, performance and structure, but I've tried to keep it decent in most aspects.
-* There are a few random utils in there right now as well (e.g. a dubious JSON parser). I intend to have common build conf utilities available, but possibly as separate headers as extensions rather than part of the core.
