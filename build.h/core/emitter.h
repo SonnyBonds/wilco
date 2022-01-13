@@ -62,15 +62,15 @@ struct Emitters
         return {};
     }
 
-    static const std::vector<const Emitter>& list()
+    static const std::vector<Emitter>& list()
     {
         return getEmitters();
     }
 
 private:
-    static std::vector<const Emitter>& getEmitters()
+    static std::vector<Emitter>& getEmitters()
     {
-        static std::vector<const Emitter> emitters;
+        static std::vector<Emitter> emitters;
         return emitters;
     }
 };
