@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/option.h"
+#include "core/os.h"
 #include "core/stringid.h"
 #include "modules/standardoptions.h"
 #include "util/operators.h"
@@ -40,15 +41,21 @@ struct ConfigSelector
         : projectType(projectType)
     {}
 
+    ConfigSelector(OperatingSystem targetOS)
+        : targetOS(targetOS)
+    {}
+
     std::optional<Transitivity> transitivity;
     std::optional<StringId> name;
     std::optional<ProjectType> projectType;
+    std::optional<OperatingSystem> targetOS;
 
     bool operator <(const ConfigSelector& other) const
     {
         if(transitivity != other.transitivity) return transitivity < other.transitivity;
         if(projectType != other.projectType) return projectType < other.projectType;
         if(name != other.name) return name < other.name;
+        if(targetOS != other.targetOS) return targetOS < other.targetOS;
 
         return false;
     }
@@ -74,6 +81,14 @@ ConfigSelector operator/(StringId a, ConfigSelector b)
 {
     if(b.name) throw std::invalid_argument("Configuration name was specified twice.");
     b.name = a;
+
+    return b;
+}
+
+ConfigSelector operator/(OperatingSystem a, ConfigSelector b)
+{
+    if(b.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
+    b.targetOS = a;
 
     return b;
 }
@@ -109,9 +124,9 @@ struct Project : public ProjectConfig
     {
     }
 
-    ProjectConfig resolve(std::optional<ProjectType> projectType, StringId configName)
+    ProjectConfig resolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS)
     {
-        auto config = internalResolve(projectType, configName, true);
+        auto config = internalResolve(projectType, configName, targetOS, true);
         config.options.deduplicate();
         return config;
     }
@@ -145,7 +160,7 @@ struct Project : public ProjectConfig
     }
 
 private:
-    ProjectConfig internalResolve(std::optional<ProjectType> projectType, StringId configName, bool local)
+    ProjectConfig internalResolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
     {
         std::vector<ProjectConfig*> resolveConfigs;
 
@@ -161,6 +176,7 @@ private:
             }
             if(entry.first.projectType && entry.first.projectType != projectType) continue;
             if(entry.first.name && entry.first.name != configName) continue;
+            if(entry.first.targetOS && entry.first.targetOS != targetOS) continue;
             resolveConfigs.push_back(&entry.second);
         }
 
@@ -168,7 +184,7 @@ private:
 
         auto resolveLink = [&](Project* link)
         {
-            auto resolved = link->internalResolve(projectType, configName, false);
+            auto resolved = link->internalResolve(projectType, configName, targetOS, false);
             result.links += resolved.links;
             result.options.combine(resolved.options);
         };

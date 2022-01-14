@@ -21,7 +21,7 @@ void generate(fs::path startPath, std::vector<std::string> args)
     Project hello("Hello", Executable);
     hello.links = { &helloPrinter };
     hello += glob::sources("helloapp");
-    hello += bundle();
+    hello[MacOS] += bundle();
 
     cli::parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
 }

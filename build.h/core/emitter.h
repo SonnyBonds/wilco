@@ -6,14 +6,16 @@
 #include <string>
 #include <vector>
 
+#include <core/os.h>
 #include <core/project.h>
 #include <core/stringid.h>
 
 struct EmitterArgs
 {
-    std::filesystem::path targetPath;
     std::vector<Project*> projects;
+    std::filesystem::path targetPath;
     StringId config;
+    OperatingSystem targetOS = OperatingSystem::current();
 };
 
 struct Emitter
