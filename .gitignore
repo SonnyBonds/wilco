@@ -1,0 +1,6 @@
+.ninja*
+.DS_Store
+bin
+build
+!build/
+ninjabuild
