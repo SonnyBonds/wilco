@@ -71,9 +71,14 @@ private:
         auto resolved = project.resolve(project.type, config, OperatingSystem::current());
         resolved[DataDir] = root;
 
-        for(auto& processor : resolved[PostProcess])
         {
-            processor(project, resolved);
+            // Avoiding range-based for loop here since it breaks
+            // if a post processor adds more post processors. 
+            auto postProcessors = resolved[PostProcess];
+            for(size_t i = 0; i < postProcessors.size(); ++i)
+            {
+                postProcessors[i](project, resolved);
+            }
         }
 
         if(!project.type.has_value())
