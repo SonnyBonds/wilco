@@ -29,6 +29,7 @@ enum Transitivity
 
 struct ConfigSelector
 {
+    ConfigSelector() {}
     ConfigSelector(StringId name)
         : name(name)
     {}
@@ -93,30 +94,11 @@ ConfigSelector operator/(OperatingSystem a, ConfigSelector b)
     return b;
 }
 
-struct Project;
-
-struct ProjectConfig
-{
-    OptionCollection options;
-
-    template<typename T>
-    T& operator[](Option<T> option)
-    {
-        return options[option];
-    }
-
-    ProjectConfig& operator +=(const OptionCollection& collection)
-    {
-        options.combine(collection);
-        return *this;
-    }
-};
-
-struct Project : public ProjectConfig
+struct Project
 {
     std::string name;
     std::optional<ProjectType> type;
-    std::map<ConfigSelector, ProjectConfig, std::less<>> configs;
+    std::map<ConfigSelector, OptionCollection, std::less<>> configs;
     std::vector<Project*> links;
 
     Project(std::string name = {}, std::optional<ProjectType> type = {})
@@ -124,45 +106,55 @@ struct Project : public ProjectConfig
     {
     }
 
-    ProjectConfig resolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS)
+    OptionCollection resolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS)
     {
-        auto config = internalResolve(projectType, configName, targetOS, true);
-        config.options.deduplicate();
-        return config;
+        auto options = internalResolve(projectType, configName, targetOS, true);
+        options.deduplicate();
+        return options;
     }
 
-    ProjectConfig& operator[](ConfigSelector selector)
+    OptionCollection& operator[](ConfigSelector selector)
     {
         return configs[selector];
     }
-    
+
     template<typename T>
     T& operator[](Option<T> option)
     {
-        return options[option];
+        return configs[{}][option];
     }
 
-    std::filesystem::path calcOutputPath(ProjectConfig& resolvedConfig)
+    void operator +=(const OptionCollection& collection)
     {
-        auto path = resolvedConfig[OutputPath];
+        configs[{}] += collection;
+    }
+
+    std::filesystem::path calcOutputPath(OptionCollection& resolvedOptions)
+    {
+        auto path = resolvedOptions[OutputPath];
         if(!path.empty())
         {
             return path;
         }
 
-        auto stem = resolvedConfig[OutputStem];
+        auto stem = resolvedOptions[OutputStem];
         if(stem.empty())
         {
             stem = name;
         }
 
-        return resolvedConfig[OutputDir] / (resolvedConfig[OutputPrefix] + stem + resolvedConfig[OutputSuffix] + resolvedConfig[OutputStem]);
+        return resolvedOptions[OutputDir] / (resolvedOptions[OutputPrefix] + stem + resolvedOptions[OutputSuffix] + resolvedOptions[OutputStem]);
     }
 
 private:
-    ProjectConfig internalResolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
+    OptionCollection internalResolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
     {
-        std::vector<ProjectConfig*> resolveConfigs;
+        OptionCollection result;
+
+        for(auto& link : links)
+        {
+            result.combine(link->internalResolve(projectType, configName, targetOS, false));
+        }
 
         for(auto& entry : configs)
         {
@@ -177,31 +169,10 @@ private:
             if(entry.first.projectType && entry.first.projectType != projectType) continue;
             if(entry.first.name && entry.first.name != configName) continue;
             if(entry.first.targetOS && entry.first.targetOS != targetOS) continue;
-            resolveConfigs.push_back(&entry.second);
+
+            result.combine(entry.second);
         }
 
-        ProjectConfig result;
-
-        for(auto& link : links)
-        {
-            auto resolved = link->internalResolve(projectType, configName, targetOS, false);
-            result.options.combine(resolved.options);
-        }
-
-        auto addOptions = [](auto& a, auto& b)
-        {
-            a.combine(b);
-        };
-
-        if(local)
-        {
-            addOptions(result.options, options);
-        }
-        for(auto config : resolveConfigs)
-        {
-            addOptions(result.options, config->options);
-        }
-        
         return result;
     }
 };

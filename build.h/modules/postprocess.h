@@ -7,11 +7,11 @@
 
 struct PostProcessor
 {
-    std::function<void(Project& project, ProjectConfig& resolvedConfig)> func;
+    std::function<void(Project& project, OptionCollection& resolvedOptions)> func;
 
-    void operator ()(Project& project, ProjectConfig& resolvedConfig)
+    void operator ()(Project& project, OptionCollection& resolvedOptions)
     {
-        func(project, resolvedConfig);
+        func(project, resolvedOptions);
     }
 
     bool operator ==(const PostProcessor& other) const

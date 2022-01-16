@@ -53,7 +53,7 @@ using PlistValue = std::variant<std::string, bool, int, VerbatimPlistValue>;
 Option<std::vector<BundleEntry>> BundleContents{"BundleContents"};
 Option<std::map<std::string, PlistValue>> PlistEntries{"PlistEntries"}; 
 
-std::string generatePlist(Project& project, ProjectConfig& resolvedConfig)
+std::string generatePlist(Project& project, OptionCollection& resolvedOptions)
 {
     std::string result;
     result += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
@@ -61,7 +61,7 @@ std::string generatePlist(Project& project, ProjectConfig& resolvedConfig)
     result += "<plist version=\"1.0\">\n";
     result += "<dict>\n";
 
-    for(auto& entry : resolvedConfig[PlistEntries])
+    for(auto& entry : resolvedOptions[PlistEntries])
     {
         result += "  <key>" + entry.first + "</key>\n";
         if(auto value = std::get_if<std::string>(&entry.second))
@@ -92,7 +92,7 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
 {
     OptionCollection result;
 
-    auto bundleFunc = [bundleExtension](Project& project, ProjectConfig& resolvedConfig)
+    auto bundleFunc = [bundleExtension](Project& project, OptionCollection& resolvedOptions)
     {
         std::string resolvedExtension;
         if(bundleExtension)
@@ -104,7 +104,7 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
             resolvedExtension = std::string(project.type == Executable ? ".app" : ".bundle");
         }
 
-        auto projectOutput = project.calcOutputPath(resolvedConfig);
+        auto projectOutput = project.calcOutputPath(resolvedOptions);
         auto bundleOutput = projectOutput;
         bundleOutput.replace_extension(resolvedExtension);
         auto bundleBinary = projectOutput.filename();
@@ -112,21 +112,21 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
 
         if(project.type == Executable)
         {
-            resolvedConfig[PlistEntries]["CFBundleExecutable"] = bundleBinary.string();
-            resolvedConfig[PlistEntries]["CFBundlePackageType"] = "APPL";
+            resolvedOptions[PlistEntries]["CFBundleExecutable"] = bundleBinary.string();
+            resolvedOptions[PlistEntries]["CFBundlePackageType"] = "APPL";
         }
         else if(project.type == SharedLib)
         {
-            resolvedConfig[PlistEntries]["CFBundleExecutable"] = bundleBinary.string();
-            resolvedConfig[PlistEntries]["CFBundlePackageType"] = "BNDL";
+            resolvedOptions[PlistEntries]["CFBundleExecutable"] = bundleBinary.string();
+            resolvedOptions[PlistEntries]["CFBundlePackageType"] = "BNDL";
         }
 
-        auto dataDir = resolvedConfig[DataDir];
+        auto dataDir = resolvedOptions[DataDir];
         auto plistPath = dataDir / project.name / "Info.plist";
-        file::write(plistPath, generatePlist(project, resolvedConfig));
+        file::write(plistPath, generatePlist(project, resolvedOptions));
 
-        resolvedConfig[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
-        resolvedConfig[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
+        resolvedOptions[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
+        resolvedOptions[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
     };
 
     PostProcessor postProcessor;

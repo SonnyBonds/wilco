@@ -172,6 +172,12 @@ struct OptionCollection
         return _storage[option].template getOrAdd<T>();
     }
 
+    OptionCollection& operator+=(const OptionCollection& other)
+    {
+        combine(other);
+        return *this;
+    }
+
     void combine(const OptionCollection& other)
     {
         for(auto& entry : other._storage)
