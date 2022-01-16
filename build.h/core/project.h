@@ -98,7 +98,6 @@ struct Project;
 struct ProjectConfig
 {
     OptionCollection options;
-    std::vector<Project*> links;
 
     template<typename T>
     T& operator[](Option<T> option)
@@ -118,6 +117,7 @@ struct Project : public ProjectConfig
     std::string name;
     std::optional<ProjectType> type;
     std::map<ConfigSelector, ProjectConfig, std::less<>> configs;
+    std::vector<Project*> links;
 
     Project(std::string name = {}, std::optional<ProjectType> type = {})
         : name(std::move(name)), type(type)
@@ -182,24 +182,10 @@ private:
 
         ProjectConfig result;
 
-        auto resolveLink = [&](Project* link)
-        {
-            auto resolved = link->internalResolve(projectType, configName, targetOS, false);
-            result.links += resolved.links;
-            result.options.combine(resolved.options);
-        };
-
         for(auto& link : links)
         {
-            resolveLink(link);
-        }
-
-        for(auto config : resolveConfigs)
-        {
-            for(auto& link : config->links)
-            {
-                resolveLink(link);
-            }
+            auto resolved = link->internalResolve(projectType, configName, targetOS, false);
+            result.options.combine(resolved.options);
         }
 
         auto addOptions = [](auto& a, auto& b)
