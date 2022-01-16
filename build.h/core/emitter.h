@@ -15,7 +15,6 @@ struct EmitterArgs
     std::vector<Project*> projects;
     std::filesystem::path targetPath;
     StringId config;
-    OperatingSystem targetOS = OperatingSystem::current();
 };
 
 struct Emitter

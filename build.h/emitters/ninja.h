@@ -57,7 +57,7 @@ public:
 
         for(auto project : projects)
         {
-            auto outputName = emitProject(args.targetPath, *project, args.config, args.targetOS);
+            auto outputName = emitProject(args.targetPath, *project, args.config);
             if(!outputName.empty())
             {
                 ninja.subninja(outputName);
@@ -66,9 +66,9 @@ public:
     }
 
 private:
-    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config, OperatingSystem targetOS)
+    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config)
     {
-        auto resolved = project.resolve(project.type, config, targetOS);
+        auto resolved = project.resolve(project.type, config, OperatingSystem::current());
         resolved[DataDir] = root;
 
         for(auto& processor : resolved[PostProcess])
