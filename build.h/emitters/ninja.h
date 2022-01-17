@@ -55,6 +55,8 @@ public:
 
         projects.push_back(&generator);
 
+        projects = Emitter::discoverProjects(projects);
+
         for(auto project : projects)
         {
             auto outputName = emitProject(args.targetPath, *project, args.config);

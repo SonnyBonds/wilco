@@ -54,6 +54,8 @@ public:
 
         projects.push_back(&generator);
 
+        projects = Emitter::discoverProjects(projects);
+
         std::vector<PendingCommand> pendingCommands;
         using It = decltype(pendingCommands.begin());
 

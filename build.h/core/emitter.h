@@ -24,19 +24,22 @@ struct Emitter
 
     void operator ()(EmitterArgs args) const
     {
+        emit(args);
+    }
+
+    static std::vector<Project*> discoverProjects(const std::vector<Project*>& projects)
+    {
         std::vector<Project*> orderedProjects;
         std::set<Project*> discoveredProjects;
-        for(auto project : args.projects)
+        for(auto project : projects)
         {
             discover(project, discoveredProjects, orderedProjects);
         }
 
-        args.projects = orderedProjects;
-
-        emit(args);
+        return orderedProjects;
     }
+protected:
 
-private:
     static void discover(Project* project, std::set<Project*>& discoveredProjects, std::vector<Project*>& orderedProjects)
     {
         for(auto& link : project->links)
