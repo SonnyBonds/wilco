@@ -14,33 +14,30 @@ struct ProcessResult
     std::string output;
 };
 
-std::future<ProcessResult> run(std::string command)
+ProcessResult run(std::string command)
 {
-    return std::async(std::launch::async, [command]()
+    ProcessResult result;
     {
-        ProcessResult result;
+        auto processPipe = popen(command.c_str(), "r");
+        try
         {
-            auto processPipe = popen(command.c_str(), "r");
-            try
+            std::array<char, 2048> buffer;
+            while(auto bytesRead = fread(buffer.data(), 1, buffer.size(), processPipe))
             {
-                std::array<char, 2048> buffer;
-                while(auto bytesRead = fread(buffer.data(), 1, buffer.size(), processPipe))
-                {
-                    result.output.append(buffer.data(), bytesRead);
-                }
-                
+                result.output.append(buffer.data(), bytesRead);
             }
-            catch(...)
-            {
-                pclose(processPipe);
-                throw;
-            }
-            auto status = pclose(processPipe);
-            result.exitCode = WEXITSTATUS(status);
+            
         }
+        catch(...)
+        {
+            pclose(processPipe);
+            throw;
+        }
+        auto status = pclose(processPipe);
+        result.exitCode = WEXITSTATUS(status);
+    }
 
-        return result;
-    });
+    return result;
 }
 
 }
