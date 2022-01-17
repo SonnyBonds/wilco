@@ -34,6 +34,14 @@ struct ConfigSelector
         : name(name)
     {}
 
+    ConfigSelector(const char* name)
+        : name(name)
+    {}
+
+    ConfigSelector(std::string name)
+        : name(std::move(name))
+    {}
+
     ConfigSelector(Transitivity transitivity)
         : transitivity(transitivity)
     {}
