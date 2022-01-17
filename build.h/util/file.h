@@ -46,6 +46,10 @@ bool write(std::filesystem::path path, const std::string& data)
         }
     }
 
+    if(path.has_parent_path())
+    {
+        std::filesystem::create_directories(path.parent_path());
+    }
     std::ofstream stream(path);
     stream.write(data.data(), data.size());
     return true;
