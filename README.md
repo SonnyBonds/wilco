@@ -12,7 +12,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 # Philosophy
 
-With build.h the C++ build environment itself is the only requirement for build configuration. Currently "build environment" involves Ninja (or, in the future, GNU make, Visual Studio etc) which very well could be argued is a dependency in itself, but actual build execution is however outside of the current scope of build.h at this point at least.
+With build.h the C++ build environment itself is the only requirement for build configuration. build.h can either perform a build itself or generate build files for a build system like Ninja (or, in the future, GNU make, Visual Studio etc). 
 
 Build configuration is created by code rather than declarative data. Build.h acts more as a framework for easily generating project dependency graphs and emitting them to an actual builder. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
 
@@ -51,22 +51,17 @@ void generate(fs::path startPath, std::vector<std::string> args)
     Project hello("Hello", Executable);
     hello[Files] += "hello.cpp";
 
-    NinjaEmitter::emit("ninja", {&hello});
+    DirectBuilder::emit({{&hello}, "out"});
 }
 ```
 
-This declares one project, called "Hello", with a single file; "hello.cpp" and no extra configuration. The Ninja emitter is then called directly to emit build files for this project into a directory called "ninja".
+This declares one project, called "Hello", with a single file; "hello.cpp" and no extra configuration. The internal builder is then called directly with a list of projects (the single 'hello' project), and an output folder for build data.
 
 To actually run this build, the script needs to be compiled. Since compiling C++ is part of the problem we want to solve here, we've got a chicken-and-egg scenario and need to bootstrap the build. To get started, assuming build.h is located in a directory called 'build.h', we run:
 ```
 build.h/bootstrap build.cpp
 ```
-This will figure out the build environment, build and run the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.*
-
-To run the build use the corresponding build tool, e.g.:
-```
-ninja -C ninja
-```
+This will figure out the build environment, build and run the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.* To build again, just run `./build`.
 
 *TODO: The build environment is currently just assumed to exist with clang++ on the path, and clang is the only supported toolchain.*
 
@@ -105,9 +100,6 @@ config[Public / "debug"][Feature] += "debuginfo";
 // Set an output prefix for library outputs
 config[Public / StaticLib][OutputPrefix] = "lib";
 
-// Set an output prefix for library outputs
-config[Public / StaticLib][OutputPrefix] = "lib";
-
 // Declare another project with an actual output
 Project app("App", Executable);
 
@@ -121,14 +113,14 @@ app[Files] += "test.cpp";
 # Future
 
 This is so far mostly a proof of concept and many real life requirements for it to be properly useful are still missing. Some have been mentioned before, but a non-exhaustive list of things to work on is:
+* The internal builder is currently not amazing, and will likely never rival dedicated systems like Ninja for development iterations, but can still be useful for getting up and running quickly with a self contained system. It is however intended to eventually be decent enough to use for build servers and situations where the overhead of non-optimal dependency checking isn't a huge factor.
 * Build environment discovery will likely be done when bootstrapping, with a number of ways to search through to discover a default build environment in most cases, and probably a way to force a specific. The ones currently in mind are:
     * clang++, from path
     * g++, from path
     * (windows) clang++ from installation directory (with winsdk resolved by clang)
     * (windows) cl/winsdk from environment set up by vcvars
     * (windows) cl/winsdk from vswhere + sdk search
-* Toolkit setup is part of build environment discovery, but it also ties into translation of options into compiler flags. Currently this is mostly hard coded but there are plans and ideas on how to make this more configurable. Toolkits likely will be tied into project configuration to allow for multiple toolkits within the same project tree, since building the generator might not be done with the same toolkit as the main build in case of cross compiling.
+* Toolchain setup is part of build environment discovery, but it also ties into translation of options into compiler flags. Currently this is mostly hard coded but there are plans and ideas on how to make this more configurable. Toolchains likely will be tied into project configuration to allow for multiple toolchains within the same project tree, since building the generator might not be done with the same toolchain as the main build in case of cross compiling.
 * More emitters, specifically GNU Make and Visual Studio projects
-* Possibly more selector criteria, e.g. platform (windows/mac)
+* Possibly more selector criteria
 * I'm not in love with the `project[Foo / Bar][Option]` syntax but it's not terrible. Operator overloading could make more esoteric things like `project/Foo/Bar > Files += "test.cpp";` possible but I haven't really come up with something I like better.
-* The code isn't amazing and can be improved in both style, performance and structure, but I've tried to keep it decent in most aspects.
