@@ -13,6 +13,7 @@
 #include "modules/command.h"
 #include "modules/postprocess.h"
 #include "modules/toolchain.h"
+#include "toolchains/detected.h"
 #include "util/operators.h"
 
 class NinjaEmitter
@@ -116,12 +117,7 @@ private:
         const ToolchainProvider* toolchain = resolved[Toolchain];
         if(!toolchain)
         {
-            auto& toolchains = Toolchains::list();
-            if(toolchains.empty())
-            {
-                throw std::runtime_error("Project '" + project.name + "' has no toolchain specified and no default is available.");
-            }
-            toolchain = toolchains[0];
+            toolchain = defaultToolchain;
         }
 
         auto toolchainOutputs = toolchain->process(project, resolved, config, root);

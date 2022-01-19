@@ -1,45 +1,141 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
-# TODO: Find/verify build environment. Right now we just assume it's there.
-
-set -e
-
-SELF=$0
 display_usage() { 
-	echo "Usage: $SELF path/to/build.cpp [arguments passed to build]" 
+	echo "Usage: $0 path/to/build.cpp [--help] [--toolchain=toolchain]" 
+    if [ ! -z "$toolchain_list" ]; then
+        echo "Discovered toolchains:"
+        echo "$toolchain_list"
+    fi
 } 
 
-if [ $# -le 0 ]; then
+fail_usage() {
+    echo "$@" 1>&2
     display_usage
     exit 1
+}
+
+fail() {
+    echo "$@" 1>&2
+}
+
+full_path() {
+    echo `cd $(dirname "$1") && pwd`
+}
+
+parse_argument() {
+    if [ "${1#$2}" != "${1}" ]; then 
+        arg_value="${1#*=}"
+        if [ -z "$arg_value" -o "$arg_value" = "$1" ]; then 
+            fail_usage "Expected value for option $2"
+        fi
+        return 0
+    fi
+    return 1
+}
+
+find_command()
+{
+    command -v "$1"
+}
+
+xcrun_command=`find_command xcrun`
+find_command_xcrun()
+{
+    if [ -z "$xcrun_command" ]; then return; fi
+    $xcrun_command -f $1 2>/dev/null
+}
+
+find_sdk_xcrun()
+{
+    if [ -z "$xcrun_command" ]; then return; fi
+    $xcrun_command --show-sdk-path $1 2>/dev/null
+}
+
+if [ $# -le 0 ]; then
+    fail_usage
 fi
 
-INPUT="$1"
-shift
 
-BUILD_H_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-BUILD_DIR=$(cd $(dirname "$INPUT") && pwd)
+INPUT="$1"; shift
+BUILD_H_DIR=`full_path "$0"`
+BUILD_DIR=`full_path "$INPUT"`
+INPUT_BASE=$(basename "$INPUT")
+OUTPUT="${INPUT%.*}"
+OUTPUT_BASE=$(basename "$OUTPUT")
+BUILD_ARGS="$@"
 
 if [ ! -f "$INPUT" ]; then
+    fail_usage "Expected a build source file as first argument, got $INPUT"
+elif [ "$INPUT" = "$OUTPUT" ]; then
+    fail_usage "Expected an input with extension, e.g. 'build.cpp', got $INPUT"
+fi
+
+if [ "${OUTPUT#*/}" = "${OUTPUT}" ]; then
+    OUTPUT="./$OUTPUT"
+fi
+
+for opt in "$@"; do
+    if [ -z "$args_reset" ]; then
+        args_reset=1;
+        set --;
+    fi
+
+    if [ "$opt" = "--help" ]; then help_requested=1
+    elif parse_argument "$opt" --toolchain; then selected_toolchain=$arg_value
+    fi
+    
+    set -- "$@" "$opt"
+done
+
+toolchain_contents="#pragma once
+
+#include \"toolchains/gcclike.h\"
+
+"
+
+try_gcc()
+{
+    if [ -z "$3" ]; then return; fi
+    if [ -z "$4" ]; then return; fi
+    if [ -z "$5" ]; then return; fi
+    local selected=
+    local this_compile_command="$3"\ $6$7$8$9\ -std=c++17\ -I"$BUILD_H_DIR"\ -DSTART_DIR=\"$(pwd)\"\ -DBUILD_H_DIR=\""$BUILD_H_DIR"\"\ -DBUILD_DIR=\""$BUILD_DIR"\"\ -DBUILD_FILE=\""$INPUT_BASE"\"\ -DBUILD_ARGS=\""$BUILD_ARGS"\"\ "$INPUT"\ -o\ "$OUTPUT"
+    if [ -z "$selected_toolchain" ]; then
+        local selected="(selected by default)"
+        compile_command="$this_compile_command"
+        selected_toolchain="$1"
+        selected_toolchain_desc="$2 $selected"
+    elif [ "$selected_toolchain" = "$1" ]; then
+        local selected="(selected)"
+        compile_command="$this_compile_command"
+        selected_toolchain_desc="$2"
+    fi
+    local desc="`printf "  %-20s - %s\n" "$1" "$2 $selected"`"
+    toolchain_contents=$toolchain_contents`printf 'GccLikeToolchainProvider %s_toolchain("%s", "%s", "%s", "%s");' "$1" "$1" "$3" "$4" "$5"`"\n"
+    toolchain_list="$toolchain_list$desc\n"
+}
+
+try_gcc gcc "GCC found on path" `find_command g++` `find_command g++` `find_command ar`
+try_gcc clang "Clang found on path" `find_command clang++` `find_command clang++` `find_command ar`
+try_gcc clang_xcode "Default clang provided by XCode" `find_command_xcrun clang++` `find_command_xcrun clang++` `find_command_xcrun ar` -isysroot `find_sdk_xcrun`
+
+toolchain_contents=$toolchain_contents"ToolchainProvider* defaultToolchain = &${selected_toolchain}_toolchain;\n"
+
+if [ "$help_requested" ]; then
     display_usage
-    echo $INPUT not found >&2
-    exit 1
+    exit 0
 fi
 
-INPUT_BASE=$(basename "$INPUT")
-OUTPUT="${INPUT%%.*}"
-OUTPUT_BASE=$(basename "$OUTPUT")
-
-if [[ "$INPUT" == "$OUTPUT" ]]; then
-    echo Expected an input with extension, e.g. "build.cpp"
-    exit 1
+if [ -z "$selected_toolchain" ]; then
+    fail "No toolchain found"
+elif [ -z "$selected_toolchain_desc" ]; then
+    fail "Can't find toolchain $selected_toolchain"
 fi
 
-if [[ "$INPUT" != /* ]]; then
-    OUTPUT=./$OUTPUT
-fi
-
-echo Build root: $BUILD_DIR
-
-clang++ -std=c++17 -I"$BUILD_H_DIR" -DSTART_DIR=\"$(pwd)\" -DBUILD_H_DIR=\"$BUILD_H_DIR\" -DBUILD_DIR=\"$BUILD_DIR\" -DBUILD_FILE=\"$INPUT_BASE\" -DBUILD_ARGS=\""$@"\" "$INPUT" -o "$OUTPUT"
-"$OUTPUT" "$@"
+set -e
+echo "Bootstrapping using $selected_toolchain_desc"...
+$compile_command
+#"$OUTPUT" "$@"
+echo "$toolchain_contents" > "$BUILD_H_DIR/toolchains/_detected_toolchains.h"
+echo Done!
+echo Run \'"$OUTPUT"\' to build.

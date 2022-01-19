@@ -6,8 +6,9 @@ It is currently work in process and in a state of flux both in terms of interfac
 # TL;DR - Let's run the example
 
 - Clone the repository.
-- `build.h/bootstrap example/build.cpp --ninja`
-- `ninja -C ninjabuild/debug`
+- `build.h/bootstrap example/build.cpp`
+- `example/build --direct`
+- `example/bin/Hello`
 - Revel.
 
 # Philosophy

@@ -14,6 +14,7 @@
 #include "modules/toolchain.h"
 
 #include "toolchains/gcclike.h"
+#include "toolchains/detected.h"
 
 #include "util/cli.h"
 #include "util/commands.h"
