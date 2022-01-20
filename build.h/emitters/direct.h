@@ -283,8 +283,6 @@ private:
                 continue;
             }
 
-            std::cout << ">>> " << pathString << std::endl;
-
             if(pathString.back() == ':')
             {
                 scanningOutputs = false;
