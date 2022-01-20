@@ -218,12 +218,7 @@ private:
             return true;;
         }
 
-        auto pos = data.find(':');
-        if(pos == std::string::npos)
-        {
-            return true;
-        }
-        
+        size_t pos = 0;
         auto skipWhitespace = [&](){
             while(pos < data.size())
             {
@@ -242,18 +237,34 @@ private:
             while(pos < data.size())
             {
                 char c = data[pos];
-                if(escaped)
+                if(c == '\\')
                 {
-                    escaped = false;
-                    result += c;
+                    if(escaped)
+                    {
+                        result += '\\';
+                    }
+                    escaped = true;
+                    ++pos;
+                    continue;
                 }
                 else if(std::isspace(c))
                 {
-                    return result;
+                    if(escaped)
+                    {
+                        escaped = false;
+                    }
+                    else
+                    {
+                        return result;
+                    }
                 }
-
+                else if(escaped)
+                {
+                    result += '\\';
+                    escaped = false;
+                }
+                
                 result += c;
-
                 ++pos;
             }
             return result;
@@ -261,12 +272,26 @@ private:
 
         ++pos;
 
+        bool scanningOutputs = true;
         std::string pathString;
         while(pos < data.size())
         {
             skipWhitespace();
             readPath(pathString);
             if(pathString.empty())
+            {
+                continue;
+            }
+
+            std::cout << ">>> " << pathString << std::endl;
+
+            if(pathString.back() == ':')
+            {
+                scanningOutputs = false;
+                continue;
+            }
+
+            if(scanningOutputs)
             {
                 continue;
             }
