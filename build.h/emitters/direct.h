@@ -65,9 +65,6 @@ public:
             build(pendingCommands, args.targetPath, *project, args.config);
         }
 
-        std::vector<PendingCommand*> sortedCommands;
-        sortedCommands.reserve(pendingCommands.size());
-
         struct PathHash
         {
             size_t operator()(const std::filesystem::path& path) const
@@ -85,91 +82,108 @@ public:
             }
         }
 
-        It next = pendingCommands.begin();
-        std::vector<PendingCommand*> stack;
-        while(next != pendingCommands.end())
+        for(auto& command : pendingCommands)
         {
-            PendingCommand* command;
-            if(stack.empty())
-            {
-                command = &*next;
-                ++next;
-            }
-            else
-            {
-                command = stack.back();
-                stack.pop_back();
-            }
-
-            if(command->visited) continue;
-
-            bool readded = false;
-            for(auto& input : command->inputs)
+            command.dependencies.reserve(command.inputs.size());
+            for(auto& input : command.inputs)
             {
                 auto it = commandMap.find(input);
-                if(it == commandMap.end()) continue;
-                if(it->second->visited) continue;
-
-                if(!readded)
+                if(it != commandMap.end())
                 {
-                    stack.push_back(command);
-                    readded = true;
+                    command.dependencies.push_back(it->second);
                 }
-                stack.push_back(it->second);
-            }
-
-            if(!readded && !command->visited)
-            {
-                command->visited = true;
-                sortedCommands.push_back(command);
             }
         }
 
-        std::string line;
-
-        size_t count = 0;
-        size_t buildCount = 0;
-        for(auto& command : sortedCommands)
+        It next = pendingCommands.begin();
+        std::vector<std::pair<PendingCommand*, int>> stack;
+        stack.reserve(pendingCommands.size());
+        std::vector<PendingCommand*> commands;
+        commands.reserve(pendingCommands.size());
+        while(next != pendingCommands.end() || !stack.empty())
         {
-            count++;
-            
-            bool dirty = false;
+            PendingCommand* command;
+            int depth = 0;
+            if(stack.empty())
+            {
+                command = &*next;
+                depth = command->depth;
+                ++next;
+                commands.push_back(command);
+            }
+            else
+            {
+                command = stack.back().first;
+                depth = stack.back().second;
+                stack.pop_back();
+            }
+
+            command->depth = depth;
+
+            for(auto& dependency : command->dependencies)
+            {
+                if(dependency->depth < depth+1)
+                {
+                    stack += {dependency, depth+1};
+                }
+            }
+        }
+
+        std::sort(commands.begin(), commands.end(), [](auto a, auto b) { return a->depth > b->depth; });
+        
+        for(auto command : commands)
+        {
+            for(auto dependency : command->dependencies)
+            {
+                if(dependency->dirty)
+                {
+                    command->dirty = true;
+                    break;
+                }
+            }
+            if(command->dirty) continue;
+
             std::filesystem::file_time_type outputTime;
             outputTime = outputTime.max();
             std::error_code ec;
             for(auto& output : command->outputs)
             {
-                if(dirty) break;
-
                 outputTime = std::min(outputTime, std::filesystem::last_write_time(output, ec));
                 if(ec)
                 {
-                    dirty = true;
+                    command->dirty = true;
+                    break;
                 }
             }
+            if(command->dirty) continue;
 
             for(auto& input : command->inputs)
             {
-                if(dirty) break;
-
                 auto inputTime = std::filesystem::last_write_time(input, ec);
                 if(ec || inputTime > outputTime)
                 {
-                    dirty = true;
+                    command->dirty = true;
+                    break;
                 }
             }
+            if(command->dirty) continue;
 
-            if(!command->depFile.empty())
+            if(checkDeps(command->depFile, outputTime))
             {
-                if(checkDeps(command->depFile, outputTime))
-                {
-                    dirty = true;
-                }
-            }
+                command->dirty = true;
+            }            
+        }
 
-            if(!dirty) continue;
+        commands.erase(std::remove_if(commands.begin(), commands.end(), [](auto command) { return !command->dirty; }), commands.end());
 
-            std::cout << "\33[2K\r[" << count << "/" << sortedCommands.size() << "] " << command->desciption << std::flush;
+        std::string line;
+
+        size_t count = 1;
+        size_t firstPending = 0;
+        for(auto command : commands)
+        {
+            std::cout << "\33[2K\r[" << count << "/" << commands.size() << "] " << command->desciption << std::flush;
+
             for(auto& output : command->outputs)
             {
                 if(output.has_parent_path())
@@ -184,15 +198,11 @@ public:
                 throw std::runtime_error("Command returned " + std::to_string(result.exitCode));
             }
 
-            ++buildCount;
-        }
-        if(buildCount > 0)
-        {
-            std::cout << "\n";
+            ++count;
         }
 
-        std::cout << std::string(args.config) + ": " + std::to_string(buildCount) << " targets rebuilt.";
-        if(buildCount == 0)
+        std::cout << "\n" << std::string(args.config) + ": " + std::to_string(commands.size()) << " targets rebuilt.";
+        if(commands.size() == 0)
         {
             std::cout << " (Everything up to date.)";
         }
@@ -207,15 +217,22 @@ private:
         std::filesystem::path depFile;
         std::string commandString;
         std::string desciption;
-        bool visited = false;
+        int depth = 0;
+        bool dirty = false;
+        std::vector<PendingCommand*> dependencies;
     };
 
     static bool checkDeps(const std::filesystem::path& path, std::filesystem::file_time_type outputTime)
     {
+        if(path.empty())
+        {
+            return false;
+        }
+
         auto data = file::read(path);
         if(data.empty())
         {
-            return true;;
+            return true;
         }
 
         size_t pos = 0;
