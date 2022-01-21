@@ -5,15 +5,22 @@
 #include <sstream>
 #include <string>
 
+#include <sys/mman.h>
+
 namespace file
 {
 
 std::string read(std::filesystem::path path)
 {
     std::ifstream stream(path);
-    std::stringstream buffer;
-    buffer << stream.rdbuf();
-    return buffer.str();
+    stream.seekg(0, std::ios_base::end);
+    size_t size = stream.tellg();
+    stream.seekg(0, std::ios_base::beg);
+
+    std::string buffer;
+    buffer.resize(size);
+    stream.read(buffer.data(), size);
+    return buffer;
 }
 
 bool write(std::filesystem::path path, const std::string& data)
@@ -55,4 +62,61 @@ bool write(std::filesystem::path path, const std::string& data)
     return true;
 }
 
+#if 0
+struct MappedFile
+{
+    MappedFile(MappedFile&& other)
+        : data(other.data)
+        , size(other.size)
+    {
+        data = other.data;
+        size = other.size;
+        other.data = nullptr;
+    } 
+
+    ~MappedFile()
+    {
+        if(data)
+        {
+            munmap(data, size);
+        }
+    }
+}
+
+template<typename T = char>
+std::unique_ptr<T> map(const std::filesystem::path& path)
+{
+    template<typename T>
+    struct Destructor
+    {
+        Destructor(T callable) : _callable(callable) {}
+        ~Destructor() { _callable(); }
+
+    private:
+        T _callable;
+    };
+
+    int fileDescriptor = open(path.c_str(), O_RDONLY);
+    if(fileDescriptor < 0)
+    {
+        throw std::runtime_error("Could not open file " + path.string() + " for mapping.");
+    }
+    Destructor fileDestructor([fileDescriptor](){ close(fileDescriptor); });
+
+    struct stat statData;
+    int err = fstat(fileDescriptor, &statData);
+    if(err < 0)
+    {
+        throw std::runtime_error("Could not stat file " + path.string() + " for mapping.");
+    }
+
+
+    struct Unmapper {
+        void operator()(T*) {  };
+    };
+    void* ptr = mmap(0, statData.st_size, PROT_READ, MAP_PRIVATE, fileDescriptor, 0);
+
+}
+
+#endif
 }
