@@ -340,53 +340,46 @@ private:
             }
         };
 
-        auto readPath = [&](std::string& result){
-            result.clear();
+        auto readPath = [&](){
+            size_t start = pos;
+            size_t offs = false;
             bool escaped = false;
             while(pos < data.size())
             {
-                char c = data[pos];
+                auto c = data[pos];
                 if(c == '\\')
                 {
-                    if(escaped)
-                    {
-                        result += '\\';
-                    }
                     escaped = true;
-                    ++pos;
-                    continue;
                 }
                 else if(std::isspace(c))
                 {
                     if(escaped)
                     {
-                        escaped = false;
+                        offs += 1;
                     }
                     else
                     {
-                        return result;
+                        return std::string_view(data.data()+start, pos-offs-start);
                     }
-                }
-                else if(escaped)
-                {
-                    result += '\\';
                     escaped = false;
                 }
-                
-                result += c;
+                else
+                {
+                    escaped = false;
+                }
+
+                data[pos-offs] = c;
                 ++pos;
             }
-            return result;
+
+            return std::string_view(data.data() + start, pos-offs-start);
         };
 
-        ++pos;
-
         bool scanningOutputs = true;
-        std::string pathString;
         while(pos < data.size())
         {
             skipWhitespace();
-            readPath(pathString);
+            auto pathString = readPath();
             if(pathString.empty())
             {
                 continue;
