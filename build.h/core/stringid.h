@@ -56,3 +56,12 @@ private:
         return result;
     }
 };
+
+template<>
+struct std::hash<StringId>
+{
+    std::size_t operator()(StringId const& id) const
+    {
+        return std::hash<const void*>{}(id.cstr());
+    }
+};

@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/stringid.h"
 #include "core/emitter.h"
 #include "core/project.h"
 #include "core/stringid.h"
@@ -65,15 +66,7 @@ public:
             build(pendingCommands, args.targetPath, *project, args.config);
         }
 
-        struct PathHash
-        {
-            size_t operator()(const std::filesystem::path& path) const
-            {
-                return std::filesystem::hash_value(path);
-            }   
-        };
-
-        std::unordered_map<std::filesystem::path, PendingCommand*, PathHash> commandMap;
+        std::unordered_map<StringId, PendingCommand*> commandMap;
         for(auto& command : pendingCommands)
         {
             for(auto& output : command.outputs)
@@ -131,6 +124,8 @@ public:
 
         std::sort(commands.begin(), commands.end(), [](auto a, auto b) { return a->depth > b->depth; });
         
+        TimeCache timeCache;
+        
         for(auto command : commands)
         {
             for(auto dependency : command->dependencies)
@@ -148,7 +143,7 @@ public:
             std::error_code ec;
             for(auto& output : command->outputs)
             {
-                outputTime = std::min(outputTime, std::filesystem::last_write_time(output, ec));
+                outputTime = std::min(outputTime, timeCache.get(output, ec));
                 if(ec)
                 {
                     command->dirty = true;
@@ -159,7 +154,7 @@ public:
 
             for(auto& input : command->inputs)
             {
-                auto inputTime = std::filesystem::last_write_time(input, ec);
+                auto inputTime = timeCache.get(input, ec);
                 if(ec || inputTime > outputTime)
                 {
                     command->dirty = true;
@@ -168,7 +163,7 @@ public:
             }
             if(command->dirty) continue;
 
-            if(checkDeps(command->depFile, outputTime))
+            if(checkDeps(command->depFile, outputTime, timeCache))
             {
                 command->dirty = true;
             }            
@@ -253,9 +248,10 @@ public:
                     command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
                         for(auto& output : command->outputs)
                         {
-                            if(output.has_parent_path())
+                            std::filesystem::path path(output.cstr());
+                            if(path.has_parent_path())
                             {
-                                std::filesystem::create_directories(output.parent_path());
+                                std::filesystem::create_directories(path.parent_path());
                             }
                         }
 
@@ -287,9 +283,9 @@ public:
 private:
     struct PendingCommand
     {
-        std::vector<std::filesystem::path> inputs;
-        std::vector<std::filesystem::path> outputs;
-        std::filesystem::path depFile;
+        std::vector<StringId> inputs;
+        std::vector<StringId> outputs;
+        StringId depFile;
         std::string commandString;
         std::string desciption;
         int depth = 0;
@@ -298,14 +294,34 @@ private:
         std::future<process::ProcessResult> result;
     };
 
-    static bool checkDeps(const std::filesystem::path& path, std::filesystem::file_time_type outputTime)
+    struct TimeCache
+    {
+    public:
+        std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
+        {
+            auto it = _times.find(path);
+            if(it != _times.end())
+            {
+                errorCode = it->second.second;
+                return it->second.first;
+            }
+
+            auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
+            _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
+            return time;
+        }
+    private:        
+        std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
+    };
+
+    static bool checkDeps(StringId path, std::filesystem::file_time_type outputTime, TimeCache& timeCache)
     {
         if(path.empty())
         {
             return false;
         }
 
-        auto data = file::read(path);
+        auto data = file::read(path.cstr());
         if(data.empty())
         {
             return true;
@@ -388,7 +404,7 @@ private:
             }
 
             std::error_code ec;
-            auto inputTime = std::filesystem::last_write_time(pathString, ec);
+            auto inputTime = timeCache.get(pathString, ec);
             if(ec || inputTime > outputTime)
             {
                 return true;
@@ -457,23 +473,30 @@ private:
             }
             std::string cwdStr = cwd.string();
 
-            std::vector<std::string> inputStrs;
+            std::vector<StringId> inputStrs;
             inputStrs.reserve(command.inputs.size());
             for(auto& path : command.inputs)
             {
-                inputStrs.push_back((pathOffset / path).string());
+                inputStrs.push_back(path.string());
+            }
+
+            std::vector<StringId> outputStrs;
+            outputStrs.reserve(command.outputs.size());
+            for(auto& path : command.outputs)
+            {
+                outputStrs.push_back(path.string());
             }
 
             std::string depfileStr;
             if(!command.depFile.empty())
             {
-                depfileStr = (pathOffset / command.depFile).string();
+                depfileStr = command.depFile.string();
             }
 
             pendingCommands.push_back({
-                command.inputs,
-                command.outputs,
-                command.depFile,
+                inputStrs,
+                outputStrs,
+                depfileStr,
                 "cd \"" + cwdStr + "\" && " + command.command,
                 command.description,
             });
