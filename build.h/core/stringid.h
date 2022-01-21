@@ -27,8 +27,19 @@ struct StringId
         return _cstr;
     }
 
+    static size_t getStorageSize()
+    {
+        return getStorage().size();
+    }
+
 private:
     const char* _cstr;
+    
+    static std::unordered_set<std::string>& getStorage()
+    {
+        static std::unordered_set<std::string> storage;
+        return storage;
+    }
 
     static StringId get(const char* str)
     {
@@ -37,7 +48,7 @@ private:
             return StringId();
         }
         
-        static std::unordered_set<std::string> storage;
+        auto& storage = getStorage();
         auto entry = storage.insert(str).first;
 
         StringId result;

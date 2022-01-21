@@ -1,5 +1,6 @@
 #pragma once
 
+#ifndef CUSTOM_BUILD_H_MAIN
 void generate(std::filesystem::path startPath, std::vector<std::string> args);
 int main(int argc, const char** argv)
 {
@@ -16,3 +17,4 @@ int main(int argc, const char** argv)
         return -1;
     }
 }
+#endif
