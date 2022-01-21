@@ -178,27 +178,102 @@ public:
 
         std::string line;
 
-        size_t count = 1;
+        size_t count = 0;
         size_t firstPending = 0;
-        for(auto command : commands)
+        std::vector<PendingCommand*> runningCommands;
+        bool halt = false;
+        std::mutex doneMutex;
+        std::vector<PendingCommand*> doneCommands;
+        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+        std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
+        while((!halt && firstPending < commands.size()) || !runningCommands.empty())
         {
-            std::cout << "\33[2K\r[" << count << "/" << commands.size() << "] " << command->desciption << std::flush;
+            // TODO: Semaphore of some kind instead of semi-spin lock
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(10ms);
 
-            for(auto& output : command->outputs)
             {
-                if(output.has_parent_path())
+                std::scoped_lock doneLock(doneMutex);
+                for(auto it = doneCommands.begin(); it != doneCommands.end(); )
                 {
-                    std::filesystem::create_directories(output.parent_path());
+                    auto command = *it;
+                    command->dirty = false;
+
+                    auto result = command->result.get();
+                    if(result.exitCode != 0)
+                    {
+                        std::cout << "\n" << result.output;
+                        std::cout << "\nCommand returned " + std::to_string(result.exitCode) << std::flush;
+                        halt = true;
+                    }
+                    it = doneCommands.erase(it);
+
+                    auto runIt = std::find(runningCommands.begin(), runningCommands.end(), command);
+                    assert(runIt != runningCommands.end());
+                    if(runIt != runningCommands.end())
+                    {
+                        runningCommands.erase(runIt);
+                    }
                 }
             }
-            auto result = process::run(command->commandString + " 2>&1");
-            if(result.exitCode != 0)
+
+            if(halt)
             {
-                std::cout << "\n" << result.output << std::flush;
-                throw std::runtime_error("Command returned " + std::to_string(result.exitCode));
+                continue;
             }
 
-            ++count;
+            bool skipped = false;
+            for(size_t i = firstPending; i < commands.size(); ++i)
+            {
+                if(runningCommands.size() >= maxConcurrentCommands)
+                {
+                    break;
+                }
+
+                auto command = commands[i];
+                if(command->dirty && !command->result.valid())
+                {
+                    bool ready = true;
+                    for(auto dependency : command->dependencies)
+                    {
+                        if(dependency->dirty)
+                        {
+                            ready = false;
+                            break;
+                        }
+                    }
+
+                    if(!ready)
+                    {
+                        skipped = true;
+                        continue;
+                    }
+
+                    std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
+                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
+                        for(auto& output : command->outputs)
+                        {
+                            if(output.has_parent_path())
+                            {
+                                std::filesystem::create_directories(output.parent_path());
+                            }
+                        }
+
+                        auto result = process::run(command->commandString + " 2>&1");
+                        {
+                            std::scoped_lock doneLock(doneMutex);
+                            doneCommands.push_back(command);
+                        }
+                        return result;
+                    });
+                    runningCommands.push_back(command);
+                }
+
+                if((!command->dirty || command->result.valid()) && !skipped)
+                {
+                    firstPending = i+1;
+                }
+            }
         }
 
         std::cout << "\n" << std::string(args.config) + ": " + std::to_string(commands.size()) << " targets rebuilt.";
@@ -220,6 +295,7 @@ private:
         int depth = 0;
         bool dirty = false;
         std::vector<PendingCommand*> dependencies;
+        std::future<process::ProcessResult> result;
     };
 
     static bool checkDeps(const std::filesystem::path& path, std::filesystem::file_time_type outputTime)
