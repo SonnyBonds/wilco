@@ -163,6 +163,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         auto compiler = getCompiler(project, resolvedOptions, pathOffset);
         auto commonCompilerFlags = getCommonCompilerFlags(project, resolvedOptions, pathOffset);
+        auto commonCompilerFlagsObjC = commonCompilerFlags;
         auto linker = getLinker(project, resolvedOptions, pathOffset);
         auto commonLinkerFlags = getCommonLinkerFlags(project, resolvedOptions, pathOffset);
 
@@ -173,17 +174,34 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         {
             auto input = buildPch;
             auto inputStr = (pathOffset / input).string();
+
             auto output = dataDir / std::filesystem::path("pch") / (input.string() + ".pch");
             auto outputStr = (pathOffset / output).string();
 
-            CommandEntry command;
-            command.command = compiler + commonCompilerFlags + " -x c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
-            command.inputs = { input };
-            command.outputs = { output };
-            command.workingDirectory = workingDir;
-            command.depFile = output.string() + ".d";
-            command.description = "Compiling " + project.name + " PCH: " + input.string();
-            resolvedOptions[Commands] += std::move(command);
+            auto outputObjC = dataDir / std::filesystem::path("pch") / (input.string() + ".pchmm");
+            auto outputObjCStr = (pathOffset / outputObjC).string();
+
+            {
+                CommandEntry command;
+                command.command = compiler + commonCompilerFlags + " -x c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
+                command.inputs = { input };
+                command.outputs = { output };
+                command.workingDirectory = workingDir;
+                command.depFile = output.string() + ".d";
+                command.description = "Compiling " + project.name + " PCH: " + input.string();
+                resolvedOptions[Commands] += std::move(command);
+            }
+
+            {
+                CommandEntry command;
+                command.command = compiler + commonCompilerFlags + " -x objective-c++-header -Xclang -emit-pch " + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputObjCStr);
+                command.inputs = { input };
+                command.outputs = { outputObjC };
+                command.workingDirectory = workingDir;
+                command.depFile = outputObjC.string() + ".d";
+                command.description = "Compiling " + project.name + " PCH (Objective-C++): " + input.string();
+                resolvedOptions[Commands] += std::move(command);
+            }
         }
 
         std::vector<std::filesystem::path> pchInputs;
@@ -192,8 +210,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             auto input = dataDir / std::filesystem::path("pch") / (importPch.string() + ".pch");
             auto inputStr = (pathOffset / input).string();
             commonCompilerFlags += " -Xclang -include-pch -Xclang " + inputStr;
-
             pchInputs.push_back(input);
+
+            auto inputObjC = dataDir / std::filesystem::path("pch") / (importPch.string() + ".pchmm");
+            auto inputObjCStr = (pathOffset / inputObjC).string();
+            commonCompilerFlagsObjC += " -Xclang -include-pch -Xclang " + inputObjCStr;
+            pchInputs.push_back(inputObjC);
         }
 
         std::vector<std::filesystem::path> linkerInputs;
@@ -208,7 +230,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             auto outputStr = (pathOffset / output).string();
 
             CommandEntry command;
-            command.command = compiler + commonCompilerFlags + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
+            command.command = compiler + (ext == ".mm" ? commonCompilerFlagsObjC : commonCompilerFlags) + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
             command.inputs = { input };
             command.inputs += pchInputs;
             command.outputs = { output };
