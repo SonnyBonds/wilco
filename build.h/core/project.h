@@ -102,6 +102,16 @@ ConfigSelector operator/(OperatingSystem a, ConfigSelector b)
     return b;
 }
 
+ConfigSelector operator/(ProjectType type, Transitivity transitivity)
+{
+    return type / ConfigSelector(transitivity);
+}
+
+ConfigSelector operator/(Transitivity transitivity, ProjectType type)
+{
+    return type / ConfigSelector(transitivity);
+}
+
 struct Project
 {
     std::string name;
