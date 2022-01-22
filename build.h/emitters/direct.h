@@ -208,9 +208,9 @@ public:
                     command->dirty = false;
 
                     auto result = command->result.get();
+                    std::cout << "\n" << result.output;
                     if(result.exitCode != 0)
                     {
-                        std::cout << "\n" << result.output;
                         std::cout << "\nCommand returned " + std::to_string(result.exitCode) << std::flush;
                         halt = true;
                     }
