@@ -409,7 +409,7 @@ private:
 
     static void build(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
     {
-        auto resolved = project.resolve(project.type, config, OperatingSystem::current());
+        auto resolved = project.resolve(config, OperatingSystem::current());
         resolved[DataDir] = root;
 
         {

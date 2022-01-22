@@ -124,9 +124,9 @@ struct Project
     {
     }
 
-    OptionCollection resolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS)
+    OptionCollection resolve(StringId configName, OperatingSystem targetOS)
     {
-        auto options = internalResolve(projectType, configName, targetOS, true);
+        auto options = internalResolve(type, configName, targetOS, true);
         options.deduplicate();
         return options;
     }
