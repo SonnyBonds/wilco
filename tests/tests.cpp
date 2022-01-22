@@ -222,7 +222,7 @@ TEST_CASE( "Dependency Parser" ) {
     trailing\space\  
     \leading \\backslash
     m\ u\ l\ tiple\ s\ p\ aces
-    )--";
+    endoffile)--";
     std::vector<std::string> result;
 
     DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
@@ -236,5 +236,6 @@ TEST_CASE( "Dependency Parser" ) {
         R"--(\leading)--",
         R"--(\\backslash)--",
         R"--(m u l tiple s p aces)--",
+        R"--(endoffile)--",
     });
 }
