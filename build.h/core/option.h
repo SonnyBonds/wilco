@@ -42,7 +42,7 @@ struct OptionStorage
     }
 
     template<typename T> 
-    const T& get() const
+    T& get() const
     {
         if(!_data)
         {

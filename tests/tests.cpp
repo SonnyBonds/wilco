@@ -77,14 +77,14 @@ public:
         return str.c_str();
     }
 
-    bool operator ==(const CompareEqualString& other)
+    bool operator ==(const CompareEqualString& other) const
     {
         return true;
     }
 };
 
 template<>
-class std::hash<CompareEqualString>
+struct std::hash<CompareEqualString>
 {
     size_t operator()(const CompareEqualString&)
     {

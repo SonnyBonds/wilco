@@ -32,6 +32,17 @@ private:
 
     // UINT_MAX ids ought to be enough for anybody...
     unsigned int _id = getUniqueId();
+
+    friend struct std::hash<PostProcessor>;
+};
+
+template<>
+struct std::hash<PostProcessor>
+{
+    size_t operator()(const PostProcessor& processor)
+    {
+        return processor._id;
+    }
 };
 
 Option<std::vector<PostProcessor>> PostProcess{"PostProcess"};
