@@ -62,7 +62,21 @@ private:
 
         bool operator==(const StringStorage& other) const
         {
-            return view == other.view;
+            // File paths are the bulk of long strings we're dealing with,
+            // and having a long common prefix is not uncommon.
+            // Therefore we check a piece of the tail first and hope
+            // to exit earlier.
+            if(view.size() != other.view.size()) return false;
+            if(view.size() > 32)
+            {
+                auto l = view.size() - 32;
+                if(view.substr(l) != other.view.substr(l)) return false;
+                return view.substr(0, l) == other.view.substr(0, l);
+            }
+            else
+            {
+                return view == other.view;
+            }
         }
         
         const char* c_str() const
@@ -78,7 +92,16 @@ private:
     {
         size_t operator()(const StringStorage& storage) const
         {
-            return std::hash<std::string_view>{}(storage.view);
+            // File paths are the bulk of long strings we're dealing with,
+            // so let's just hash the tail.
+            if(storage.view.size() > 32)
+            {
+                return std::hash<std::string_view>{}(storage.view.substr(storage.view.size() - 32));
+            }
+            else
+            {
+                return std::hash<std::string_view>{}(storage.view);
+            }
         }
     };
 
