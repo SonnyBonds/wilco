@@ -52,7 +52,7 @@ public:
         generator[Files] += BUILD_FILE;
 
         generatorDependencies += buildOutput;
-        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" " BUILD_ARGS, generatorDependencies, { outputFile }, START_DIR, {}, "Running build generator." };
+        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, { outputFile }, START_DIR, {}, "Running build generator." };
 
         projects.push_back(&generator);
 
