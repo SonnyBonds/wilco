@@ -99,7 +99,7 @@ try_gcc()
     if [ -z "$4" ]; then return; fi
     if [ -z "$5" ]; then return; fi
     local selected=
-    local this_compile_command="$3"\ $6$7$8$9\ -std=c++17\ -I"$BUILD_H_DIR"\ -DSTART_DIR=\"$(pwd)\"\ -DBUILD_H_DIR=\""$BUILD_H_DIR"\"\ -DBUILD_DIR=\""$BUILD_DIR"\"\ -DBUILD_FILE=\""$INPUT_BASE"\"\ -DBUILD_ARGS=\""$BUILD_ARGS"\"\ "$INPUT"\ -o\ "$OUTPUT"
+    local this_compile_command="$3"\ $6$7$8$9\ -std=c++17\ -O3\ -I"$BUILD_H_DIR"\ -DSTART_DIR=\"$(pwd)\"\ -DBUILD_H_DIR=\""$BUILD_H_DIR"\"\ -DBUILD_DIR=\""$BUILD_DIR"\"\ -DBUILD_FILE=\""$INPUT_BASE"\"\ -DBUILD_ARGS=\""$BUILD_ARGS"\"\ "$INPUT"\ -o\ "$OUTPUT"
     if [ -z "$selected_toolchain" ]; then
         local selected="(selected by default)"
         compile_command="$this_compile_command"
