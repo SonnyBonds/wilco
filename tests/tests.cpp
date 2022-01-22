@@ -211,3 +211,30 @@ TEST_CASE( "Resolve Config" ) {
         REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
     }
 }
+
+TEST_CASE( "Dependency Parser" ) {
+    using strvec = std::vector<std::string>;
+
+    std::string dependencyData = R"--( \asdf:
+    some\path\with\ spaces \
+    another\without \
+
+    trailing\space\  
+    \leading \\backslash
+    m\ u\ l\ tiple\ s\ p\ aces
+    )--";
+    std::vector<std::string> result;
+
+    DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+        result.push_back(std::string(path));
+        return false;
+    });
+    REQUIRE(result == strvec{
+        R"--(some\path\with spaces)--",
+        R"--(another\without)--",
+        R"--(trailing\space )--",
+        R"--(\leading)--",
+        R"--(\\backslash)--",
+        R"--(m u l tiple s p aces)--",
+    });
+}
