@@ -273,7 +273,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
             if(project.type == StaticLib)
             {
-                project[Public / config][LinkedOutputs] += output;
+                project[PublicOnly / config][LinkedOutputs] += output;
             }
         }
 
