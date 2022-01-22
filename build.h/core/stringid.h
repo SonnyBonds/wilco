@@ -163,7 +163,7 @@ private:
 template<>
 struct std::hash<StringId>
 {
-    std::size_t operator()(StringId const& id) const
+    size_t operator()(const StringId& id) const
     {
         return std::hash<const void*>{}(id.cstr());
     }

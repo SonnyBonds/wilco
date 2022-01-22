@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <type_traits>
 #include <unordered_set>
 #include <vector>
 
@@ -17,7 +18,14 @@ struct Option : public StringId
 template<typename T>
 struct OptionHash
 {
-    size_t operator()(const T& a) const
+    template<typename U>
+    std::enable_if_t<std::is_base_of_v<StringId, U>, size_t> operator()(const U& a) const
+    { 
+        return std::hash<StringId>()(a);
+    };
+
+    template<typename U>
+    std::enable_if_t<!std::is_base_of_v<StringId, U>, size_t> operator()(const U& a) const
     { 
         return std::hash<T>()(a);
     };
