@@ -6,6 +6,9 @@
 #include "core/project.h"
 #include "modules/command.h"
 #include "modules/toolchain.h"
+#include "modules/feature.h"
+
+Option<std::vector<StringId>> GccFlags{"GccFlags"};
 
 struct GccLikeToolchainProvider : public ToolchainProvider
 {
@@ -43,11 +46,18 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             flags += " -m64 -arch x86_64";
         }
 
-        std::map<std::string, std::string> featureMap = {
-            { "c++17", " -std=c++17"},
-            { "libc++", " -stdlib=libc++"},
-            { "optimize", " -O3"},
-            { "debuginfo", " -g"},
+        std::map<Feature, std::string> featureMap = {
+            { feature::Cpp11, " -std=c++11"},
+            { feature::Cpp14, " -std=c++14"},
+            { feature::Cpp17, " -std=c++17"},
+            { feature::Cpp20, " -std=c++20"},
+            { feature::Cpp23, " -std=c++23"},
+            { feature::Optimize, " -O2"},
+            { feature::OptimizeSize, " -Os"},
+            { feature::DebugSymbols, " -g"},
+            { feature::WarningsAsErrors, " -Werror"},
+            { feature::FastMath, " -ffast-math"},
+            { feature::Exceptions, " -fexceptions"},
         };
         for(auto& feature : resolvedOptions[Features])
         {
@@ -56,6 +66,11 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             {
                 flags += it->second;
             }
+        }
+
+        for(auto& flag : resolvedOptions[GccFlags])
+        {
+            flags += flag;
         }
 
         return flags;

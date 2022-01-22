@@ -39,7 +39,7 @@ public:
 
         auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
         Project generator("_generator", Executable);
-        generator[Features] += { "c++17", "optimize" };
+        generator[Features] += { feature::Cpp17, feature::Optimize };
         generator[IncludePaths] += BUILD_H_DIR;
         generator[OutputPath] = buildOutput;
         generator[Defines] += {

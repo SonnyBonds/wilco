@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/option.h"
+#include "modules/feature.h"
 
 Option<std::string> Platform{"Platform"};
 Option<std::vector<std::filesystem::path>> IncludePaths{"IncludePaths"};
@@ -12,7 +13,7 @@ Option<std::vector<std::filesystem::path>> Files{"Files"};
 Option<std::vector<std::filesystem::path>> GeneratorDependencies{"GeneratorDependencies"};
 Option<std::vector<std::filesystem::path>> Libs{"Libs"};
 Option<std::vector<std::string>> Defines{"Defines"};
-Option<std::vector<std::string>> Features{"Features"};
+Option<std::vector<Feature>> Features{"Features"};
 Option<std::vector<std::string>> Frameworks{"Frameworks"};
 Option<std::filesystem::path> OutputDir{"OutputDir"};
 Option<std::string> OutputStem{"OutputStem"};
