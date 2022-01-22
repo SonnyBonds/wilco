@@ -163,10 +163,23 @@ public:
             }
             if(command->dirty) continue;
 
-            if(checkDeps(command->depFile, outputTime, timeCache))
+            if(!command->depFile.empty())
             {
-                command->dirty = true;
-            }            
+                auto data = file::read(command->depFile.cstr());
+                if(data.empty())
+                {
+                    command->dirty = true;
+                }
+                else
+                {
+                    command->dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
+                    {
+                        std::error_code ec;
+                        auto inputTime = timeCache.get(path, ec);
+                        return ec || inputTime > outputTime;
+                    });
+                }            
+            }
         }
 
         commands.erase(std::remove_if(commands.begin(), commands.end(), [](auto command) { return !command->dirty; }), commands.end());
@@ -280,53 +293,9 @@ public:
         std::cout << "\n";
     }
 
-private:
-    struct PendingCommand
+    template<typename Callable>
+    static bool parseDependencyData(std::string& data, Callable callable)
     {
-        std::vector<StringId> inputs;
-        std::vector<StringId> outputs;
-        StringId depFile;
-        std::string commandString;
-        std::string desciption;
-        int depth = 0;
-        bool dirty = false;
-        std::vector<PendingCommand*> dependencies;
-        std::future<process::ProcessResult> result;
-    };
-
-    struct TimeCache
-    {
-    public:
-        std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
-        {
-            auto it = _times.find(path);
-            if(it != _times.end())
-            {
-                errorCode = it->second.second;
-                return it->second.first;
-            }
-
-            auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
-            _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
-            return time;
-        }
-    private:        
-        std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
-    };
-
-    static bool checkDeps(StringId path, std::filesystem::file_time_type outputTime, TimeCache& timeCache)
-    {
-        if(path.empty())
-        {
-            return false;
-        }
-
-        auto data = file::read(path.cstr());
-        if(data.empty())
-        {
-            return true;
-        }
-
         size_t pos = 0;
         auto skipWhitespace = [&](){
             while(pos < data.size())
@@ -396,9 +365,7 @@ private:
                 continue;
             }
 
-            std::error_code ec;
-            auto inputTime = timeCache.get(pathString, ec);
-            if(ec || inputTime > outputTime)
+            if(callable(pathString))
             {
                 return true;
             }
@@ -406,6 +373,40 @@ private:
 
         return false;
     }
+
+private:
+    struct PendingCommand
+    {
+        std::vector<StringId> inputs;
+        std::vector<StringId> outputs;
+        StringId depFile;
+        std::string commandString;
+        std::string desciption;
+        int depth = 0;
+        bool dirty = false;
+        std::vector<PendingCommand*> dependencies;
+        std::future<process::ProcessResult> result;
+    };
+
+    struct TimeCache
+    {
+    public:
+        std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
+        {
+            auto it = _times.find(path);
+            if(it != _times.end())
+            {
+                errorCode = it->second.second;
+                return it->second.first;
+            }
+
+            auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
+            _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
+            return time;
+        }
+    private:        
+        std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
+    };
 
     static void build(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
     {
