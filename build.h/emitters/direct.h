@@ -301,7 +301,8 @@ public:
             while(pos < data.size())
             {
                 char c = data[pos];
-                if(!std::isspace(data[pos]) && data[pos] != '\\')
+                if(!std::isspace(data[pos]) && 
+                   (data[pos] != '\\' || pos == data.size()-1 || !std::isspace(data[pos+1])))
                 {
                     break;
                 }
