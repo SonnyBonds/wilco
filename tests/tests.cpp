@@ -49,6 +49,11 @@ TEST_CASE( "StringId" ) {
     SECTION("default - empty std::string_view comparison") {
         REQUIRE(StringId() == StringId(std::string_view()));
     }
+
+    SECTION("long string comparison") {
+        REQUIRE(StringId("/a/long/string/of/data/that/could/resemble/a/path/maybe") == StringId("/a/long/string/of/data/that/could/resemble/a/path/maybe"));
+        REQUIRE_FALSE(StringId("/a/long/string/of/data/that/could/resemble/a/path/xxxxx") == StringId("/a/long/string/of/data/that/could/resemble/a/path/maybe"));
+    }
 }
 
 // Used to make test deduplication, while still being able to trace where it comes from
