@@ -28,25 +28,186 @@ TEST_CASE( "StringId" ) {
     SECTION("const char* - std::string comparison") {
         REQUIRE(StringId("asdf") == StringId(std::string("asdf")));
     }
-    /*SECTION("const char* - std::string_view comparison") {
+    SECTION("const char* - std::string_view comparison") {
         REQUIRE(StringId("asdf") == StringId(std::string_view("asdf")));
-    }*/
+    }
     SECTION("std::string - std::string comparison") {
         REQUIRE(StringId(std::string("asdf")) == StringId(std::string("asdf")));
     }
-    /*SECTION("std::string - std::string_view comparison") {
+    SECTION("std::string - std::string_view comparison") {
         REQUIRE(StringId(std::string("asdf")) == StringId(std::string_view("asdf")));
-    }*/
-    /*SECTION("std::string_view - std::string_view comparison") {
+    }
+    SECTION("std::string_view - std::string_view comparison") {
         REQUIRE(StringId(std::string("asdf")) == StringId(std::string_view("asdf")));
-    }*/
+    }
     SECTION("default - empty const char* comparison") {
         REQUIRE(StringId() == StringId(""));
     }
     SECTION("default - empty std::string comparison") {
         REQUIRE(StringId() == StringId(std::string()));
     }
-    /*SECTION("default - empty std::string_view comparison") {
-        REQUIRE(StringId() == StringId(std::string_view())));
-    }*/
+    SECTION("default - empty std::string_view comparison") {
+        REQUIRE(StringId() == StringId(std::string_view()));
+    }
+}
+
+// Used to make test deduplication, while still being able to trace where it comes from
+class CompareEqualString
+{
+public:
+    std::string str;
+
+    CompareEqualString(std::string other)
+        : str(std::move(other))
+    {
+    }
+
+    CompareEqualString(const char* other)
+        : str(other)
+    {
+    }
+
+    operator const std::string&() const
+    {
+        return str;
+    }
+
+    operator const char*() const
+    {
+        return str.c_str();
+    }
+
+    bool operator ==(const CompareEqualString& other)
+    {
+        return true;
+    }
+};
+
+template<>
+class std::hash<CompareEqualString>
+{
+    size_t operator()(const CompareEqualString&)
+    {
+        return 1;
+    }
+};
+
+TEST_CASE( "Resolve Config" ) {
+    
+    using strvec = std::vector<std::string>;
+    using streqvec = std::vector<CompareEqualString>;
+
+    Option<strvec> LocalOption{"LocalOption"};
+    Option<strvec> PublicOption{"PublicOption"};
+    Option<strvec> PublicOnlyOption{"PublicOnlyOption"};
+    Option<strvec> StaticLibOption{"StaticLibOption"};
+    Option<strvec> TypeOption{"TypeOption"};
+    Option<streqvec> DuplicateOption{"DuplicateOption"};
+    StringId configA = "configA";
+    StringId configB = "configB";
+
+    Project baseProject;
+    baseProject[LocalOption] += "None";
+    baseProject[configA][LocalOption] += "A";
+    baseProject[configB][LocalOption] += "B";
+    baseProject[Public][DuplicateOption] += { "Base 1", "Base 2" };
+    baseProject[Public / configA][DuplicateOption] += { "Base A 1", "Base A 2"};
+    baseProject[Public / configB][DuplicateOption] += { "Base B 1", "Base B 2"};
+    baseProject[Public][PublicOption] += "P None";
+    baseProject[Public / configA][PublicOption] += "P A";
+    baseProject[Public / configB][PublicOption] += "P B";
+    baseProject[PublicOnly][PublicOnlyOption] += "PO None";
+    baseProject[PublicOnly / configA][PublicOnlyOption] += "PO A";
+    baseProject[PublicOnly / configB][PublicOnlyOption] += "PO B";
+    baseProject[Public / StaticLib][TypeOption] += "Static On Base";
+    baseProject[Public / Executable][TypeOption] += "Executable On Base";
+
+    Project noTypeProject;
+    noTypeProject.links += &baseProject;
+    noTypeProject[Public / StaticLib][TypeOption] += "Static On None";
+    noTypeProject[Public / Executable][TypeOption] += "Executable On None";
+    noTypeProject[Public][DuplicateOption] += { "None 1", "None 2" };
+    noTypeProject[Public / configA][DuplicateOption] += { "None A 1", "None A 2"};
+    noTypeProject[Public / configB][DuplicateOption] += { "None B 1", "None B 2"};
+
+    Project staticLibProject;
+    staticLibProject.links += &noTypeProject;
+    staticLibProject.type = StaticLib;
+    staticLibProject[Public / StaticLib][TypeOption] += "Static On Static";
+    staticLibProject[Public / Executable][TypeOption] += "Executable On Static";
+    staticLibProject[Public][DuplicateOption] += { "Static 1", "Static 2" };
+    staticLibProject[Public / configA][DuplicateOption] += { "Static A 1", "Static A 2"};
+    staticLibProject[Public / configB][DuplicateOption] += { "Static B 1", "Static B 2"};
+
+    Project executableProject;
+    executableProject.links += &staticLibProject;
+    executableProject.type = Executable;
+    executableProject[Public / StaticLib][TypeOption] += "Static On Executable";
+    executableProject[Public / Executable][TypeOption] += "Executable On Executable";
+    executableProject[Public][DuplicateOption] += { "Executable 1", "Executable 2" };
+    executableProject[Public / configA][DuplicateOption] += { "Executable A 1", "Executable A 2"};
+    executableProject[Public / configB][DuplicateOption] += { "Executable B 1", "Executable B 2"};
+
+    SECTION("base no config") {
+        auto resolved = baseProject.resolve("", OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{"None"});
+        REQUIRE(resolved[PublicOption] == strvec{"P None"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{});
+        REQUIRE(resolved[TypeOption] == strvec{});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("base config A") {
+        auto resolved = baseProject.resolve(configA, OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{"None", "A"});
+        REQUIRE(resolved[PublicOption] == strvec{"P None", "P A"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("base config B") {
+        auto resolved = baseProject.resolve(configB, OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{"None", "B"});
+        REQUIRE(resolved[PublicOption] == strvec{"P None", "P B"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("no type no config") {
+        auto resolved = noTypeProject.resolve("", OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{});
+        REQUIRE(resolved[PublicOption] == strvec{"P None"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None"});
+        REQUIRE(resolved[TypeOption] == strvec{});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("no type config A") {
+        auto resolved = noTypeProject.resolve(configA, OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{});
+        REQUIRE(resolved[PublicOption] == strvec{"P None", "P A"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None", "PO A"});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("no type config B") {
+        auto resolved = noTypeProject.resolve(configB, OperatingSystem::current());
+        REQUIRE(resolved[LocalOption] == strvec{});
+        REQUIRE(resolved[PublicOption] == strvec{"P None", "P B"});
+        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None", "PO B"});
+        REQUIRE(resolved[TypeOption] == strvec{});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("staticlib no config") {
+        auto resolved = staticLibProject.resolve("", OperatingSystem::current());
+        REQUIRE(resolved[TypeOption] == strvec{"Static On Base", "Static On None", "Static On Static"});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
+
+    SECTION("executable no config") {
+        auto resolved = executableProject.resolve("", OperatingSystem::current());
+        REQUIRE(resolved[TypeOption] == strvec{"Executable On Base", "Executable On None", "Executable On Static", "Executable On Executable"});
+        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+    }
 }
