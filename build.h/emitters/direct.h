@@ -310,39 +310,44 @@ public:
             }
         };
 
+        std::string_view spaces(" \n");
         auto readPath = [&](){
             size_t start = pos;
-            size_t offs = false;
-            bool escaped = false;
-            while(pos < data.size())
+            size_t lastBreak = pos;
+            size_t offset = 0;
+            bool stop = false;
+            while(!stop)
             {
-                auto c = data[pos];
-                if(c == '\\')
+                bool space = false;
+                pos = data.find_first_of(spaces, pos+1);
+                if(pos == std::string::npos)
                 {
-                    escaped = true;
-                }
-                else if(std::isspace(c))
-                {
-                    if(escaped)
-                    {
-                        offs += 1;
-                    }
-                    else
-                    {
-                        return std::string_view(data.data()+start, pos-offs-start);
-                    }
-                    escaped = false;
+                    pos = data.size();
+                    stop = true;
                 }
                 else
                 {
-                    escaped = false;
+                    if(data[pos-1] != '\\')
+                    {
+                        stop = true;
+                    }
+                    else
+                    {
+                        space = true;
+                    }
                 }
-
-                data[pos-offs] = c;
-                ++pos;
+                if(offset > 0)
+                {
+                    memmove(data.data()+lastBreak-offset, data.data()+lastBreak, pos-lastBreak);
+                }
+                if(space)
+                {
+                    ++offset;
+                }
+                lastBreak = pos;
             }
 
-            return std::string_view(data.data() + start, pos-offs-start);
+            return std::string_view(data.data() + start, pos-offset-start);
         };
 
         bool scanningOutputs = true;
