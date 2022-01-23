@@ -31,6 +31,8 @@ struct Emitter
     {
         std::vector<Project*> orderedProjects;
         std::set<Project*> discoveredProjects;
+
+        discover(&Project::defaults, discoveredProjects, orderedProjects);
         for(auto project : projects)
         {
             discover(project, discoveredProjects, orderedProjects);

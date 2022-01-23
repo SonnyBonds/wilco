@@ -120,6 +120,8 @@ struct Project
     std::map<ConfigSelector, OptionCollection, std::less<>> configs;
     std::vector<Project*> links;
 
+    static Project defaults;
+
     Project(std::string name = {}, std::optional<ProjectType> type = {})
         : name(std::move(name)), type(type)
     {
@@ -170,9 +172,19 @@ private:
     {
         OptionCollection result;
 
-        for(auto& link : links)
+        if(links.empty())
         {
-            result.combine(link->internalResolve(projectType, configName, targetOS, false));
+            if(this != &defaults)
+            {
+                result.combine(defaults.internalResolve(projectType, configName, targetOS, false));
+            }
+        }
+        else
+        {
+            for(auto& link : links)
+            {
+                result.combine(link->internalResolve(projectType, configName, targetOS, false));
+            }
         }
 
         for(auto& entry : configs)
@@ -198,15 +210,16 @@ private:
 
 Project Project::defaults = [](){
     Project defaults;
-    defaults.links = {}; // Don't link defaults to itself
-    defaults[Linux / Executable][OutputExtension] = "";
-    defaults[Linux / StaticLib][OutputExtension] = ".a";
-    defaults[Linux / SharedLib][OutputExtension] = ".so";
-    defaults[MacOS / Executable][OutputExtension] = "";
-    defaults[MacOS / StaticLib][OutputExtension] = ".a";
-    defaults[MacOS / SharedLib][OutputExtension] = ".so";
-    defaults[Windows / Executable][OutputExtension] = ".exe";
-    defaults[Windows / StaticLib][OutputExtension] = ".lib";
-    defaults[Windows / SharedLib][OutputExtension] = ".dll";
+
+    defaults[Public][OutputDir] = "bin";
+    defaults[Public / Linux / Executable][OutputExtension] = "";
+    defaults[Public / Linux / StaticLib][OutputExtension] = ".a";
+    defaults[Public / Linux / SharedLib][OutputExtension] = ".so";
+    defaults[Public / MacOS / Executable][OutputExtension] = "";
+    defaults[Public / MacOS / StaticLib][OutputExtension] = ".a";
+    defaults[Public / MacOS / SharedLib][OutputExtension] = ".so";
+    defaults[Public / Windows / Executable][OutputExtension] = ".exe";
+    defaults[Public / Windows / StaticLib][OutputExtension] = ".lib";
+    defaults[Public / Windows / SharedLib][OutputExtension] = ".dll";
     return defaults;
 }();
