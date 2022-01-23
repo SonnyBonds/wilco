@@ -70,46 +70,47 @@ struct ConfigSelector
     }
 };
 
-ConfigSelector operator/(Transitivity a, ConfigSelector b)
+ConfigSelector operator/(ConfigSelector a, Transitivity b)
 {
-    if(b.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
-    b.transitivity = a;
+    if(a.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
+    a.transitivity = b;
 
-    return b;
+    return a;
 }
 
-ConfigSelector operator/(ProjectType a, ConfigSelector b)
+ConfigSelector operator/(ConfigSelector a, ProjectType b)
 {
-    if(b.projectType) throw std::invalid_argument("Project type was specified twice.");
-    b.projectType = a;
+    if(a.projectType) throw std::invalid_argument("Project type was specified twice.");
+    a.projectType = b;
 
-    return b;
+    return a;
 }
 
-ConfigSelector operator/(StringId a, ConfigSelector b)
+ConfigSelector operator/(ConfigSelector a, StringId b)
 {
-    if(b.name) throw std::invalid_argument("Configuration name was specified twice.");
-    b.name = a;
+    if(a.name) throw std::invalid_argument("Configuration name was specified twice.");
+    a.name = b;
 
-    return b;
+    return a;
 }
 
-ConfigSelector operator/(OperatingSystem a, ConfigSelector b)
+ConfigSelector operator/(ConfigSelector a, OperatingSystem b)
 {
-    if(b.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
-    b.targetOS = a;
+    if(a.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
+    a.targetOS = b;
 
-    return b;
+    return a;
 }
 
+// Need explicit operators for enums since regular int / is a valid overload otherwise
 ConfigSelector operator/(ProjectType type, Transitivity transitivity)
 {
-    return type / ConfigSelector(transitivity);
+    return ConfigSelector(type) / transitivity;
 }
 
 ConfigSelector operator/(Transitivity transitivity, ProjectType type)
 {
-    return type / ConfigSelector(transitivity);
+    return ConfigSelector(type) / transitivity;
 }
 
 struct Project
@@ -194,3 +195,18 @@ private:
         return result;
     }
 };
+
+Project Project::defaults = [](){
+    Project defaults;
+    defaults.links = {}; // Don't link defaults to itself
+    defaults[Linux / Executable][OutputExtension] = "";
+    defaults[Linux / StaticLib][OutputExtension] = ".a";
+    defaults[Linux / SharedLib][OutputExtension] = ".so";
+    defaults[MacOS / Executable][OutputExtension] = "";
+    defaults[MacOS / StaticLib][OutputExtension] = ".a";
+    defaults[MacOS / SharedLib][OutputExtension] = ".so";
+    defaults[Windows / Executable][OutputExtension] = ".exe";
+    defaults[Windows / StaticLib][OutputExtension] = ".lib";
+    defaults[Windows / SharedLib][OutputExtension] = ".dll";
+    return defaults;
+}();
