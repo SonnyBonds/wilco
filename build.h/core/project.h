@@ -162,7 +162,7 @@ struct Project
             stem = name;
         }
 
-        return resolvedOptions[OutputDir] / (resolvedOptions[OutputPrefix] + stem + resolvedOptions[OutputSuffix] + resolvedOptions[OutputStem]);
+        return resolvedOptions[OutputDir] / (resolvedOptions[OutputPrefix] + stem + resolvedOptions[OutputSuffix] + resolvedOptions[OutputExtension]);
     }
 
 private:
