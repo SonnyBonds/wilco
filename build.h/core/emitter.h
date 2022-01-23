@@ -6,9 +6,9 @@
 #include <string>
 #include <vector>
 
-#include <core/os.h>
-#include <core/project.h>
-#include <core/stringid.h>
+#include "core/os.h"
+#include "core/project.h"
+#include "core/stringid.h"
 
 struct EmitterArgs
 {
