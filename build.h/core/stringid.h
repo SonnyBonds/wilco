@@ -41,14 +41,14 @@ private:
     // so we'll have to make do with this... thing.
     struct StringStorage
     {
-        StringStorage(std::string str)
-            : str(str)
+        StringStorage(std::string s)
+            : str(std::move(s))
         {
-            view = std::string_view(str);
+            view = str;
         }
 
-        StringStorage(std::string_view view)
-            : view(view)
+        StringStorage(std::string_view v)
+            : view(v)
         {
         }
 
@@ -58,6 +58,14 @@ private:
             view = str;
         }
 
+        StringStorage& operator=(StringStorage&& other)
+        {
+            str = std::move(other.str);
+            view = str;
+            return *this;
+        }
+
+        StringStorage& operator=(const StringStorage& other) = delete;
         StringStorage(const StringStorage& other) = delete;
 
         bool operator==(const StringStorage& other) const
