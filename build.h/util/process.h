@@ -8,6 +8,7 @@
 #if _WIN32
 #else
 #include <dlfcn.h>
+#include <unistd.h>
 #endif
 
 namespace process
@@ -36,18 +37,23 @@ ProcessResult run(std::string command, bool echoOutput = false)
     ProcessResult result;
     {
         auto processPipe = popen(command.c_str(), "r");
+        auto pipeFd = fileno(processPipe);
         try
         {
             std::array<char, 2048> buffer;
-            while(auto bytesRead = fread(buffer.data(), 1, buffer.size(), processPipe))
+            while(auto bytesRead = read(pipeFd, buffer.data(), buffer.size()))
             {
+                if(bytesRead < 0)
+                {
+                    break;
+                }
                 result.output.append(buffer.data(), bytesRead);
                 if(echoOutput)
                 {
                     std::cout.write(buffer.data(), bytesRead);
+                    std::cout.flush();
                 }
             }
-            
         }
         catch(...)
         {
