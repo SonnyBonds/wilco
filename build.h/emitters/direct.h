@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -186,11 +187,14 @@ public:
 
         std::string line;
 
+        auto currentModule = process::findCurrentModulePath();
         size_t count = 0;
         size_t firstPending = 0;
         std::vector<PendingCommand*> runningCommands;
         bool halt = false;
         std::mutex doneMutex;
+        PendingCommand* restartCommand = nullptr;
+        bool restart = false;
         std::vector<PendingCommand*> doneCommands;
         size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
         std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
@@ -213,6 +217,10 @@ public:
                     {
                         std::cout << "\nCommand returned " + std::to_string(result.exitCode) << std::flush;
                         halt = true;
+                    }
+                    else if(command == restartCommand)
+                    {
+                        restart = true;
                     }
                     it = doneCommands.erase(it);
 
@@ -258,7 +266,7 @@ public:
                     }
 
                     std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
-                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
+                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands, &currentModule](){
                         for(auto& output : command->outputs)
                         {
                             std::filesystem::path path(output.cstr());
@@ -276,6 +284,16 @@ public:
                         return result;
                     });
                     runningCommands.push_back(command);
+
+                    for(auto& output : command->outputs)
+                    {
+                        std::error_code ec;
+                        if(std::filesystem::equivalent(output.cstr(), currentModule, ec))
+                        {
+                            restartCommand = command;
+                            halt = true;
+                        }
+                    }
                 }
 
                 if((!command->dirty || command->result.valid()) && !skipped)
@@ -283,6 +301,14 @@ public:
                     firstPending = i+1;
                 }
             }
+        }
+
+        if(restart)
+        {
+            std::cout << "Build updated, restarting...\n";
+            // TODO: Pass same command line as we got started with?
+            auto result = process::run(currentModule + " --direct", true);
+            std::exit(result.exitCode);
         }
 
         std::cout << "\n" << std::string(args.config) + ": " + std::to_string(commands.size()) << " targets rebuilt.";
