@@ -25,8 +25,7 @@ bool write(std::filesystem::path path, const std::string& data)
 {
     bool upToDate = false;
     std::error_code ec;
-    size_t fileSize = 0;
-    std::filesystem::file_size(path, ec);
+    size_t fileSize = std::filesystem::file_size(path, ec);
     if(!ec && fileSize != data.size())
     {
         std::ifstream inputStream(path);
