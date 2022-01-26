@@ -5,8 +5,6 @@
 #include <sstream>
 #include <string>
 
-#include <sys/mman.h>
-
 namespace file
 {
 
