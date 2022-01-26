@@ -215,7 +215,7 @@ public:
                     std::cout << "\n" << result.output;
                     if(result.exitCode != 0)
                     {
-                        std::cout << "\nCommand returned " + std::to_string(result.exitCode) << std::flush;
+                        std::cout << "\nCommand returned " + std::to_string(result.exitCode);
                         halt = true;
                     }
                     else if(command == restartCommand)
@@ -230,6 +230,8 @@ public:
                     {
                         runningCommands.erase(runIt);
                     }
+
+                    std::cout << std::flush;
                 }
             }
 
@@ -305,7 +307,7 @@ public:
 
         if(restart)
         {
-            std::cout << "Build updated, restarting...\n";
+            std::cout << "Build updated, restarting...\n\n\n" << std::flush;
             // TODO: Pass same command line as we got started with?
             auto result = process::run(currentModule + " --direct", true);
             std::exit(result.exitCode);
@@ -316,7 +318,7 @@ public:
         {
             std::cout << " (Everything up to date.)";
         }
-        std::cout << "\n";
+        std::cout << "\n" << std::flush;
     }
 
     template<typename Callable>
