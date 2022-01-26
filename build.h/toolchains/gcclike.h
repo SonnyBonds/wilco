@@ -295,16 +295,3 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         return outputs;
     }
 };
-
-struct GccToolchainProvider : public GccLikeToolchainProvider
-{
-    using GccLikeToolchainProvider::GccLikeToolchainProvider;
-    static GccToolchainProvider* getInstance()
-    {
-        static GccToolchainProvider instance("gcc", "g++", "g++", "ar");
-        return &instance;
-    }
-    static Toolchains::Token installToken;
-};
-
-Toolchains::Token GccToolchainProvider::installToken = Toolchains::install(GccToolchainProvider::getInstance());
