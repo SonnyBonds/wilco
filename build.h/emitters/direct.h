@@ -26,389 +26,75 @@ class DirectBuilder
 public:
     static void emit(const EmitterArgs& args)
     {
-        auto projects = args.projects;
-
-        std::vector<std::filesystem::path> generatorDependencies;
-        for(auto& project : projects)
         {
-            generatorDependencies += (*project)[GeneratorDependencies];
-            for(auto& entry : project->configs)
+            auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
+            Project generator("_generator", Executable);
+            generator[Features] += { feature::Cpp17, feature::Optimize };
+            generator[IncludePaths] += BUILD_H_DIR;
+            generator[OutputPath] = buildOutput;
+            generator[Defines] += {
+                "START_DIR=\\\"" START_DIR "\\\"",
+                "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
+                "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
+                "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
+                "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
+            };
+            generator[Files] += BUILD_FILE;        
+
+            std::vector<PendingCommand> pendingCommands;
+            collectCommands(pendingCommands, args.targetPath, generator, "");
+            auto commands = processCommands(pendingCommands);
+
+            if(!commands.empty())
             {
-                generatorDependencies += (*project)[GeneratorDependencies];
-            }
-        }
+                std::cout << "Generator has changed. Rebuilding...";
+                size_t completedCommands = runCommands(commands, 1);
 
-        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
-        Project generator("_generator", Executable);
-        generator[Features] += { feature::Cpp17, feature::Optimize };
-        generator[IncludePaths] += BUILD_H_DIR;
-        generator[OutputPath] = buildOutput;
-        generator[Defines] += {
-            "START_DIR=\\\"" START_DIR "\\\"",
-            "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
-            "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
-            "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
-            "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
-        };
-        generator[Files] += BUILD_FILE;
-
-        generatorDependencies += buildOutput;
-        //generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" " BUILD_ARGS, generatorDependencies, { }, START_DIR, {}, "Running build generator." };
-
-        projects.push_back(&generator);
-
-        projects = Emitter::discoverProjects(projects);
-
-        std::vector<PendingCommand> pendingCommands;
-        using It = decltype(pendingCommands.begin());
-
-        for(auto project : projects)
-        {
-            build(pendingCommands, args.targetPath, *project, args.config);
-        }
-
-        std::unordered_map<StringId, PendingCommand*> commandMap;
-        for(auto& command : pendingCommands)
-        {
-            for(auto& output : command.outputs)
-            {
-                commandMap[output] = &command;
-            }
-        }
-
-        for(auto& command : pendingCommands)
-        {
-            command.dependencies.reserve(command.inputs.size());
-            for(auto& input : command.inputs)
-            {
-                auto it = commandMap.find(input);
-                if(it != commandMap.end())
+                int exitCode = 0;
+                if(completedCommands == commands.size())
                 {
-                    command.dependencies.push_back(it->second);
+                    std::cout << "Restarting build.\n\n" << std::flush;
+                    // TODO: Pass arguments used to start build?
+                    auto result = process::run("cd \"" START_DIR "\" && \"" + (BUILD_DIR / buildOutput).string() + "\" --direct ", true);
+                    exitCode = result.exitCode;
                 }
+                else
+                {
+                    exitCode = EXIT_FAILURE;
+                }
+
+                // TODO: Exit more gracefully?
+                std::exit(0);
             }
         }
 
-        It next = pendingCommands.begin();
-        std::vector<std::pair<PendingCommand*, int>> stack;
-        stack.reserve(pendingCommands.size());
-        std::vector<PendingCommand*> commands;
-        commands.reserve(pendingCommands.size());
-        while(next != pendingCommands.end() || !stack.empty())
         {
-            PendingCommand* command;
-            int depth = 0;
-            if(stack.empty())
+            auto projects = Emitter::discoverProjects(args.projects);
+
+            std::vector<PendingCommand> pendingCommands;
+            for(auto project : projects)
             {
-                command = &*next;
-                depth = command->depth;
-                ++next;
-                commands.push_back(command);
+                collectCommands(pendingCommands, args.targetPath, *project, args.config);
+            }
+            auto commands = processCommands(pendingCommands);
+
+            if(commands.empty())
+            {
+                std::cout << std::string(args.config) + ": Nothing to do. (Everything up to date.)\n" << std::flush;
             }
             else
             {
-                command = stack.back().first;
-                depth = stack.back().second;
-                stack.pop_back();
-            }
+                size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+                std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
+                size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
-            command->depth = depth;
+                std::cout << "\n" << std::string(args.config) + ": " + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
 
-            for(auto& dependency : command->dependencies)
-            {
-                if(dependency->depth < depth+1)
-                {
-                    stack += {dependency, depth+1};
-                }
+                // TODO: Error exit code on failure
             }
         }
-
-        std::sort(commands.begin(), commands.end(), [](auto a, auto b) { return a->depth > b->depth; });
-        
-        TimeCache timeCache;
-        
-        for(auto command : commands)
-        {
-            for(auto dependency : command->dependencies)
-            {
-                if(dependency->dirty)
-                {
-                    command->dirty = true;
-                    break;
-                }
-            }
-            if(command->dirty) continue;
-
-            std::filesystem::file_time_type outputTime;
-            outputTime = outputTime.max();
-            std::error_code ec;
-            for(auto& output : command->outputs)
-            {
-                outputTime = std::min(outputTime, timeCache.get(output, ec));
-                if(ec)
-                {
-                    command->dirty = true;
-                    break;
-                }
-            }
-            if(command->dirty) continue;
-
-            for(auto& input : command->inputs)
-            {
-                auto inputTime = timeCache.get(input, ec);
-                if(ec || inputTime > outputTime)
-                {
-                    command->dirty = true;
-                    break;
-                }
-            }
-            if(command->dirty) continue;
-
-            if(!command->depFile.empty())
-            {
-                auto data = file::read(command->depFile.cstr());
-                if(data.empty())
-                {
-                    command->dirty = true;
-                }
-                else
-                {
-                    command->dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
-                    {
-                        std::error_code ec;
-                        auto inputTime = timeCache.get(path, ec);
-                        return ec || inputTime > outputTime;
-                    });
-                }            
-            }
-        }
-
-        commands.erase(std::remove_if(commands.begin(), commands.end(), [](auto command) { return !command->dirty; }), commands.end());
-
-        std::string line;
-
-        auto currentModule = process::findCurrentModulePath();
-        size_t count = 0;
-        size_t firstPending = 0;
-        std::vector<PendingCommand*> runningCommands;
-        bool halt = false;
-        std::mutex doneMutex;
-        PendingCommand* restartCommand = nullptr;
-        bool restart = false;
-        std::vector<PendingCommand*> doneCommands;
-        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
-        std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-        while((!halt && firstPending < commands.size()) || !runningCommands.empty())
-        {
-            // TODO: Semaphore of some kind instead of semi-spin lock
-            using namespace std::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-
-            {
-                std::scoped_lock doneLock(doneMutex);
-                for(auto it = doneCommands.begin(); it != doneCommands.end(); )
-                {
-                    auto command = *it;
-                    command->dirty = false;
-
-                    auto result = command->result.get();
-                    std::cout << "\n" << result.output;
-                    if(result.exitCode != 0)
-                    {
-                        std::cout << "\nCommand returned " + std::to_string(result.exitCode);
-                        halt = true;
-                    }
-                    else if(command == restartCommand)
-                    {
-                        restart = true;
-                    }
-                    it = doneCommands.erase(it);
-
-                    auto runIt = std::find(runningCommands.begin(), runningCommands.end(), command);
-                    assert(runIt != runningCommands.end());
-                    if(runIt != runningCommands.end())
-                    {
-                        runningCommands.erase(runIt);
-                    }
-
-                    std::cout << std::flush;
-                }
-            }
-
-            if(halt)
-            {
-                continue;
-            }
-
-            bool skipped = false;
-            for(size_t i = firstPending; i < commands.size(); ++i)
-            {
-                if(runningCommands.size() >= maxConcurrentCommands)
-                {
-                    break;
-                }
-
-                auto command = commands[i];
-                if(command->dirty && !command->result.valid())
-                {
-                    bool ready = true;
-                    for(auto dependency : command->dependencies)
-                    {
-                        if(dependency->dirty)
-                        {
-                            ready = false;
-                            break;
-                        }
-                    }
-
-                    if(!ready)
-                    {
-                        skipped = true;
-                        continue;
-                    }
-
-                    std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
-                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands, &currentModule](){
-                        for(auto& output : command->outputs)
-                        {
-                            std::filesystem::path path(output.cstr());
-                            if(path.has_parent_path())
-                            {
-                                std::filesystem::create_directories(path.parent_path());
-                            }
-                        }
-
-                        auto result = process::run(command->commandString + " 2>&1");
-                        {
-                            std::scoped_lock doneLock(doneMutex);
-                            doneCommands.push_back(command);
-                        }
-                        return result;
-                    });
-                    runningCommands.push_back(command);
-
-                    for(auto& output : command->outputs)
-                    {
-                        std::error_code ec;
-                        if(std::filesystem::equivalent(output.cstr(), currentModule, ec))
-                        {
-                            restartCommand = command;
-                            halt = true;
-                        }
-                    }
-                }
-
-                if((!command->dirty || command->result.valid()) && !skipped)
-                {
-                    firstPending = i+1;
-                }
-            }
-        }
-
-        if(restart)
-        {
-            std::cout << "Build updated, restarting...\n\n\n" << std::flush;
-            // TODO: Pass same command line as we got started with?
-            auto result = process::run(currentModule + " --direct", true);
-            std::exit(result.exitCode);
-        }
-
-        std::cout << "\n" << std::string(args.config) + ": " + std::to_string(commands.size()) << " targets rebuilt.";
-        if(commands.size() == 0)
-        {
-            std::cout << " (Everything up to date.)";
-        }
-        std::cout << "\n" << std::flush;
     }
 
-    template<typename Callable>
-    static bool parseDependencyData(std::string& data, Callable callable)
-    {
-        size_t pos = 0;
-        auto skipWhitespace = [&](){
-            while(pos < data.size())
-            {
-                char c = data[pos];
-                if(!std::isspace(data[pos]) && 
-                   (data[pos] != '\\' || pos == data.size()-1 || !std::isspace(data[pos+1])))
-                {
-                    break;
-                }
-                ++pos;
-            }
-        };
-
-        std::string_view spaces(" \n");
-        auto readPath = [&](){
-            size_t start = pos;
-            size_t lastBreak = pos;
-            size_t offset = 0;
-            bool stop = false;
-            while(!stop)
-            {
-                bool space = false;
-                pos = data.find_first_of(spaces, pos+1);
-                if(pos == std::string::npos)
-                {
-                    pos = data.size();
-                    stop = true;
-                }
-                else
-                {
-                    if(data[pos-1] != '\\')
-                    {
-                        stop = true;
-                    }
-                    else
-                    {
-                        space = true;
-                    }
-                }
-                if(offset > 0)
-                {
-                    memmove(data.data()+lastBreak-offset, data.data()+lastBreak, pos-lastBreak);
-                }
-                if(space)
-                {
-                    ++offset;
-                }
-                lastBreak = pos;
-            }
-
-            return std::string_view(data.data() + start, pos-offset-start);
-        };
-
-        bool scanningOutputs = true;
-        while(pos < data.size())
-        {
-            skipWhitespace();
-            auto pathString = readPath();
-            if(pathString.empty())
-            {
-                continue;
-            }
-
-            if(pathString.back() == ':')
-            {
-                scanningOutputs = false;
-                continue;
-            }
-
-            if(scanningOutputs)
-            {
-                continue;
-            }
-
-            if(callable(pathString))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-private:
     struct PendingCommand
     {
         std::vector<StringId> inputs;
@@ -422,27 +108,7 @@ private:
         std::future<process::ProcessResult> result;
     };
 
-    struct TimeCache
-    {
-    public:
-        std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
-        {
-            auto it = _times.find(path);
-            if(it != _times.end())
-            {
-                errorCode = it->second.second;
-                return it->second.first;
-            }
-
-            auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
-            _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
-            return time;
-        }
-    private:        
-        std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
-    };
-
-    static void build(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
+    static void collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
     {
         auto resolved = project.resolve(config, OperatingSystem::current());
         resolved[DataDir] = root;
@@ -531,6 +197,351 @@ private:
         }
     }
 
+    static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands)
+    {
+        auto currentModule = process::findCurrentModulePath();
+        size_t count = 0;
+        size_t completed = 0;
+        size_t firstPending = 0;
+        std::vector<PendingCommand*> runningCommands;
+        bool halt = false;
+        std::mutex doneMutex;
+        std::vector<PendingCommand*> doneCommands;
+        while((!halt && firstPending < commands.size()) || !runningCommands.empty())
+        {
+            // TODO: Semaphore of some kind instead of semi-spin lock
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+
+            {
+                std::scoped_lock doneLock(doneMutex);
+                for(auto it = doneCommands.begin(); it != doneCommands.end(); )
+                {
+                    auto command = *it;
+                    command->dirty = false;
+
+                    auto result = command->result.get();
+                    std::cout << "\n" << result.output;
+                    if(result.exitCode != 0)
+                    {
+                        std::cout << "\nCommand returned " + std::to_string(result.exitCode);
+                        halt = true;
+                    }
+                    else
+                    {
+                        ++completed;
+                    }
+                    it = doneCommands.erase(it);
+
+                    auto runIt = std::find(runningCommands.begin(), runningCommands.end(), command);
+                    assert(runIt != runningCommands.end());
+                    if(runIt != runningCommands.end())
+                    {
+                        runningCommands.erase(runIt);
+                    }
+
+                    std::cout << std::flush;
+                }
+            }
+
+            if(halt)
+            {
+                continue;
+            }
+
+            bool skipped = false;
+            for(size_t i = firstPending; i < commands.size(); ++i)
+            {
+                if(runningCommands.size() >= maxConcurrentCommands)
+                {
+                    break;
+                }
+
+                auto command = commands[i];
+                if(command->dirty && !command->result.valid())
+                {
+                    bool ready = true;
+                    for(auto dependency : command->dependencies)
+                    {
+                        if(dependency->dirty)
+                        {
+                            ready = false;
+                            break;
+                        }
+                    }
+
+                    if(!ready)
+                    {
+                        skipped = true;
+                        continue;
+                    }
+
+                    std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
+                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands, &currentModule](){
+                        for(auto& output : command->outputs)
+                        {
+                            std::filesystem::path path(output.cstr());
+                            if(path.has_parent_path())
+                            {
+                                std::filesystem::create_directories(path.parent_path());
+                            }
+                        }
+
+                        auto result = process::run(command->commandString + " 2>&1");
+                        {
+                            std::scoped_lock doneLock(doneMutex);
+                            doneCommands.push_back(command);
+                        }
+                        return result;
+                    });
+                    runningCommands.push_back(command);
+                }
+
+                if((!command->dirty || command->result.valid()) && !skipped)
+                {
+                    firstPending = i+1;
+                }
+            }
+        }
+
+        std::cout << "\n" << std::flush;
+
+        return count;
+    }
+
+    static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>& pendingCommands)
+    {
+        std::unordered_map<StringId, PendingCommand*> commandMap;
+        for(auto& command : pendingCommands)
+        {
+            for(auto& output : command.outputs)
+            {
+                commandMap[output] = &command;
+            }
+        }
+
+        for(auto& command : pendingCommands)
+        {
+            command.dependencies.reserve(command.inputs.size());
+            for(auto& input : command.inputs)
+            {
+                auto it = commandMap.find(input);
+                if(it != commandMap.end())
+                {
+                    command.dependencies.push_back(it->second);
+                }
+            }
+        }
+
+        using It = decltype(pendingCommands.begin());
+        It next = pendingCommands.begin();
+        std::vector<std::pair<PendingCommand*, int>> stack;
+        stack.reserve(pendingCommands.size());
+        std::vector<PendingCommand*> outputCommands;
+        outputCommands.reserve(pendingCommands.size());
+        while(next != pendingCommands.end() || !stack.empty())
+        {
+            PendingCommand* command;
+            int depth = 0;
+            if(stack.empty())
+            {
+                command = &*next;
+                depth = command->depth;
+                ++next;
+                outputCommands.push_back(command);
+            }
+            else
+            {
+                command = stack.back().first;
+                depth = stack.back().second;
+                stack.pop_back();
+            }
+
+            command->depth = depth;
+
+            for(auto& dependency : command->dependencies)
+            {
+                if(dependency->depth < depth+1)
+                {
+                    stack += {dependency, depth+1};
+                }
+            }
+        }
+
+        std::sort(outputCommands.begin(), outputCommands.end(), [](auto a, auto b) { return a->depth > b->depth; });
+        
+        TimeCache timeCache;
+        
+        for(auto command : outputCommands)
+        {
+            for(auto dependency : command->dependencies)
+            {
+                if(dependency->dirty)
+                {
+                    command->dirty = true;
+                    break;
+                }
+            }
+            if(command->dirty) continue;
+
+            std::filesystem::file_time_type outputTime;
+            outputTime = outputTime.max();
+            std::error_code ec;
+            for(auto& output : command->outputs)
+            {
+                outputTime = std::min(outputTime, timeCache.get(output, ec));
+                if(ec)
+                {
+                    command->dirty = true;
+                    break;
+                }
+            }
+            if(command->dirty) continue;
+
+            for(auto& input : command->inputs)
+            {
+                auto inputTime = timeCache.get(input, ec);
+                if(ec || inputTime > outputTime)
+                {
+                    command->dirty = true;
+                    break;
+                }
+            }
+            if(command->dirty) continue;
+
+            if(!command->depFile.empty())
+            {
+                auto data = file::read(command->depFile.cstr());
+                if(data.empty())
+                {
+                    command->dirty = true;
+                }
+                else
+                {
+                    command->dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
+                    {
+                        std::error_code ec;
+                        auto inputTime = timeCache.get(path, ec);
+                        return ec || inputTime > outputTime;
+                    });
+                }            
+            }
+        }
+
+        outputCommands.erase(std::remove_if(outputCommands.begin(), outputCommands.end(), [](auto command) { return !command->dirty; }), outputCommands.end());
+
+        return outputCommands;
+    }
+
+
+    struct TimeCache
+    {
+    public:
+        std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
+        {
+            auto it = _times.find(path);
+            if(it != _times.end())
+            {
+                errorCode = it->second.second;
+                return it->second.first;
+            }
+
+            auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
+            _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
+            return time;
+        }
+    private:        
+        std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
+    };
+
     static Emitters::Token installToken;
+
+public:
+    template<typename Callable>
+    static bool parseDependencyData(std::string& data, Callable callable)
+    {
+        size_t pos = 0;
+        auto skipWhitespace = [&](){
+            while(pos < data.size())
+            {
+                char c = data[pos];
+                if(!std::isspace(data[pos]) && 
+                   (data[pos] != '\\' || pos == data.size()-1 || !std::isspace(data[pos+1])))
+                {
+                    break;
+                }
+                ++pos;
+            }
+        };
+
+        std::string_view spaces(" \n");
+        auto readPath = [&](){
+            size_t start = pos;
+            size_t lastBreak = pos;
+            size_t offset = 0;
+            bool stop = false;
+            while(!stop)
+            {
+                bool space = false;
+                pos = data.find_first_of(spaces, pos+1);
+                if(pos == std::string::npos)
+                {
+                    pos = data.size();
+                    stop = true;
+                }
+                else
+                {
+                    if(data[pos-1] != '\\')
+                    {
+                        stop = true;
+                    }
+                    else
+                    {
+                        space = true;
+                    }
+                }
+                if(offset > 0)
+                {
+                    memmove(data.data()+lastBreak-offset, data.data()+lastBreak, pos-lastBreak);
+                }
+                if(space)
+                {
+                    ++offset;
+                }
+                lastBreak = pos;
+            }
+
+            return std::string_view(data.data() + start, pos-offset-start);
+        };
+
+        bool scanningOutputs = true;
+        while(pos < data.size())
+        {
+            skipWhitespace();
+            auto pathString = readPath();
+            if(pathString.empty())
+            {
+                continue;
+            }
+
+            if(pathString.back() == ':')
+            {
+                scanningOutputs = false;
+                continue;
+            }
+
+            if(scanningOutputs)
+            {
+                continue;
+            }
+
+            if(callable(pathString))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 };
 Emitters::Token DirectBuilder::installToken = Emitters::install({ "direct", &DirectBuilder::emit });
