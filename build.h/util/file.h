@@ -26,7 +26,7 @@ bool write(std::filesystem::path path, const std::string& data)
     bool upToDate = false;
     std::error_code ec;
     size_t fileSize = std::filesystem::file_size(path, ec);
-    if(!ec && fileSize != data.size())
+    if(!ec && fileSize == data.size())
     {
         std::ifstream inputStream(path);
         std::array<char, 2048> buffer;
@@ -35,7 +35,7 @@ bool write(std::filesystem::path path, const std::string& data)
         {
             size_t chunk = std::min(buffer.size(), fileSize - pos);
             inputStream.read(buffer.data(), chunk);
-            if(!inputStream.good())
+            if(!inputStream)
             {
                 break;
             }
@@ -43,6 +43,7 @@ bool write(std::filesystem::path path, const std::string& data)
             {
                 break;
             }
+            pos += chunk;
             if(pos == fileSize)
             {
                 return false;
