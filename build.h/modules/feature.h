@@ -16,5 +16,6 @@ Feature DebugSymbols{"DebugSymbols"};
 Feature Exceptions{"Exceptions"};
 Feature Optimize{"Optimize"};
 Feature OptimizeSize{"OptimizeSize"};
+Feature MacOSBundle{"MacOSBundle"};
 
 }

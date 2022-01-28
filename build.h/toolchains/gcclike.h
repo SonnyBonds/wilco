@@ -8,7 +8,9 @@
 #include "modules/toolchain.h"
 #include "modules/feature.h"
 
-Option<std::vector<StringId>> GccFlags{"GccFlags"};
+Option<std::vector<StringId>> GccCompilerFlags{"GccCompilerFlags"};
+Option<std::vector<StringId>> GccLinkerFlags{"GccLinkerFlags"};
+Option<std::vector<StringId>> GccArchiverFlags{"GccArchiverFlags"};
 
 struct GccLikeToolchainProvider : public ToolchainProvider
 {
@@ -68,9 +70,9 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             }
         }
 
-        for(auto& flag : resolvedOptions[GccFlags])
+        for(auto& flag : resolvedOptions[GccCompilerFlags])
         {
-            flags += flag;
+            flags += " " + std::string(flag);
         }
 
         return flags;
@@ -103,6 +105,10 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
         case StaticLib:
             flags += " -rcs";
+            for(auto& flag : resolvedOptions[GccArchiverFlags])
+            {
+                flags += " " + std::string(flag);
+            }
             break;
         case Executable:
         case SharedLib:
@@ -119,7 +125,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             if(project.type == SharedLib)
             {
                 auto features = resolvedOptions[Features];
-                if(std::find(features.begin(), features.end(), "bundle") != features.end())
+                if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
                 {
                     flags += " -bundle";
                 }
@@ -128,6 +134,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
                     flags += " -shared";
                 }
             }
+
+            for(auto& flag : resolvedOptions[GccLinkerFlags])
+            {
+                flags += " " + std::string(flag);
+            }
+
             break;
         }
 

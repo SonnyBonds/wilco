@@ -6,6 +6,7 @@
 
 #include "core/option.h"
 #include "core/project.h"
+#include "modules/feature.h"
 #include "modules/postprocess.h"
 #include "util/commands.h"
 #include "util/file.h"
@@ -132,6 +133,7 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
     PostProcessor postProcessor;
     postProcessor.func = std::function(bundleFunc);
     result[PostProcess] += std::move(postProcessor);
+    result[Features] += feature::MacOSBundle;
 
     return result;
 }
