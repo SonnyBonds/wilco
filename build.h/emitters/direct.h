@@ -20,6 +20,7 @@
 #include "util/operators.h"
 #include "util/process.h"
 #include "util/file.h"
+#include "util/string.h"
 
 class DirectBuilder
 {
@@ -221,7 +222,11 @@ public:
                     command->dirty = false;
 
                     auto result = command->result.get();
-                    std::cout << "\n" << result.output;
+                    auto output = str::trim(std::string_view(result.output));
+                    if(!output.empty())
+                    {
+                        std::cout << "\n" << output;
+                    }
                     if(result.exitCode != 0)
                     {
                         std::cout << "\nCommand returned " + std::to_string(result.exitCode);
