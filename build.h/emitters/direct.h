@@ -64,7 +64,7 @@ public:
                 }
 
                 // TODO: Exit more gracefully?
-                std::exit(0);
+                std::exit(exitCode);
             }
         }
 
