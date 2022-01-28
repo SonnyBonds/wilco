@@ -273,9 +273,12 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         if(!linker.empty())
         {
-            for(auto& output : resolvedOptions[LinkedOutputs])
+            if(project.type != StaticLib)
             {
-                linkerInputs.push_back(output);
+                for(auto& output : resolvedOptions[LinkedOutputs])
+                {
+                    linkerInputs.push_back(output);
+                }
             }
 
             std::vector<std::string> linkerInputStrs;
