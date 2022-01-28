@@ -3,9 +3,22 @@
 #include <filesystem>
 
 #include "core/option.h"
+#include "modules/bundle.h"
 
 namespace glob
 {
+
+OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
+{
+    OptionCollection result;
+    for(auto entry : std::filesystem::recursive_directory_iterator(path))
+    {            
+        if(!entry.is_regular_file()) continue;
+        result[BundleContents] += BundleEntry{ entry.path(), "Contents/Resources/" / subPath / std::filesystem::relative(entry, path) };
+    }
+
+    return result;
+}
 
 OptionCollection files(const std::filesystem::path& path, const std::vector<std::string>& extensions, bool recurse = true)
 {
