@@ -217,6 +217,13 @@ TEST_CASE( "Resolve Config" ) {
     }
 }
 
+TEST_CASE( "String util" ) {
+    CHECK(str::trim(std::string(" \n \tsome text\t  \n")) == "some text");
+    CHECK(str::trim(std::string("some text")) == "some text");
+    CHECK(str::trim(std::string_view(" \n \tsome text\t  \n")) == "some text");
+    CHECK(str::trim(std::string_view("some text")) == "some text");
+}
+
 TEST_CASE( "Dependency Parser" ) {
     using strvec = std::vector<std::string>;
 
