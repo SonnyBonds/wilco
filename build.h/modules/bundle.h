@@ -128,6 +128,11 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
 
         resolvedOptions[Commands] += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
         resolvedOptions[Commands] += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
+
+        for(auto& entry : resolvedOptions[BundleContents])
+        {
+            resolvedOptions[Commands] += commands::copy(entry.source, bundleOutput / entry.target);
+        }
     };
 
     PostProcessor postProcessor;
