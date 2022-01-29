@@ -17,16 +17,40 @@ struct EmitterArgs
     StringId config;
 };
 
-struct Emitter
-{
-    std::string name;
-    std::function<void(const EmitterArgs&)> emit;
+struct Emitter;
 
-    void operator ()(EmitterArgs args) const
+struct Emitters
+{
+    static void install(Emitter* emitter)
     {
-        emit(args);
+        getEmitters().push_back(emitter);
     }
 
+    static const std::vector<Emitter*>& list()
+    {
+        return getEmitters();
+    }
+
+private:
+    static std::vector<Emitter*>& getEmitters()
+    {
+        static std::vector<Emitter*> emitters;
+        return emitters;
+    }
+};
+
+struct Emitter
+{
+    StringId name;
+    Emitter(std::string name)
+        : name(std::move(name)) 
+    {
+        Emitters::install(this);
+    }
+
+    virtual void emit(const EmitterArgs& args) = 0;
+
+protected:
     static std::vector<Project*> discoverProjects(const std::vector<Project*>& projects)
     {
         std::vector<Project*> orderedProjects;
@@ -40,7 +64,6 @@ struct Emitter
 
         return orderedProjects;
     }
-protected:
 
     static void discover(Project* project, std::set<Project*>& discoveredProjects, std::vector<Project*>& orderedProjects)
     {
@@ -53,28 +76,5 @@ protected:
         {
             orderedProjects.push_back(project);
         }
-    }
-};
-
-struct Emitters
-{
-    using Token = int;
-
-    static Token install(Emitter emitter)
-    {
-        getEmitters().push_back(emitter);
-        return {};
-    }
-
-    static const std::vector<Emitter>& list()
-    {
-        return getEmitters();
-    }
-
-private:
-    static std::vector<Emitter>& getEmitters()
-    {
-        static std::vector<Emitter> emitters;
-        return emitters;
     }
 };

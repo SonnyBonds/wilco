@@ -63,10 +63,10 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
         throw std::runtime_error("No emitters available.");
     }
 
-    std::vector<std::pair<Emitter, std::filesystem::path>> emitters;
+    std::vector<std::pair<Emitter*, std::filesystem::path>> emitters;
     for(auto& arg : optionArgs)
     {
-        auto emitterIt = std::find_if(availableEmitters.begin(), availableEmitters.end(), [&arg](auto& v){ return v.name == arg.first; });
+        auto emitterIt = std::find_if(availableEmitters.begin(), availableEmitters.end(), [&arg](auto& v){ return v->name == StringId(arg.first); });
         if(emitterIt != availableEmitters.end())
         {
             auto targetDir = arg.second;
@@ -81,11 +81,11 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
     if(emitters.empty())
     {
         std::cout << "Usage: " << arguments[0] << " --emitter[=†argetDir]\n";
-        std::cout << "Example: " << arguments[0] << " --" << availableEmitters[0].name << "[=" << availableEmitters[0].name << "build]\n\n";
+        std::cout << "Example: " << arguments[0] << " --" << availableEmitters[0]->name << "[=" << availableEmitters[0]->name << "build]\n\n";
         std::cout << "Available emitters: \n";
         for(auto& emitter : availableEmitters)
         {
-            std::cout << "  --" << emitter.name << "\n";
+            std::cout << "  --" << emitter->name << "\n";
         }
         std::cout << "\n\n";
         throw std::runtime_error("No emitters specified.");
@@ -104,7 +104,7 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
             args.targetPath = outputPath;
             args.projects = projects;
             args.config = config;
-            emitter.first(args);
+            emitter.first->emit(args);
         }
     }
 }

@@ -22,10 +22,17 @@
 #include "util/file.h"
 #include "util/string.h"
 
-class DirectBuilder
+class DirectBuilder : public Emitter
 {
 public:
-    static void emit(const EmitterArgs& args)
+    static DirectBuilder instance;
+
+    DirectBuilder()
+        : Emitter("direct")
+    {
+    }
+
+    virtual void emit(const EmitterArgs& args) override
     {
         {
             auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
@@ -95,6 +102,8 @@ public:
             }
         }
     }
+
+private:
 
     struct PendingCommand
     {
@@ -459,8 +468,6 @@ public:
         std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
     };
 
-    static Emitters::Token installToken;
-
 public:
     template<typename Callable>
     static bool parseDependencyData(std::string& data, Callable callable)
@@ -549,4 +556,5 @@ public:
         return false;
     }
 };
-Emitters::Token DirectBuilder::installToken = Emitters::install({ "direct", &DirectBuilder::emit });
+
+DirectBuilder DirectBuilder::instance;

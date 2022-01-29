@@ -31,9 +31,9 @@ private:
 
 struct ToolchainProvider
 {
-    std::string name;
-    ToolchainProvider(std::string name) 
-        : name(std::move(name)) 
+    StringId name;
+    ToolchainProvider(StringId name) 
+        : name(name) 
     {
         Toolchains::install(this);
     }

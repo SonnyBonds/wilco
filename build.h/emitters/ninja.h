@@ -16,15 +16,22 @@
 #include "toolchains/detected.h"
 #include "util/operators.h"
 
-class NinjaEmitter
+class NinjaEmitter : public Emitter
 {
 public:
-    static void emit(const EmitterArgs& args)
+    static NinjaEmitter instance;
+
+    NinjaEmitter()
+        : Emitter("ninja")
+    {
+    }
+
+    virtual void emit(const EmitterArgs& args) override
     {
         std::filesystem::create_directories(args.targetPath);
 
         auto outputFile = args.targetPath / "build.ninja";
-        NinjaEmitter ninja(outputFile);
+        NinjaWriter ninja(outputFile);
 
         auto projects = args.projects;
         std::vector<std::filesystem::path> generatorDependencies;
@@ -102,7 +109,7 @@ private:
         std::cout << "\n";
 
         auto ninjaName = project.name + ".ninja";
-        NinjaEmitter ninja(root / ninjaName);
+        NinjaWriter ninja(root / ninjaName);
 
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
@@ -189,83 +196,83 @@ private:
     }
 
 private:
-    NinjaEmitter(std::filesystem::path path)
-        : _stream(path)
+    struct NinjaWriter
     {
-    }
-
-    std::ofstream _stream;
-
-    void subninja(std::string_view name)
-    {
-        _stream << "subninja " << name << "\n";
-    }
-
-    void variable(std::string_view name, std::string_view value)
-    {
-        _stream << name << " = " << value << "\n";
-    }
-
-    void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {})
-    {
-        _stream << "rule " << name << "\n";
-        _stream << "  command = " << command << "\n";
-        if(!depfile.empty())
+        std::ofstream _stream;
+        NinjaWriter(std::filesystem::path path)
+            : _stream(path)
         {
-            _stream << "  depfile = " << depfile << "\n";
-        }
-        if(!deps.empty())
-        {
-            _stream << "  deps = " << deps << "\n";
-        }
-        if(!description.empty())
-        {
-            _stream << "  description = " << description << "\n";
-        }
-        _stream << "\n";
-    }
-
-    void build(const std::vector<std::string>& outputs, std::string_view rule, const std::vector<std::string>& inputs, const std::vector<std::string>& implicitInputs = {}, const std::vector<std::string>& orderInputs = {}, std::vector<std::pair<std::string_view, std::string_view>> variables = {})
-    {
-        _stream << "build ";
-        for(auto& output : outputs)
-        {
-            _stream << output << " ";
         }
 
-        _stream << ": " << rule << " ";
-
-        for(auto& input : inputs)
+        void subninja(std::string_view name)
         {
-            _stream << input << " ";
+            _stream << "subninja " << name << "\n";
         }
 
-        if(!implicitInputs.empty())
+        void variable(std::string_view name, std::string_view value)
         {
-            _stream << "| ";
-            for(auto& implicitInput : implicitInputs)
+            _stream << name << " = " << value << "\n";
+        }
+
+        void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {})
+        {
+            _stream << "rule " << name << "\n";
+            _stream << "  command = " << command << "\n";
+            if(!depfile.empty())
             {
-                _stream << implicitInput << " ";
+                _stream << "  depfile = " << depfile << "\n";
             }
-        }
-        if(!orderInputs.empty())
-        {
-            _stream << "|| ";
-            for(auto& orderInput : orderInputs)
+            if(!deps.empty())
             {
-                _stream << orderInput << " ";
+                _stream << "  deps = " << deps << "\n";
             }
+            if(!description.empty())
+            {
+                _stream << "  description = " << description << "\n";
+            }
+            _stream << "\n";
         }
-        _stream << "\n";
-        for(auto& variable : variables)
+
+        void build(const std::vector<std::string>& outputs, std::string_view rule, const std::vector<std::string>& inputs, const std::vector<std::string>& implicitInputs = {}, const std::vector<std::string>& orderInputs = {}, std::vector<std::pair<std::string_view, std::string_view>> variables = {})
         {
-            _stream << "  " << variable.first << " = " << variable.second << "\n";
+            _stream << "build ";
+            for(auto& output : outputs)
+            {
+                _stream << output << " ";
+            }
+
+            _stream << ": " << rule << " ";
+
+            for(auto& input : inputs)
+            {
+                _stream << input << " ";
+            }
+
+            if(!implicitInputs.empty())
+            {
+                _stream << "| ";
+                for(auto& implicitInput : implicitInputs)
+                {
+                    _stream << implicitInput << " ";
+                }
+            }
+            if(!orderInputs.empty())
+            {
+                _stream << "|| ";
+                for(auto& orderInput : orderInputs)
+                {
+                    _stream << orderInput << " ";
+                }
+            }
+            _stream << "\n";
+            for(auto& variable : variables)
+            {
+                _stream << "  " << variable.first << " = " << variable.second << "\n";
+            }
+
+            _stream << "\n";
         }
-
-        _stream << "\n";
-    }
-
-private:
-    static Emitters::Token installToken;
+    };
 };
-static Emitters::Token installToken = Emitters::install({ "ninja", &NinjaEmitter::emit });
+
+NinjaEmitter NinjaEmitter::instance;
