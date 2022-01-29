@@ -55,23 +55,10 @@ public:
             }
         }
 
-        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
-        Project generator("_generator", Executable);
-        generator[Features] += { feature::Cpp17, feature::Optimize };
-        generator[IncludePaths] += BUILD_H_DIR;
-        generator[OutputPath] = buildOutput;
-        generator[Defines] += {
-            "START_DIR=\\\"" START_DIR "\\\"",
-            "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
-            "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
-            "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
-            "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
-        };
-        generator[Files] += BUILD_FILE;
-
+        Project generator = createGeneratorProject();
         outputs += "build.ninja";
-        generatorDependencies += buildOutput;
-        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
+        generatorDependencies += generator[OutputPath];
+        generator[Commands] += { "\"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
     
         auto outputName = emitProject(args.targetPath, generator, args.config, true);
         ninja.subninja(outputName);

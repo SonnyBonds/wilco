@@ -77,4 +77,22 @@ protected:
             orderedProjects.push_back(project);
         }
     }
+
+    static Project createGeneratorProject()
+    {
+        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
+        Project project("_generator", Executable);
+        project[Features] += { feature::Cpp17, feature::Optimize };
+        project[IncludePaths] += BUILD_H_DIR;
+        project[OutputPath] = buildOutput;
+        project[Defines] += {
+            "START_DIR=\\\"" START_DIR "\\\"",
+            "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
+            "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
+            "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
+            "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
+        };
+        project[Files] += BUILD_FILE;
+        return project;
+    }
 };

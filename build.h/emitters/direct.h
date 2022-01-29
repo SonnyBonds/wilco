@@ -35,19 +35,7 @@ public:
     virtual void emit(const EmitterArgs& args) override
     {
         {
-            auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
-            Project generator("_generator", Executable);
-            generator[Features] += { feature::Cpp17, feature::Optimize };
-            generator[IncludePaths] += BUILD_H_DIR;
-            generator[OutputPath] = buildOutput;
-            generator[Defines] += {
-                "START_DIR=\\\"" START_DIR "\\\"",
-                "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
-                "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
-                "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
-                "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
-            };
-            generator[Files] += BUILD_FILE;        
+            Project generator = createGeneratorProject();
 
             std::vector<PendingCommand> pendingCommands;
             collectCommands(pendingCommands, args.targetPath, generator, "");
@@ -63,7 +51,7 @@ public:
                 {
                     std::cout << "Restarting build.\n\n" << std::flush;
                     // TODO: Pass arguments used to start build?
-                    auto result = process::run("cd \"" START_DIR "\" && \"" + (BUILD_DIR / buildOutput).string() + "\" --direct ", true);
+                    auto result = process::run("cd \"" START_DIR "\" && \"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --direct ", true);
                     exitCode = result.exitCode;
                 }
                 else
