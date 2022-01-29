@@ -24,7 +24,7 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
 {
     OptionCollection result;
     auto& files = result[Files];
-    auto generatorDeps = result[GeneratorDependencies];
+    auto& generatorDeps = result[GeneratorDependencies];
 
     // Add the directory as a dependency to rescan if the contents change
     generatorDeps += path;

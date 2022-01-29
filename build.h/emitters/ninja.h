@@ -33,14 +33,25 @@ public:
         auto outputFile = args.targetPath / "build.ninja";
         NinjaWriter ninja(outputFile);
 
-        auto projects = args.projects;
+        auto projects = Emitter::discoverProjects(args.projects);
+
+        std::vector<std::filesystem::path> outputs;
+        for(auto project : projects)
+        {
+            auto outputName = emitProject(args.targetPath, *project, args.config, false);
+            if(!outputName.empty())
+            {
+                ninja.subninja(outputName);
+                outputs.push_back(outputName);
+            }
+        }
+
         std::vector<std::filesystem::path> generatorDependencies;
         for(auto& project : projects)
         {
-            generatorDependencies += (*project)[GeneratorDependencies];
             for(auto& entry : project->configs)
             {
-                generatorDependencies += (*project)[GeneratorDependencies];
+                generatorDependencies += entry.second[GeneratorDependencies];
             }
         }
 
@@ -58,25 +69,16 @@ public:
         };
         generator[Files] += BUILD_FILE;
 
+        outputs += "build.ninja";
         generatorDependencies += buildOutput;
-        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, { outputFile }, START_DIR, {}, "Running build generator." };
-
-        projects.push_back(&generator);
-
-        projects = Emitter::discoverProjects(projects);
-
-        for(auto project : projects)
-        {
-            auto outputName = emitProject(args.targetPath, *project, args.config);
-            if(!outputName.empty())
-            {
-                ninja.subninja(outputName);
-            }
-        }
+        generator[Commands] += { "\"" + (BUILD_DIR / buildOutput).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
+    
+        auto outputName = emitProject(args.targetPath, generator, args.config, true);
+        ninja.subninja(outputName);
     }
 
 private:
-    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config)
+    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config, bool generator)
     {
         auto resolved = project.resolve(config, OperatingSystem::current());
         resolved[DataDir] = root;
@@ -140,7 +142,7 @@ private:
             prologue += "cmd /c ";
         }*/
         prologue += "cd \"$cwd\" && ";
-        ninja.rule("command", prologue + "$cmd", "$depfile", "", "$desc");
+        ninja.rule("command", prologue + "$cmd", "$depfile", "", "$desc", generator);
 
         std::vector<std::string> generatorDep = { "_generator" };
         std::vector<std::string> emptyDep = {};
@@ -165,7 +167,14 @@ private:
             outputStrs.reserve(command.outputs.size());
             for(auto& path : command.outputs)
             {
-                outputStrs.push_back((pathOffset / path).string());
+                if(generator && path.extension() == ".ninja")
+                {
+                    outputStrs.push_back(path.string());
+                }
+                else
+                {
+                    outputStrs.push_back((pathOffset / path).string());
+                }
             }
 
             projectOutputs += outputStrs;
@@ -214,7 +223,7 @@ private:
             _stream << name << " = " << value << "\n";
         }
 
-        void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {})
+        void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {}, bool generator = false)
         {
             _stream << "rule " << name << "\n";
             _stream << "  command = " << command << "\n";
@@ -229,6 +238,10 @@ private:
             if(!description.empty())
             {
                 _stream << "  description = " << description << "\n";
+            }
+            if(generator)
+            {
+                _stream << "  generator = 1\n";
             }
             _stream << "\n";
         }
