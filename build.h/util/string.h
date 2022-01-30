@@ -58,4 +58,20 @@ std::pair<std::string, std::string> split(std::string_view str, char delimiter)
     }
 }
 
+std::string quote(std::string str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
+{
+    for(auto it = str.begin(); it != str.end(); ++it)
+    {
+        if(escapedChars.find(*it) != std::string_view::npos)
+        {
+            it = str.insert(it, escapeChar);
+            ++it;
+        }
+    }
+
+    str.insert(str.begin(), '"');
+    str.insert(str.end(), '"');
+    return str;
+}
+
 }

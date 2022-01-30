@@ -4,6 +4,7 @@
 #include "core/project.h"
 #include "core/stringid.h"
 
+#include "emitters/compilecommands.h"
 #include "emitters/direct.h"
 #include "emitters/ninja.h"
 
