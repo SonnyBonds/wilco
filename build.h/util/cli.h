@@ -80,7 +80,7 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
 
     if(emitters.empty())
     {
-        std::cout << "Usage: " << arguments[0] << " --emitter[=†argetDir]\n";
+        std::cout << "Usage: " << arguments[0] << " --emitter[=targetDir]\n";
         std::cout << "Example: " << arguments[0] << " --" << availableEmitters[0]->name << "[=" << availableEmitters[0]->name << "build]\n\n";
         std::cout << "Available emitters: \n";
         for(auto& emitter : availableEmitters)
