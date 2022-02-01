@@ -40,12 +40,16 @@ public:
         stream << "[\n";
 
         Project generator = createGeneratorProject();
-        emitCommands(stream, args.targetPath, generator, args.config, true);
+        emitCommands(stream, args.targetPath, generator, "", true);
 
         auto projects = Emitter::discoverProjects(args.projects);
-        for(auto project : projects)
+        auto configs = discoverConfigs(projects);
+        for(auto config : configs)
         {
-            emitCommands(stream, args.targetPath, *project, args.config, false);
+            for(auto project : projects)
+            {
+                emitCommands(stream, args.targetPath, *project, config, false);
+            }
         }
         
         stream << "\n]\n";

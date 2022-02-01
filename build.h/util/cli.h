@@ -46,15 +46,10 @@ std::vector<std::string> parsePositionalArguments(const std::vector<std::string>
     return result;
 }
 
-void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::vector<Project*> projects, std::set<StringId> configs)
+void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::vector<Project*> projects)
 {
     auto optionArgs = parseOptionArguments(arguments);
     auto positionalArgs = parsePositionalArguments(arguments);
-
-    if(configs.empty())
-    {
-        throw std::runtime_error("No configurations available.");
-    }
 
     auto& availableEmitters = Emitters::list();
 
@@ -63,25 +58,26 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
         throw std::runtime_error("No emitters available.");
     }
 
-    std::vector<std::pair<Emitter*, std::filesystem::path>> emitters;
+    std::filesystem::path outputPath = "buildfiles";
+
+    std::vector<Emitter*> emitters;
     for(auto& arg : optionArgs)
     {
         auto emitterIt = std::find_if(availableEmitters.begin(), availableEmitters.end(), [&arg](auto& v){ return v->name == StringId(arg.first); });
         if(emitterIt != availableEmitters.end())
         {
-            auto targetDir = arg.second;
-            if(targetDir.empty())
-            {
-                targetDir = arg.first + "build";
-            }
-            emitters.push_back({ *emitterIt, targetDir });
+            emitters.push_back(*emitterIt);
+        }
+        if(arg.first == "outputPath" && !arg.second.empty())
+        {
+            outputPath = arg.second;
         }
     }
 
     if(emitters.empty())
     {
-        std::cout << "Usage: " << arguments[0] << " --emitter[=targetDir]\n";
-        std::cout << "Example: " << arguments[0] << " --" << availableEmitters[0]->name << "[=" << availableEmitters[0]->name << "build]\n\n";
+        std::cout << "Usage: " << arguments[0] << "[--outputPath=<target path for build files>] --emitter\n";
+        std::cout << "Example: " << arguments[0] << " --outputPath=buildoutput --" << availableEmitters[0]->name << "\n\n";
         std::cout << "Available emitters: \n";
         for(auto& emitter : availableEmitters)
         {
@@ -93,19 +89,14 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
 
     for(auto& emitter : emitters)
     {
-        for(auto& config : configs)
+        if(!outputPath.is_absolute())
         {
-            auto outputPath = emitter.second / config.cstr();
-            if(!outputPath.is_absolute())
-            {
-                outputPath = startPath / outputPath;
-            }
-            EmitterArgs args;
-            args.targetPath = outputPath;
-            args.projects = projects;
-            args.config = config;
-            emitter.first->emit(args);
+            outputPath = startPath / outputPath;
         }
+        EmitterArgs args;
+        args.targetPath = outputPath;
+        args.projects = projects;
+        emitter->emit(args);
     }
 }
 

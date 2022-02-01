@@ -14,7 +14,6 @@ struct EmitterArgs
 {
     std::vector<Project*> projects;
     std::filesystem::path targetPath;
-    StringId config;
 };
 
 struct Emitter;
@@ -76,6 +75,36 @@ protected:
         {
             orderedProjects.push_back(project);
         }
+    }
+
+    static std::vector<StringId> discoverConfigs(const std::vector<Project*> projects)
+    {
+        std::set<StringId> configs;
+
+        for(auto project : projects)
+        {
+            for(auto& config : project->configs)
+            {
+                if(config.first.name.has_value())
+                {
+                    configs.insert(*config.first.name);
+                }
+            }
+        }
+
+        if(configs.empty())
+        {
+            return {StringId()};
+        }
+
+        std::vector<StringId> result;
+        result.reserve(configs.size());
+        for(auto& config : configs)
+        {
+            result.push_back(config);
+        }
+
+        return result;
     }
 
     static Project createGeneratorProject()

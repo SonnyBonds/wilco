@@ -22,5 +22,5 @@ void generate(fs::path startPath, std::vector<std::string> args)
     hello += glob::sources("helloapp");
     hello[MacOS] += bundle();
 
-    cli::parseCommandLineAndEmit(startPath, args, {&hello}, {debug, release});
+    cli::parseCommandLineAndEmit(startPath, args, {&hello});
 }

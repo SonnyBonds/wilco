@@ -28,40 +28,49 @@ public:
 
     virtual void emit(const EmitterArgs& args) override
     {
-        std::filesystem::create_directories(args.targetPath);
-
-        auto outputFile = args.targetPath / "build.ninja";
-        NinjaWriter ninja(outputFile);
-
         auto projects = Emitter::discoverProjects(args.projects);
 
         std::vector<std::filesystem::path> outputs;
-        for(auto project : projects)
+        auto configs = discoverConfigs(projects);
+        for(auto& config : configs)
         {
-            auto outputName = emitProject(args.targetPath, *project, args.config, false);
-            if(!outputName.empty())
+            std::filesystem::path targetPath = args.targetPath;
+            if(!config.empty())
             {
-                ninja.subninja(outputName);
-                outputs.push_back(outputName);
+                targetPath = targetPath / config.cstr();
             }
-        }
+            std::filesystem::create_directories(targetPath);
 
-        std::vector<std::filesystem::path> generatorDependencies;
-        for(auto& project : projects)
-        {
-            for(auto& entry : project->configs)
+            auto outputFile = targetPath / "build.ninja";
+            NinjaWriter ninja(outputFile);
+
+            for(auto project : projects)
             {
-                generatorDependencies += entry.second[GeneratorDependencies];
+                auto outputName = emitProject(targetPath, *project, config, false);
+                if(!outputName.empty())
+                {
+                    ninja.subninja(outputName);
+                    outputs.push_back(outputName);
+                }
             }
-        }
 
-        Project generator = createGeneratorProject();
-        outputs += "build.ninja";
-        generatorDependencies += generator[OutputPath];
-        generator[Commands] += { "\"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
-    
-        auto outputName = emitProject(args.targetPath, generator, args.config, true);
-        ninja.subninja(outputName);
+            std::vector<std::filesystem::path> generatorDependencies;
+            for(auto& project : projects)
+            {
+                for(auto& entry : project->configs)
+                {
+                    generatorDependencies += entry.second[GeneratorDependencies];
+                }
+            }
+
+            Project generator = createGeneratorProject();
+            outputs += "build.ninja";
+            generatorDependencies += generator[OutputPath];
+            generator[Commands] += { "\"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
+        
+            auto outputName = emitProject(targetPath, generator, "", true);
+            ninja.subninja(outputName);        
+        }
     }
 
 private:

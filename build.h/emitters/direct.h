@@ -64,19 +64,22 @@ public:
             }
         }
 
+        auto projects = Emitter::discoverProjects(args.projects);
+        auto configs = discoverConfigs(projects);
+        std::vector<PendingCommand> pendingCommands;
+        for(auto config : configs)
         {
-            auto projects = Emitter::discoverProjects(args.projects);
+            pendingCommands.clear();
 
-            std::vector<PendingCommand> pendingCommands;
             for(auto project : projects)
             {
-                collectCommands(pendingCommands, args.targetPath, *project, args.config);
+                collectCommands(pendingCommands, args.targetPath / config.cstr(), *project, config);
             }
             auto commands = processCommands(pendingCommands);
 
             if(commands.empty())
             {
-                std::cout << std::string(args.config) + ": Nothing to do. (Everything up to date.)\n" << std::flush;
+                std::cout << std::string(config) + ": Nothing to do. (Everything up to date.)\n" << std::flush;
             }
             else
             {
@@ -84,7 +87,7 @@ public:
                 std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
                 size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
-                std::cout << "\n" << std::string(args.config) + ": " + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
+                std::cout << "\n" << std::string(config) + ": " + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
 
                 // TODO: Error exit code on failure
             }
