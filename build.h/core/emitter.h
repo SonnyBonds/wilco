@@ -14,6 +14,8 @@ struct EmitterArgs
 {
     std::vector<Project*> projects;
     std::filesystem::path targetPath;
+    std::vector<std::string> cliArgs;
+    std::vector<std::string> allCliArgs;
 };
 
 struct Emitter;
@@ -41,8 +43,10 @@ private:
 struct Emitter
 {
     StringId name;
-    Emitter(std::string name)
-        : name(std::move(name)) 
+    std::string usage;
+    Emitter(std::string name, std::string usage = {})
+        : name(std::move(name))
+        , usage(std::move(usage)) 
     {
         Emitters::install(this);
     }

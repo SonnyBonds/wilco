@@ -48,9 +48,6 @@ std::vector<std::string> parsePositionalArguments(const std::vector<std::string>
 
 void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::vector<Project*> projects)
 {
-    auto optionArgs = parseOptionArguments(arguments);
-    auto positionalArgs = parsePositionalArguments(arguments);
-
     auto& availableEmitters = Emitters::list();
 
     if(availableEmitters.empty())
@@ -58,46 +55,84 @@ void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<
         throw std::runtime_error("No emitters available.");
     }
 
-    std::filesystem::path outputPath = "buildfiles";
-
-    std::vector<Emitter*> emitters;
-    for(auto& arg : optionArgs)
-    {
-        auto emitterIt = std::find_if(availableEmitters.begin(), availableEmitters.end(), [&arg](auto& v){ return v->name == StringId(arg.first); });
-        if(emitterIt != availableEmitters.end())
-        {
-            emitters.push_back(*emitterIt);
-        }
-        if(arg.first == "outputPath" && !arg.second.empty())
-        {
-            outputPath = arg.second;
-        }
-    }
-
-    if(emitters.empty())
-    {
-        std::cout << "Usage: " << arguments[0] << "[--outputPath=<target path for build files>] --emitter\n";
-        std::cout << "Example: " << arguments[0] << " --outputPath=buildoutput --" << availableEmitters[0]->name << "\n\n";
+    auto printUsage = [&arguments, &availableEmitters](){
+        std::cout << "Usage: " << arguments[0] << " [--outputPath=<target path for build files>] <emitter> [options to emitter] \n";
+        std::cout << "Example: " << arguments[0] << " direct\n\n";
         std::cout << "Available emitters: \n";
         for(auto& emitter : availableEmitters)
         {
-            std::cout << "  --" << emitter->name << "\n";
+            std::cout << "  " << emitter->name << " " << emitter->usage << "\n";
         }
         std::cout << "\n\n";
-        throw std::runtime_error("No emitters specified.");
-    }
+    };
 
-    for(auto& emitter : emitters)
+    Emitter* selectedEmitter = nullptr;
+    std::filesystem::path outputPath = "buildfiles";
+    int consumedArguments = 0;
+
+    try
     {
-        if(!outputPath.is_absolute())
+        for(size_t i = 1; i<arguments.size(); ++i)
         {
-            outputPath = startPath / outputPath;
+            auto& arg = arguments[i];
+            if(arg == "--help" || arg == "-h")
+            {
+                printUsage();
+                return;
+            }
+            else if(arg.find("--outputPath") == 0)
+            {
+                outputPath = str::split(arg, '=').second;
+                if(outputPath.empty())
+                {
+                    throw std::runtime_error("Expected value for option '--outputPath', e.g. '--outputPath=buildfiles'.");
+                }
+                consumedArguments = i+1;
+                continue;
+            }
+            else
+            {
+                for(auto emitter : availableEmitters)
+                {
+                    if(emitter->name.cstr() == arg)
+                    {
+                        selectedEmitter = emitter;
+                        break;
+                    }
+                }
+                if(!selectedEmitter)
+                {
+                    throw std::runtime_error("Unknown argument '" + arg + "'.");
+                }
+                consumedArguments = i+1;
+                break;
+            }
         }
-        EmitterArgs args;
-        args.targetPath = outputPath;
-        args.projects = projects;
-        emitter->emit(args);
+
+        if(selectedEmitter == nullptr)
+        {
+            throw std::runtime_error("No emitters specified.");
+        }
     }
+    catch(const std::exception& e)
+    {
+        printUsage();
+
+        throw;
+    }
+    
+    if(!outputPath.is_absolute())
+    {
+        outputPath = startPath / outputPath;
+    }
+    
+    EmitterArgs args;
+    args.targetPath = outputPath;
+    args.projects = projects;
+    args.allCliArgs = arguments;
+    args.cliArgs = arguments;
+    args.cliArgs.erase(args.cliArgs.begin(), args.cliArgs.begin() + consumedArguments);
+    selectedEmitter->emit(args);
 }
 
 }

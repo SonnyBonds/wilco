@@ -28,6 +28,11 @@ public:
 
     virtual void emit(const EmitterArgs& args) override
     {
+        if(!args.cliArgs.empty())
+        {
+            throw std::runtime_error("Unknown argument '" + args.cliArgs[0] + "'");
+        }
+        
         auto projects = Emitter::discoverProjects(args.projects);
 
         std::vector<std::filesystem::path> outputs;
@@ -66,7 +71,14 @@ public:
             Project generator = createGeneratorProject();
             outputs += "build.ninja";
             generatorDependencies += generator[OutputPath];
-            generator[Commands] += { "\"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --ninja " BUILD_ARGS, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
+
+            std::string argumentString;
+            for(size_t i = 1; i<args.allCliArgs.size(); ++i)
+            {
+                argumentString += " " + str::quote(args.allCliArgs[i]);
+            }
+            
+            generator[Commands] += { str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
         
             auto outputName = emitProject(targetPath, generator, "", true);
             ninja.subninja(outputName);        

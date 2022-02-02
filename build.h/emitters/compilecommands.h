@@ -34,6 +34,11 @@ public:
 
     virtual void emit(const EmitterArgs& args) override
     {
+        if(!args.cliArgs.empty())
+        {
+            throw std::runtime_error("Unknown argument '" + args.cliArgs[0] + "'");
+        }
+        
         std::filesystem::create_directories(args.targetPath);
         std::ofstream stream(args.targetPath / "compile_commands.json");
         

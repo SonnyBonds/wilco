@@ -9,17 +9,18 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/stringid.h"
 #include "core/emitter.h"
 #include "core/project.h"
+#include "core/stringid.h"
 #include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/postprocess.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
+#include "util/cli.h"
+#include "util/file.h"
 #include "util/operators.h"
 #include "util/process.h"
-#include "util/file.h"
 #include "util/string.h"
 
 class DirectBuilder : public Emitter
@@ -28,12 +29,41 @@ public:
     static DirectBuilder instance;
 
     DirectBuilder()
-        : Emitter("direct")
+        : Emitter(
+            "direct",
+            "[--config=<config-name>]"
+        )
     {
     }
 
     virtual void emit(const EmitterArgs& args) override
     {
+        std::optional<StringId> selectedConfig;
+
+        auto positionalArgs = cli::parsePositionalArguments(args.cliArgs);
+        if(!positionalArgs.empty())
+        {
+            throw std::runtime_error("Unknown argument '" + positionalArgs[0] + "'.");
+        }
+
+        auto optionArgs = cli::parseOptionArguments(args.cliArgs);
+        for(auto& option : optionArgs)
+        {
+            if(option.first == "config")
+            {
+                selectedConfig = option.second;
+            }
+            else
+            {
+                throw std::runtime_error("Unknown argument '" + option.first + "'.");
+            }
+        }
+
+        if(selectedConfig && selectedConfig->empty())
+        {
+            throw std::runtime_error("Expected value for option '--config', e.g. '--config=debug'.");
+        }
+
         {
             Project generator = createGeneratorProject();
 
@@ -50,8 +80,12 @@ public:
                 if(completedCommands == commands.size())
                 {
                     std::cout << "Restarting build.\n\n" << std::flush;
-                    // TODO: Pass arguments used to start build?
-                    auto result = process::run("cd \"" START_DIR "\" && \"" + (BUILD_DIR / generator[OutputPath]).string() + "\" --direct ", true);
+                    std::string argumentString;
+                    for(size_t i = 1; i<args.allCliArgs.size(); ++i)
+                    {
+                        argumentString += " " + str::quote(args.allCliArgs[i]);
+                    }
+                    auto result = process::run("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, true);
                     exitCode = result.exitCode;
                 }
                 else
@@ -66,9 +100,25 @@ public:
 
         auto projects = Emitter::discoverProjects(args.projects);
         auto configs = discoverConfigs(projects);
+
+        if(selectedConfig)
+        {
+            if(std::find(configs.begin(), configs.end(), *selectedConfig) == configs.end())
+            {
+                throw std::runtime_error("Selected config '" + std::string(*selectedConfig) + "' has not been used in build configuration.");
+            }
+        }
+
         std::vector<PendingCommand> pendingCommands;
         for(auto config : configs)
         {
+            if(selectedConfig && config != *selectedConfig)
+            {
+                continue;
+            }
+            
+            std::string configPrefix = config.empty() ? "" : std::string(config) + ": ";
+
             pendingCommands.clear();
 
             for(auto project : projects)
@@ -79,7 +129,7 @@ public:
 
             if(commands.empty())
             {
-                std::cout << std::string(config) + ": Nothing to do. (Everything up to date.)\n" << std::flush;
+                std::cout << configPrefix + "Nothing to do. (Everything up to date.)\n" << std::flush;
             }
             else
             {
@@ -87,7 +137,7 @@ public:
                 std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
                 size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
-                std::cout << "\n" << std::string(config) + ": " + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
+                std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
 
                 // TODO: Error exit code on failure
             }
