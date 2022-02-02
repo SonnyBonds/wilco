@@ -7,7 +7,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 - Clone the repository.
 - `build.h/bootstrap example/build.cpp`
-- `example/build --direct`
+- `example/build direct`
 - `example/bin/Hello`
 - Revel.
 
@@ -32,13 +32,16 @@ A *Project* is the main entity of a build configuration. It consists of a name, 
 Options considered for a project when emitting are determined by their _Selector_, a group of criteria used to filter options. These are currently:
 * *Transitivity* - An option can be declared to be applied only for the project itself, or _transitively to dependent projects_. This makes it easy to make sure a project linking to a library automatically gets the correct include path and defines for the library, or to set up common configuration flags, etc. 
 * *Project type* - The type of the emitted project.
+* *Operating System* - The target operating system of the build.
 * *Configuration* - A named configuration, e.g. "debug" or "release".
 
-It is easy to add custom options to projects, but they have very little inherent meaning apart from letting an *Emitter* to do something useful with them. It can however sometimes be useful as metadata resolved by the selector system for custom processing in the project generation itself, or possibly by custom emitters.
+It is easy to add custom options to projects, but they have very little inherent meaning apart from letting an *Emitter* do something useful with them. It can however sometimes be useful as metadata resolved by the selector system for custom processing in the project generation itself, or possibly by custom emitters.
 
 ## Emitters
-An *Emitter* takes the project structure constructed by the generator and emits the build files needed to actually build the projects. Currently only a Ninja emitter exists, but an example of another emitter in mind would be a Visual Studio project emitter.
-
+An *Emitter* takes the project structure constructed by the generator and emits the build files needed to actually build the projects. Examples of existing emitters are:
+* *Direct* builder, which builds the project without further ado.
+* *Ninja* emitter, which emits Ninja files to use for building.
+* *CompileCommands* emitter, which emits a compile_commands.json file that can be used as metadata by applications like VS Code.
 # Getting started
 
 A very simple generator file could look something like this:
@@ -52,19 +55,17 @@ void generate(fs::path startPath, std::vector<std::string> args)
     Project hello("Hello", Executable);
     hello[Files] += "hello.cpp";
 
-    DirectBuilder::emit({{&hello}, "out"});
+    cli::parseCommandLineAndEmit(startPath, args, {&hello});
 }
 ```
 
-This declares one project, called "Hello", with a single file; "hello.cpp" and no extra configuration. The internal builder is then called directly with a list of projects (the single 'hello' project), and an output folder for build data.
+This declares one project, called "Hello", with a single file; "hello.cpp" and no extra configuration. The command line is then parsed and the selected action is performed on the single 'hello' project. (Note that using the built in command line parser is a choice, and it is fully possible to implement custom command line syntax, hardcode what actions to perform, or read from a configuration file.)
 
 To actually run this build, the script needs to be compiled. Since compiling C++ is part of the problem we want to solve here, we've got a chicken-and-egg scenario and need to bootstrap the build. To get started, assuming build.h is located in a directory called 'build.h', we run:
 ```
 build.h/bootstrap build.cpp
 ```
-This will figure out the build environment, build and run the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.* To build again, just run `./build`.
-
-*TODO: The build environment is currently just assumed to exist with clang++ on the path, and clang is the only supported toolchain.*
+This will figure out the build environment, and build the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.* To run the build, just run `./build`.
 
 # Examples
 The "example" directory contains a very simple example setting up a Hello executable, linking to a HelloPrinter library that prints "Hello World!".
@@ -114,14 +115,9 @@ app[Files] += "test.cpp";
 # Future
 
 This is so far mostly a proof of concept and many real life requirements for it to be properly useful are still missing. Some have been mentioned before, but a non-exhaustive list of things to work on is:
-* The internal builder is currently not amazing, and will likely never rival dedicated systems like Ninja for development iterations, but can still be useful for getting up and running quickly with a self contained system. It is however intended to eventually be decent enough to use for build servers and situations where the overhead of non-optimal dependency checking isn't a huge factor.
-* Build environment discovery will likely be done when bootstrapping, with a number of ways to search through to discover a default build environment in most cases, and probably a way to force a specific. The ones currently in mind are:
-    * clang++, from path
-    * g++, from path
-    * (windows) clang++ from installation directory (with winsdk resolved by clang)
-    * (windows) cl/winsdk from environment set up by vcvars
-    * (windows) cl/winsdk from vswhere + sdk search
-* Toolchain setup is part of build environment discovery, but it also ties into translation of options into compiler flags. Currently this is mostly hard coded but there are plans and ideas on how to make this more configurable. Toolchains likely will be tied into project configuration to allow for multiple toolchains within the same project tree, since building the generator might not be done with the same toolchain as the main build in case of cross compiling.
-* More emitters, specifically GNU Make and Visual Studio projects
+* Windows support.
+* The internal builder is a decent build runner, but still some missing features and edge cases that probably need addressing at some point.
+* Build environment discovery done by the bootstrapper works for simple environments, but can probably fairly easily be extended to be much more versatile.
+* More emitters, specifically Visual Studio projects
 * Possibly more selector criteria
-* I'm not in love with the `project[Foo / Bar][Option]` syntax but it's not terrible. Operator overloading could make more esoteric things like `project/Foo/Bar > Files += "test.cpp";` possible but I haven't really come up with something I like better.
+* Cross compiling has been in mind when designing the system, but likely needs more support to actually be doable. Especially if full host/build/target separation is to be done.
