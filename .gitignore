@@ -3,6 +3,5 @@
 bin
 build
 !build/
-ninjabuild
-directbuild
+buildfiles
 _detected_toolchains.h
