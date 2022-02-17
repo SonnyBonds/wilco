@@ -3,6 +3,38 @@
 namespace str
 {
 
+std::string padLeft(std::string str, size_t padding, char padChar = ' ')
+{
+    str.insert(str.begin(), padding, padChar);
+    return str;
+}
+
+std::string padLeftToSize(std::string str, size_t size, char padChar = ' ')
+{
+    if(str.size() >= size)
+    {
+        return str;
+    }
+    size_t padding = size - str.size();
+    return padLeft(std::move(str), padding, padChar);
+}
+
+std::string padRight(std::string str, size_t padding, char padChar = ' ')
+{
+    str.insert(str.end(), padding, padChar);
+    return str;
+}
+
+std::string padRightToSize(std::string str, size_t size, char padChar = ' ')
+{
+    if(str.size() >= size)
+    {
+        return str;
+    }
+    size_t padding = size - str.size();
+    return padRight(std::move(str), padding, padChar);
+}
+
 std::string trim(std::string str)
 {
     {

@@ -3,6 +3,18 @@
 #include "catch2/catch.hpp"
 #include "build.h"
 
+TEST_CASE( "String utils" ) {
+    CHECK(str::padLeft("test", 4) == "    test");
+    CHECK(str::padLeft("test", 4, '#') == "####test");
+    CHECK(str::padRight("test", 4) == "test    ");
+    CHECK(str::padRight("test", 4, '#') == "test####");
+
+    CHECK(str::padLeftToSize("test", 10) == "      test");
+    CHECK(str::padRightToSize("test", 10) == "test      ");
+    CHECK(str::padLeftToSize("test", 2) == "test");
+    CHECK(str::padRightToSize("test", 2) == "test");
+}
+
 TEST_CASE( "StringId" ) {
     SECTION("use new id") {
         size_t referenceStorageSize = StringId::getStorageSize();
