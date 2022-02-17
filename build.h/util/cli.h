@@ -6,6 +6,7 @@
 #include <string>
 #include <stdexcept>
 #include <utility>
+#include <variant>
 
 #include "core/emitter.h"
 #include "util/string.h"
@@ -13,126 +14,198 @@
 namespace cli
 {
 
-std::vector<std::pair<std::string, std::string>> parseOptionArguments(const std::vector<std::string> arguments)
+struct argument_error : public std::runtime_error
 {
-    std::vector<std::pair<std::string, std::string>> result;
-    for(auto& arg : arguments)
+    argument_error(std::string message)
+        : runtime_error(message)
+    {}
+};
+
+struct ArgumentDefinition
+{
+    // Processes the argument argStr and returns true if it was used
+    std::function<bool(std::string_view argStr)> argumentProcessor;
+    std::string example;
+    std::string description;
+};
+
+namespace detail
+{
+    template<typename U>
+    std::optional<std::string> grabValue(const std::optional<U>& value)
     {
-        if(arg.size() > 1 && arg[0] == '-' && arg[1] == '-')
+        if(value)
         {
-            result.push_back(str::split(arg.substr(2), '='));
+            return std::string(*value);
         }
+        return {};
     }
 
-    return result;
+    template<typename U>
+    std::optional<std::string> grabValue(const U& value)
+    {
+        return std::string(value);
+    }
 }
 
-std::vector<std::string> parsePositionalArguments(const std::vector<std::string> arguments, bool skipFirst = true)
+template<typename T>
+ArgumentDefinition stringArgument(std::string trigger, T& value, std::string description)
 {
-    std::vector<std::string> result;
-    for(auto& arg : arguments)
+    ArgumentDefinition def;
+    def.example = trigger + "=<value>";
+    def.description = description;
+
+    std::optional<std::string> defaultValue = detail::grabValue(value);
+    if(defaultValue)
     {
-        if(skipFirst)
-        {
-            skipFirst = false;
-            continue;
-        }
-        if(arg.size() < 2 || arg[0] != '-' || arg[1] != '-')
-        {
-            result.push_back(arg);
-        }
-    }
+        def.description += " [default: \"" + *defaultValue + "\"]";
+    } 
 
-    return result;
-}
-
-void parseCommandLineAndEmit(std::filesystem::path startPath, const std::vector<std::string> arguments, std::vector<Project*> projects)
-{
-    auto& availableEmitters = Emitters::list();
-
-    if(availableEmitters.empty())
+    def.argumentProcessor = [trigger, &value](std::string_view argStr)
     {
-        throw std::runtime_error("No emitters available.");
-    }
-
-    auto printUsage = [&arguments, &availableEmitters](){
-        std::cout << "Usage: " << arguments[0] << " [--outputPath=<target path for build files>] <emitter> [options to emitter] \n";
-        std::cout << "Example: " << arguments[0] << " direct\n\n";
-        std::cout << "Available emitters: \n";
-        for(auto& emitter : availableEmitters)
+        if(argStr.compare(0, trigger.size(), trigger) != 0)
         {
-            std::cout << "  " << emitter->name << " " << emitter->usage << "\n";
+            return false;
         }
-        std::cout << "\n\n";
+
+        if(argStr.size() <= trigger.size())
+        {
+            throw argument_error("Expected value for option '" + trigger + "'.");
+        }
+        
+        if(argStr[trigger.size()] != '=')
+        {
+            return false;
+        }
+
+        value = argStr.substr(trigger.size()+1);
+        return true;
     };
 
-    Emitter* selectedEmitter = nullptr;
-    std::filesystem::path outputPath = "buildfiles";
-    int consumedArguments = 0;
+    return def;
+}
 
-    try
+
+ArgumentDefinition boolArgument(std::string trigger, bool& value, std::string description)
+{
+    ArgumentDefinition def;
+    def.example = trigger;
+    def.description = description;
+
+    def.argumentProcessor = [trigger, &value](std::string_view argStr)
     {
-        for(size_t i = 1; i<arguments.size(); ++i)
+        if(argStr == trigger)
         {
-            auto& arg = arguments[i];
-            if(arg == "--help" || arg == "-h")
+            value = true;
+            return true;
+        }
+        return false;
+    };
+
+    return def;
+}
+
+template<typename T>
+ArgumentDefinition selectionArgument(std::vector<std::pair<StringId, T>> possibleValues, T& value, std::string description)
+{
+    ArgumentDefinition def;
+    def.description = description;
+
+    def.example = "{";
+    bool first = true;
+    for(auto& valuePair : possibleValues)
+    {
+        if(!first)
+        {
+            def.example += "|";                        
+        }
+        first = false;
+        def.example += std::string(valuePair.first);
+    }
+    def.example += "}";
+
+    def.argumentProcessor = [possibleValues, &value](std::string_view argStr)
+    {
+        StringId argId(argStr);
+        for(auto valuePair : possibleValues)
+        {
+            if(argId == valuePair.first)
             {
-                printUsage();
-                return;
+                value = valuePair.second;
+                return true;
             }
-            else if(arg.find("--outputPath") == 0)
+        }
+        return false;
+    }; 
+
+    return def;
+}
+
+void extractArguments(std::vector<std::string>& argumentStrings, const std::vector<ArgumentDefinition>& argumentDefinitions)
+{
+    auto it = argumentStrings.begin();
+    while(it != argumentStrings.end())
+    {
+        auto& argStr = *it;
+        bool found = false;
+        for(auto& def : argumentDefinitions)
+        {
+            if(def.argumentProcessor(argStr))
             {
-                outputPath = str::split(arg, '=').second;
-                if(outputPath.empty())
-                {
-                    throw std::runtime_error("Expected value for option '--outputPath', e.g. '--outputPath=buildfiles'.");
-                }
-                consumedArguments = i+1;
-                continue;
-            }
-            else
-            {
-                for(auto emitter : availableEmitters)
-                {
-                    if(emitter->name.cstr() == arg)
-                    {
-                        selectedEmitter = emitter;
-                        break;
-                    }
-                }
-                if(!selectedEmitter)
-                {
-                    throw std::runtime_error("Unknown argument '" + arg + "'.");
-                }
-                consumedArguments = i+1;
+                found = true;
                 break;
             }
         }
-
-        if(selectedEmitter == nullptr)
+        if(found)
         {
-            throw std::runtime_error("No emitters specified.");
+            it = argumentStrings.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
-    catch(const std::exception& e)
-    {
-        printUsage();
-
-        throw;
-    }
-    
-    if(!outputPath.is_absolute())
-    {
-        outputPath = startPath / outputPath;
-    }
-    
-    EmitterArgs args;
-    args.targetPath = outputPath;
-    args.projects = projects;
-    args.allCliArgs = arguments;
-    args.cliArgs = arguments;
-    args.cliArgs.erase(args.cliArgs.begin(), args.cliArgs.begin() + consumedArguments);
-    selectedEmitter->emit(args);
 }
+
+struct Context
+{
+    Context(std::filesystem::path startPath, std::string invocation, std::vector<std::string> arguments)
+        : startPath(std::move(startPath))
+        , invocation(std::move(invocation))
+        , allArguments(std::move(arguments))
+    {
+        unusedArguments = allArguments;
+    }
+
+    void addArgumentDescription(const std::string& argument, const std::string& doc, std::string prefix = "  ")
+    {
+        usage += prefix + str::padRightToSize(argument, 30) + "  " + doc + "\n";
+    }
+
+    void addArgumentDescriptions(const std::vector<ArgumentDefinition>& argumentDefinitions, std::string prefix = "  ")
+    {
+        bool first = true;
+        for(auto& def : argumentDefinitions)
+        {
+            addArgumentDescription(def.example, def.description, prefix);
+            if(first)
+            {
+                first = false;
+                prefix = std::string(prefix.size(), ' ');
+            }
+        }
+    }
+
+    void extractArguments(const std::vector<ArgumentDefinition>& argumentDefinitions)
+    {
+        cli::extractArguments(unusedArguments, argumentDefinitions);
+    }
+
+    const std::filesystem::path startPath;
+    const std::string invocation;
+    const std::vector<std::string> allArguments;
+    std::vector<std::string> unusedArguments;
+    std::string usage;
+};
 
 }

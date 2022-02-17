@@ -10,45 +10,62 @@ class Query : public Emitter
 public:
     static Query instance;
 
+    enum Type : int
+    {
+        None,
+        Projects,
+        Configs
+    } type = None;
+
     Query()
         : Emitter(
-            "query",
-            "configs|projects"
+            "query"
         )
     {
+        argumentDefinitions += cli::selectionArgument({{"configs", Configs}, {"projects", Projects}}, type, "Select information to list.");
     }
 
-    virtual void emit(const EmitterArgs& args) override
+    virtual void emit(std::vector<Project*> projects) override
     {
-        if(args.cliArgs.empty())
+        if(type == None)
         {
-            throw std::runtime_error("Expected query argument.");
+            throw cli::argument_error("No valid query type specified.");  
         }
 
-        auto projects = Emitter::discoverProjects(args.projects);
+        projects = discoverProjects(projects);
 
-        if(args.cliArgs[0] == "projects")
+        switch(type)
         {
-            for(auto project : projects)
+        case Projects:
+            emitProjects(projects);
+            return;
+        case Configs:
+            emitConfigs(projects);
+            return;
+        case None:
+        default:
+            throw cli::argument_error("No query type specified.");  
+        };
+    }
+
+    void emitProjects(const std::vector<Project*>& projects)
+    {
+        for(auto project : projects)
+        {
+            if(project->type)
             {
-                if(project->type)
-                {
-                    std::cout << project->name << "\n";
-                }
-            }            
+                std::cout << project->name << "\n";
+            }
         }
-        else if(args.cliArgs[0] == "configs")
+    }
+
+    void emitConfigs(const std::vector<Project*>& projects)
+    {
+        auto configs = discoverConfigs(projects);
+        for(auto config : configs)
         {
-            auto configs = discoverConfigs(projects);
-            for(auto config : configs)
-            {
-                std::cout << std::string(config) << "\n";
-            }            
-        }
-        else
-        {
-            throw std::runtime_error("Unknown query: '" + args.cliArgs[0] + "'");            
-        }
+            std::cout << std::string(config) << "\n";
+        }            
     }
 };
 

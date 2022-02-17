@@ -5,8 +5,10 @@ namespace fs = std::filesystem;
 static StringId debug = "debug";
 static StringId release = "release";
 
-void generate(fs::path startPath, std::vector<std::string> args)
+void generate(cli::Context& cliContext)
 {
+    auto emitter = processCommandLine(cliContext);
+
     Project config;
     config[Public / debug][OutputSuffix] = "Debug";
     config[Public / debug][Features] += feature::DebugSymbols;
@@ -22,5 +24,5 @@ void generate(fs::path startPath, std::vector<std::string> args)
     hello += glob::sources("helloapp");
     hello[MacOS] += bundle();
 
-    cli::parseCommandLineAndEmit(startPath, args, {&hello});
+    emitter->emit({&hello});
 }

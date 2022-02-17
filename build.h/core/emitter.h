@@ -9,14 +9,8 @@
 #include "core/os.h"
 #include "core/project.h"
 #include "core/stringid.h"
+#include "util/cli.h"
 
-struct EmitterArgs
-{
-    std::vector<Project*> projects;
-    std::filesystem::path targetPath;
-    std::vector<std::string> cliArgs;
-    std::vector<std::string> allCliArgs;
-};
 
 struct Emitter;
 
@@ -42,18 +36,42 @@ private:
 
 struct Emitter
 {
-    StringId name;
-    std::string usage;
-    Emitter(std::string name, std::string usage = {})
-        : name(std::move(name))
-        , usage(std::move(usage)) 
+    const StringId name;
+    std::vector<std::string> generatorCliArguments;
+
+    Emitter(StringId name)
+        : name(name)
     {
         Emitters::install(this);
     }
 
-    virtual void emit(const EmitterArgs& args) = 0;
+    Emitter(const Emitter& other) = delete;
+    Emitter& operator=(const Emitter& other) = delete;
+
+    virtual void emit(std::vector<Project*> projects) = 0;
+
+    virtual void populateCliUsage(cli::Context& context)
+    {
+        context.addArgumentDescriptions(argumentDefinitions, str::padRightToSize(std::string(name), 20));
+        context.usage += "\n";
+    }
+
+    virtual void initFromCli(cli::Context& context)
+    {
+        generatorCliArguments = context.allArguments;
+        context.extractArguments(argumentDefinitions);
+        if(!targetPath.is_absolute())
+        {
+            targetPath = context.startPath / targetPath;
+        }
+    }
 
 protected:
+    std::filesystem::path targetPath = "buildfiles";
+    cli::ArgumentDefinition targetPathDefinition = cli::stringArgument("--output-path", targetPath, "Target path for build files.");
+
+    std::vector<cli::ArgumentDefinition> argumentDefinitions;
+
     static std::vector<Project*> discoverProjects(const std::vector<Project*>& projects)
     {
         std::vector<Project*> orderedProjects;
@@ -115,7 +133,7 @@ protected:
     {
         auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
         Project project("_generator", Executable);
-        project[Features] += { feature::Cpp17, feature::Optimize };
+        project[Features] += { feature::Cpp17, feature::DebugSymbols };
         project[IncludePaths] += BUILD_H_DIR;
         project[OutputPath] = buildOutput;
         project[Defines] += {

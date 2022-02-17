@@ -24,34 +24,30 @@ public:
     NinjaEmitter()
         : Emitter("ninja")
     {
+        argumentDefinitions += targetPathDefinition;
     }
 
-    virtual void emit(const EmitterArgs& args) override
+    virtual void emit(std::vector<Project*> projects) override
     {
-        if(!args.cliArgs.empty())
-        {
-            throw std::runtime_error("Unknown argument '" + args.cliArgs[0] + "'");
-        }
-        
-        auto projects = Emitter::discoverProjects(args.projects);
+        projects = discoverProjects(projects);
 
         std::vector<std::filesystem::path> outputs;
         auto configs = discoverConfigs(projects);
         for(auto& config : configs)
         {
-            std::filesystem::path targetPath = args.targetPath;
+            std::filesystem::path configTargetPath = targetPath;
             if(!config.empty())
             {
-                targetPath = targetPath / config.cstr();
+                configTargetPath = configTargetPath / config.cstr();
             }
-            std::filesystem::create_directories(targetPath);
+            std::filesystem::create_directories(configTargetPath);
 
-            auto outputFile = targetPath / "build.ninja";
+            auto outputFile = configTargetPath / "build.ninja";
             NinjaWriter ninja(outputFile);
 
             for(auto project : projects)
             {
-                auto outputName = emitProject(targetPath, *project, config, false);
+                auto outputName = emitProject(configTargetPath, *project, config, false);
                 if(!outputName.empty())
                 {
                     ninja.subninja(outputName);
@@ -73,14 +69,14 @@ public:
             generatorDependencies += generator[OutputPath];
 
             std::string argumentString;
-            for(size_t i = 1; i<args.allCliArgs.size(); ++i)
+            for(auto& arg : generatorCliArguments)
             {
-                argumentString += " " + str::quote(args.allCliArgs[i]);
+                argumentString += " " + str::quote(arg);
             }
             
             generator[Commands] += { str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
         
-            auto outputName = emitProject(targetPath, generator, "", true);
+            auto outputName = emitProject(configTargetPath, generator, "", true);
             ninja.subninja(outputName);        
         }
     }

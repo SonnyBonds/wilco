@@ -28,47 +28,22 @@ class DirectBuilder : public Emitter
 public:
     static DirectBuilder instance;
 
+    std::optional<StringId> selectedConfig;
+
     DirectBuilder()
-        : Emitter(
-            "direct",
-            "[--config=<config-name>]"
-        )
+        : Emitter("direct")
     {
+        argumentDefinitions += targetPathDefinition;
+        argumentDefinitions += cli::stringArgument("--config", selectedConfig, "Specify a configuration to build.");
     }
 
-    virtual void emit(const EmitterArgs& args) override
+    virtual void emit(std::vector<Project*> projects) override
     {
-        std::optional<StringId> selectedConfig;
-
-        auto positionalArgs = cli::parsePositionalArguments(args.cliArgs);
-        if(!positionalArgs.empty())
-        {
-            throw std::runtime_error("Unknown argument '" + positionalArgs[0] + "'.");
-        }
-
-        auto optionArgs = cli::parseOptionArguments(args.cliArgs);
-        for(auto& option : optionArgs)
-        {
-            if(option.first == "config")
-            {
-                selectedConfig = option.second;
-            }
-            else
-            {
-                throw std::runtime_error("Unknown argument '" + option.first + "'.");
-            }
-        }
-
-        if(selectedConfig && selectedConfig->empty())
-        {
-            throw std::runtime_error("Expected value for option '--config', e.g. '--config=debug'.");
-        }
-
         {
             Project generator = createGeneratorProject();
 
             std::vector<PendingCommand> pendingCommands;
-            collectCommands(pendingCommands, args.targetPath, generator, "");
+            collectCommands(pendingCommands, targetPath, generator, "");
             auto commands = processCommands(pendingCommands);
 
             if(!commands.empty())
@@ -81,9 +56,9 @@ public:
                 {
                     std::cout << "Restarting build.\n\n" << std::flush;
                     std::string argumentString;
-                    for(size_t i = 1; i<args.allCliArgs.size(); ++i)
+                    for(auto& arg : generatorCliArguments)
                     {
-                        argumentString += " " + str::quote(args.allCliArgs[i]);
+                        argumentString += " " + str::quote(arg);
                     }
                     auto result = process::run("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, true);
                     exitCode = result.exitCode;
@@ -98,7 +73,7 @@ public:
             }
         }
 
-        auto projects = Emitter::discoverProjects(args.projects);
+        projects = discoverProjects(projects);
         auto configs = discoverConfigs(projects);
 
         if(selectedConfig)
@@ -123,7 +98,7 @@ public:
 
             for(auto project : projects)
             {
-                collectCommands(pendingCommands, args.targetPath / config.cstr(), *project, config);
+                collectCommands(pendingCommands, targetPath / config.cstr(), *project, config);
             }
             auto commands = processCommands(pendingCommands);
 

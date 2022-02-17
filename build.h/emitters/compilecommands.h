@@ -30,30 +30,26 @@ public:
     CompileCommands()
         : Emitter("compilecommands")
     {
+        argumentDefinitions += targetPathDefinition;
     }
 
-    virtual void emit(const EmitterArgs& args) override
+    virtual void emit(std::vector<Project*> projects) override
     {
-        if(!args.cliArgs.empty())
-        {
-            throw std::runtime_error("Unknown argument '" + args.cliArgs[0] + "'");
-        }
-        
-        std::filesystem::create_directories(args.targetPath);
-        std::ofstream stream(args.targetPath / "compile_commands.json");
+        std::filesystem::create_directories(targetPath);
+        std::ofstream stream(targetPath / "compile_commands.json");
         
         stream << "[\n";
 
         Project generator = createGeneratorProject();
-        emitCommands(stream, args.targetPath, generator, "", true);
+        emitCommands(stream, targetPath, generator, "", true);
 
-        auto projects = Emitter::discoverProjects(args.projects);
+        projects = discoverProjects(projects);
         auto configs = discoverConfigs(projects);
         for(auto config : configs)
         {
             for(auto project : projects)
             {
-                emitCommands(stream, args.targetPath, *project, config, false);
+                emitCommands(stream, targetPath, *project, config, false);
             }
         }
         
