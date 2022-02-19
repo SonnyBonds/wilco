@@ -255,8 +255,18 @@ struct GccLikeToolchainProvider : public ToolchainProvider
         for(auto& input : resolvedOptions[Files])
         {
             auto ext = std::filesystem::path(input).extension().string();
-            auto exts = { ".c", ".cpp", ".mm" }; // TODO: Not hardcode these maybe
+            auto exts = { ".c", ".cxx", ".cc", ".cpp", ".m", ".mm" }; // TODO: Not hardcode these maybe
             if(std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
+
+            std::string langFlag;
+            if(ext == ".c")
+            {
+                langFlag = " -x c";
+            }
+            else if(ext == ".m")
+            {
+                langFlag = " -x objective-c";
+            }
 
             auto inputStr = (pathOffset / input).string();
             auto output = dataDir / std::filesystem::path("obj") / project.name / (input.string() + ".o");
