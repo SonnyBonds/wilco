@@ -20,7 +20,7 @@ OptionCollection bundleResources(const std::filesystem::path& path, const std::f
     return result;
 }
 
-OptionCollection files(const std::filesystem::path& path, const std::vector<std::string>& extensions, bool recurse = true)
+OptionCollection files(const std::filesystem::path& path, const std::vector<std::string>& extensions = {}, bool recurse = true)
 {
     OptionCollection result;
     auto& files = result[Files];
@@ -34,21 +34,40 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
         return result;
     }
 
-    for(auto entry : std::filesystem::recursive_directory_iterator(path))
+    auto scan = [&](auto&& iterator)
     {
-        if(entry.is_directory())
+        for(auto entry : iterator)
         {
-            // Add subdirectories as dependencies to rescan if the contents change
-            generatorDeps += path;
-            continue;
-        }
-        if(!entry.is_regular_file()) continue;
+            if(entry.is_directory())
+            {
+                // Add subdirectories as dependencies to rescan if the contents change
+                generatorDeps += path;
+                continue;
+            }
+            if(!entry.is_regular_file()) continue;
 
-        auto ext = entry.path().extension().string();
-        if(std::find(extensions.begin(), extensions.end(), ext) != extensions.end())
-        {
-            files += entry.path();
+            if(extensions.empty())
+            {
+                files += entry.path();
+            }
+            else
+            {
+                auto ext = entry.path().extension().string();
+                if(std::find(extensions.begin(), extensions.end(), ext) != extensions.end())
+                {
+                    files += entry.path();
+                }
+            }
         }
+    };
+
+    if(recurse)
+    {
+        scan(std::filesystem::recursive_directory_iterator(path));
+    }
+    else
+    {
+        scan(std::filesystem::directory_iterator(path));
     }
 
     return result;
@@ -56,7 +75,7 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
 
 OptionCollection sources(const std::filesystem::path& path, bool recurse = true)
 {
-    return files(path, { ".c", ".cpp", ".mm", ".h", ".hpp" }, recurse);
+    return files(path, { ".c", ".cpp", "*.m", ".mm", ".h", ".hpp" }, recurse);
 }
 
 }
