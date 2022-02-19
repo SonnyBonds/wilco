@@ -77,7 +77,20 @@ std::string_view trim(std::string_view str)
     return str;
 }
 
-std::pair<std::string, std::string> split(std::string_view str, char delimiter)
+std::pair<std::string_view, std::string_view> split(std::string_view str, char delimiter)
+{
+    auto pos = str.find(delimiter);
+    if(pos != str.npos)
+    {
+        return { str.substr(0, pos), str.substr(pos+1, str.size()-pos-1) };
+    }
+    else
+    {
+        return { str, "" };
+    }
+}
+
+std::pair<std::string, std::string> split(const std::string& str, char delimiter)
 {
     auto pos = str.find(delimiter);
     if(pos != str.npos)
