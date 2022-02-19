@@ -112,9 +112,15 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             break;
         case Executable:
         case SharedLib:
+            flags += " -L\"" + pathOffset.string() + "\"";
+            for(auto& path : resolvedOptions[LibPaths])
+            {
+                flags += " -L\"" + (pathOffset / path).string() + "\"";
+            }
+
             for(auto& path : resolvedOptions[Libs])
             {
-                flags += " " + (pathOffset / path).string();
+                flags += " -l" + path.string();
             }
 
             for(auto& framework : resolvedOptions[Frameworks])
@@ -257,7 +263,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             auto outputStr = (pathOffset / output).string();
 
             CommandEntry command;
-            command.command = compiler + (ext == ".mm" ? commonCompilerFlagsObjC : commonCompilerFlags) + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
+            command.command = compiler + (ext == ".mm" ? commonCompilerFlagsObjC : commonCompilerFlags) + langFlag + getCompilerFlags(project, resolvedOptions, pathOffset, inputStr, outputStr);
             command.inputs = { input };
             command.inputs += pchInputs;
             command.outputs = { output };
