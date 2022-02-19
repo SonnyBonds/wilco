@@ -11,6 +11,11 @@ namespace file
 std::string read(std::filesystem::path path)
 {
     std::ifstream stream(path);
+    if(!stream)
+    {
+        return {};
+    }
+    
     stream.seekg(0, std::ios_base::end);
     size_t size = stream.tellg();
     stream.seekg(0, std::ios_base::beg);
