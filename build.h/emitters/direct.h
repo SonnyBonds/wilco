@@ -128,8 +128,8 @@ private:
         StringId depFile;
         std::string commandString;
         std::string desciption;
-        int depth = 0;
         bool dirty = false;
+        int depth = 0;
         std::vector<PendingCommand*> dependencies;
         std::future<process::ProcessResult> result;
     };
@@ -183,6 +183,20 @@ private:
         }
         prologue += "cd \"$cwd\" && ";
 
+        auto cmdFilePath = root / (project.name + ".cmdlines");
+        auto cmdData = file::read(cmdFilePath);
+        std::unordered_map<StringId, std::string_view> cmdLines;
+
+        auto cmdDataView = std::string_view(cmdData);
+        while(!cmdDataView.empty())
+        {
+            std::string_view line;
+            std::tie(line, cmdDataView) = str::split(cmdDataView, '\n');
+            auto [file, cmdLine] = str::split(line, 0);
+            cmdLines[file] = cmdLine;
+        }
+        std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
+
         pendingCommands.reserve(pendingCommands.size() + commands.size());
         for(auto& command : commands)
         {
@@ -200,11 +214,23 @@ private:
                 inputStrs.push_back(path.string());
             }
 
+            bool dirty = false;
+
             std::vector<StringId> outputStrs;
             outputStrs.reserve(command.outputs.size());
             for(auto& path : command.outputs)
             {
-                outputStrs.push_back(path.string());
+                auto str = path.string();
+                auto strId = StringId(str);
+                outputStrs.push_back(strId);
+                if(cmdLines[strId] != command.command)
+                {
+                    dirty = true;
+                }
+                
+                cmdFile.write(str.c_str(), str.size()+1);
+                cmdFile.write(command.command.c_str(), command.command.size());
+                cmdFile.write("\n", 1);
             }
 
             std::string depfileStr;
@@ -219,6 +245,7 @@ private:
                 depfileStr,
                 "cd \"" + cwdStr + "\" && " + command.command,
                 command.description,
+                dirty
             });
         }
     }
