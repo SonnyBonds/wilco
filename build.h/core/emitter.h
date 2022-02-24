@@ -10,6 +10,7 @@
 #include "core/project.h"
 #include "core/stringid.h"
 #include "util/cli.h"
+#include "util/commands.h"
 
 
 struct Emitter;
@@ -129,13 +130,21 @@ protected:
         return result;
     }
 
-    static Project createGeneratorProject()
+    static std::pair<Project, std::filesystem::path> createGeneratorProject(std::filesystem::path targetPath)
     {
-        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension("");
+        targetPath = targetPath / ".build.h";
+        std::string ext;
+        if(OperatingSystem::current() == Windows)
+        {
+            ext = ".exe";
+        }
+        auto tempOutput = targetPath / std::filesystem::path(BUILD_FILE).filename().replace_extension(ext);
+        auto prevOutput = targetPath / std::filesystem::path(BUILD_FILE).filename().replace_extension(ext + ".prev");
+        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension(ext);
         Project project("_generator", Executable);
-        project[Features] += { feature::Cpp17, feature::DebugSymbols };
+        project[Features] += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions };
         project[IncludePaths] += BUILD_H_DIR;
-        project[OutputPath] = buildOutput;
+        project[OutputPath] = tempOutput;
         project[Defines] += {
             "START_DIR=\\\"" START_DIR "\\\"",
             "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
@@ -144,6 +153,8 @@ protected:
             "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
         };
         project[Files] += BUILD_FILE;
-        return project;
+        project[Commands] += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
+
+        return { std::move(project), buildOutput };
     }
 };

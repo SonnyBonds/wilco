@@ -41,7 +41,7 @@ public:
     virtual void emit(std::vector<Project*> projects) override
     {
         {
-            Project generator = createGeneratorProject();
+            auto [generator, buildOutput] = createGeneratorProject(targetPath);
 
             std::vector<PendingCommand> pendingCommands;
             collectCommands(pendingCommands, targetPath, generator, "");
@@ -61,7 +61,7 @@ public:
                     {
                         argumentString += " " + str::quote(arg);
                     }
-                    auto result = process::run("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, true);
+                    auto result = process::run("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / buildOutput).string()) + argumentString, true);
                     exitCode = result.exitCode;
                 }
                 else

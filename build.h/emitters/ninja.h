@@ -64,9 +64,9 @@ public:
                 }
             }
 
-            Project generator = createGeneratorProject();
+            auto [generator, buildOutput] = createGeneratorProject(targetPath);
             outputs += "build.ninja";
-            generatorDependencies += generator[OutputPath];
+            generatorDependencies += buildOutput;
 
             std::string argumentString;
             for(auto& arg : generatorCliArguments)
@@ -74,7 +74,7 @@ public:
                 argumentString += " " + str::quote(arg);
             }
             
-            generator[Commands] += { str::quote((BUILD_DIR / generator[OutputPath]).string()) + argumentString, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
+            generator[Commands] += { str::quote((BUILD_DIR / buildOutput).string()) + argumentString, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
         
             auto outputName = emitProject(configTargetPath, generator, "", true);
             ninja.subninja(outputName);        

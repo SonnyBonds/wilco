@@ -40,7 +40,7 @@ public:
         
         stream << "[\n";
 
-        Project generator = createGeneratorProject();
+        auto [generator, buildOutput] = createGeneratorProject(targetPath);
         emitCommands(stream, targetPath, generator, "", true);
 
         projects = discoverProjects(projects);

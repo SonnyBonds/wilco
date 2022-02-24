@@ -8,22 +8,113 @@
 namespace commands
 {
 
-CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
+CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDescription = {})
 {
-    CommandEntry commandEntry;
-    commandEntry.inputs = { from };
-    commandEntry.outputs = { to };
-    commandEntry.command = "mkdir -p \"" + from.parent_path().string() + "\" && cp \"" + from.string() + "\" \"" + to.string() + "\"";
-    commandEntry.description += "Copying '" + from.string() + "' -> '" + to.string() + "'";
-    return commandEntry;
+    if(commands.empty())
+    {
+        throw std::invalid_argument("No commands to chain");
+    }
+
+    CommandEntry result = commands[0];
+    for(size_t i = 1; i < commands.size(); ++i)
+    {
+        auto& command = commands[i];
+        if(result.workingDirectory != command.workingDirectory)
+        {
+            throw std::invalid_argument("Can't chain commands with different working directories.");
+        }        
+
+        result.command += " && " + command.command;
+        result.inputs += command.inputs;
+        result.outputs += command.outputs;
+
+        if(newDescription.empty())
+        {
+            result.description = result.description + ", " + command.description;
+        }
+    }
+
+    // Remove intermediate steps from inputs
+    result.inputs.erase(std::remove_if(result.inputs.begin(), result.inputs.end(), [&](const auto& input) {
+        return std::find(result.outputs.begin(), result.outputs.end(), input) != result.outputs.end();
+    }), result.inputs.end());
+
+    if(!newDescription.empty())
+    {
+        result.description = newDescription;
+    }
+
+    return result;
 }
 
 CommandEntry mkdir(std::filesystem::path dir)
 {
     CommandEntry commandEntry;
-    commandEntry.outputs = { dir };
-    commandEntry.command = "mkdir -p \"" + dir.string() + "\"";
+
+    auto dirStr = dir.make_preferred().string();
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "(if not exist " + dirStr + " mkdir " + dirStr + ")";
+    }
+    else
+    {
+        commandEntry.command = "mkdir -p " + dirStr + "";
+    }
     commandEntry.description += "Creating directory '" + dir.string() + "'";
+    return commandEntry;
+}
+
+CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
+{
+    CommandEntry commandEntry;
+    commandEntry.inputs = { from };
+    commandEntry.outputs = { to };
+
+    auto fromStr = str::quote(from.make_preferred().string());
+    auto toStr = str::quote(to.make_preferred().string());
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "copy " + fromStr + " " + toStr + "";
+    }
+    else
+    {
+        commandEntry.command = "cp " + fromStr + " " + toStr + "";
+    }
+
+    auto toParent = to.parent_path();
+    if(!toParent.empty())
+    {
+        commandEntry = chain({mkdir(toParent), commandEntry});
+    }
+
+    commandEntry.description = "Copying '" + from.string() + "' -> '" + to.string() + "'";
+    return commandEntry;
+}
+
+CommandEntry move(std::filesystem::path from, std::filesystem::path to)
+{
+    CommandEntry commandEntry;
+    commandEntry.inputs = { from };
+    commandEntry.outputs = { to };
+
+    auto fromStr = str::quote(from.make_preferred().string());
+    auto toStr = str::quote(to.make_preferred().string());
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "move " + fromStr + " " + toStr + " && copy /b " + toStr + " +,,";
+    }
+    else
+    {
+        commandEntry.command = "mv " + fromStr + " " + toStr + " && touch " + toStr;
+    }
+
+    auto toParent = to.parent_path();
+    if(!toParent.empty())
+    {
+        commandEntry = chain({mkdir(toParent), commandEntry});
+    }
+
+    commandEntry.description = "Moving '" + from.string() + "' -> '" + to.string() + "'";
     return commandEntry;
 }
 
