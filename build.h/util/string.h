@@ -62,7 +62,7 @@ std::string_view trim(std::string_view str)
         auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
         if(it != str.begin())
         {
-            str = std::string_view(it, str.end()-it);
+            str = std::string_view(&*it, str.end()-it);
         }
     }
     
@@ -70,7 +70,7 @@ std::string_view trim(std::string_view str)
         auto it = std::find_if_not(str.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
         if(it != str.rbegin())
         {
-            str = std::string_view(str.begin(), it.base()-str.begin());
+            str = std::string_view(&*str.begin(), it.base()-str.begin());
         }
     }
 

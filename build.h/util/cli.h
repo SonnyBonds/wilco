@@ -41,6 +41,11 @@ namespace detail
         return {};
     }
 
+    std::optional<std::string> grabValue(const std::filesystem::path& value)
+    {
+        return value.string();
+    }
+
     template<typename U>
     std::optional<std::string> grabValue(const U& value)
     {
