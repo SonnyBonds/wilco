@@ -242,29 +242,70 @@ TEST_CASE( "String util" ) {
 }
 
 TEST_CASE( "Dependency Parser" ) {
-    using strvec = std::vector<std::string>;
+    SECTION("gcc style") {
+        std::string dependencyData = R"--( c:\asdf:
+        some\path\with\ spaces \
+        another\without \
 
-    std::string dependencyData = R"--( \asdf:
-    some\path\with\ spaces \
-    another\without \
+        trailing\space\  
+        \leading \\backslash
+        path"with"quotes
+        m\ u\ l\ tiple\ s\ p\ aces
+        endoffile)--";
 
-    trailing\space\  
-    \leading \\backslash
-    m\ u\ l\ tiple\ s\ p\ aces
-    endoffile)--";
-    std::vector<std::string> result;
+        std::vector<std::string> result;
+        DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+            result.push_back(std::string(path));
+            return false;
+        });
+        REQUIRE(result == std::vector<std::string>{
+            R"--(some\path\with spaces)--",
+            R"--(another\without)--",
+            R"--(trailing\space )--",
+            R"--(\leading)--",
+            R"--(\\backslash)--",
+            R"--(path"with"quotes)--",
+            R"--(m u l tiple s p aces)--",
+            R"--(endoffile)--",
+        });
+    }
 
-    DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
-        result.push_back(std::string(path));
-        return false;
-    });
-    REQUIRE(result == strvec{
-        R"--(some\path\with spaces)--",
-        R"--(another\without)--",
-        R"--(trailing\space )--",
-        R"--(\leading)--",
-        R"--(\\backslash)--",
-        R"--(m u l tiple s p aces)--",
-        R"--(endoffile)--",
-    });
+    SECTION("cl style") {
+        std::string dependencyData = R"--({
+    "Version": "1.1",
+    "Data": {
+        "Source": "c:\\some\\file\\build.cpp",
+        "ProvidedModule": "",
+        "Includes": [
+            "some\\path\\with spaces",
+            "another\\without",
+            "trailing\\space ",
+            "\\leading",
+            "\\\\backslash",
+            "path\"with\"quotes",
+            "m u l tiple s p aces",
+            "endoffile"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}           
+        )--";
+
+        std::vector<std::string> result;
+        DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+            result.push_back(std::string(path));
+            return false;
+        });
+        REQUIRE(result == std::vector<std::string>{
+            R"--(some\path\with spaces)--",
+            R"--(another\without)--",
+            R"--(trailing\space )--",
+            R"--(\leading)--",
+            R"--(\\backslash)--",
+            R"--(path"with"quotes)--",
+            R"--(m u l tiple s p aces)--",
+            R"--(endoffile)--",
+        });
+    }
 }
