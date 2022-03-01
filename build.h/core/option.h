@@ -49,6 +49,9 @@ struct OptionStorage
     {
     }
 
+    OptionStorage(OptionStorage&&) = default;
+    OptionStorage& operator=(OptionStorage&&) = default;
+
     template<typename T> 
     T& get() const
     {
@@ -174,6 +177,10 @@ private:
 
 struct OptionCollection
 {
+    OptionCollection() {}
+    OptionCollection(OptionCollection&&) = default;
+    OptionCollection& operator=(OptionCollection&&) = default;
+
     template<typename T>
     T& operator[](Option<T> option)
     {

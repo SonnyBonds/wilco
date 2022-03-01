@@ -127,6 +127,8 @@ struct Project
     {
     }
 
+    Project(Project&&) = default;
+
     OptionCollection resolve(StringId configName, OperatingSystem targetOS)
     {
         auto options = internalResolve(type, configName, targetOS, true);
