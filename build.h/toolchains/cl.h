@@ -116,6 +116,19 @@ struct ClToolchainProvider : public ToolchainProvider
             {
                 flags += " " + (pathOffset / path).string();
             }
+
+            std::map<Feature, std::string> featureMap = {
+                { feature::DebugSymbols, " /DEBUG"},
+            };
+            for(auto& feature : resolvedOptions[Features])
+            {
+                auto it = featureMap.find(feature);
+                if(it != featureMap.end())
+                {
+                    flags += it->second;
+                }
+            }
+
             break;
         }
 
