@@ -207,7 +207,7 @@ foreach ($id in $toolchains.Keys)
 
 $toolchain_contents += "`n}`n`nToolchainProvider* defaultToolchain = &detected_toolchains::${selected_toolchain};`n"
 
+Set-Content -Path ($params["BUILD_H_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
+
 $toolchain = $toolchains[$selected_toolchain]
 & $toolchain["Command"] $toolchain["Args"]
-
-Set-Content -Path ($params["BUILD_H_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
