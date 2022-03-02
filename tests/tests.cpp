@@ -254,10 +254,10 @@ TEST_CASE( "Dependency Parser" ) {
         endoffile)--";
 
         std::vector<std::string> result;
-        DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+        REQUIRE(!DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
             result.push_back(std::string(path));
             return false;
-        });
+        }));
         REQUIRE(result == std::vector<std::string>{
             R"--(some\path\with spaces)--",
             R"--(another\without)--",
@@ -293,10 +293,10 @@ TEST_CASE( "Dependency Parser" ) {
         )--";
 
         std::vector<std::string> result;
-        DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+        REQUIRE(!DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
             result.push_back(std::string(path));
             return false;
-        });
+        }));
         REQUIRE(result == std::vector<std::string>{
             R"--(some\path\with spaces)--",
             R"--(another\without)--",

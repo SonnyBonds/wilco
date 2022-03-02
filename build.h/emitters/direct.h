@@ -685,6 +685,7 @@ public:
                     return true;
                 }
 
+                skipWhitespace();
                 if(consume(']'))
                 {
                     break;
