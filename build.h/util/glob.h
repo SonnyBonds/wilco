@@ -75,7 +75,15 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
 
 OptionCollection sources(const std::filesystem::path& path, bool recurse = true)
 {
-    return files(path, { ".c", ".cpp", "*.m", ".mm", ".h", ".hpp" }, recurse);
+    // TODO: This should probably be target operating system rather than current, and also configurable.
+    if(OperatingSystem::current() == MacOS)
+    {
+        return files(path, { ".c", ".cpp", "*.m", ".mm", ".h", ".hpp" }, recurse);
+    }
+    else
+    {
+        return files(path, { ".c", ".cpp", ".h", ".hpp" }, recurse);
+    }
 }
 
 }
