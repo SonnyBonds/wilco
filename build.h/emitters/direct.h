@@ -61,16 +61,12 @@ public:
                     {
                         argumentString += " " + str::quote(arg);
                     }
-                    auto result = process::run("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / buildOutput).string()) + argumentString, true);
-                    exitCode = result.exitCode;
-                }
-                else
-                {
-                    exitCode = EXIT_FAILURE;
+                    process::runAndExit("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / buildOutput).string()) + argumentString);
+                    std::cout << "Build restart failed.\n" << std::flush;
                 }
 
                 // TODO: Exit more gracefully?
-                std::exit(exitCode);
+                std::exit(EXIT_FAILURE);
             }
         }
 
@@ -113,7 +109,7 @@ public:
                 std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
                 size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
-                std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " targets rebuilt.\n" << std::flush;
+                std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
 
                 // TODO: Error exit code on failure
             }
@@ -226,6 +222,7 @@ private:
                 outputStrs.push_back(strId);
                 if(cmdLines[strId] != command.command)
                 {
+                    // LOG std::cout << "\"" << cmdLines[strId] << "\" vs \"" << command.command << "\"\n";
                     dirty = true;
                 }
                 
@@ -450,6 +447,7 @@ private:
                 outputTime = std::min(outputTime, timeCache.get(output, ec));
                 if(ec)
                 {
+                    // LOG std::cout << "dirty: " << output << " did not exist.\n";
                     command->dirty = true;
                     break;
                 }
@@ -461,6 +459,14 @@ private:
                 auto inputTime = timeCache.get(input, ec);
                 if(ec || inputTime > outputTime)
                 {
+                    if(ec)
+                    {
+                        // LOG std::cout << "dirty: " << input << " did not exist.\n";
+                    }
+                    else
+                    {
+                        // LOG std::cout << "dirty: " << input << " was newer than output.\n";
+                    }
                     command->dirty = true;
                     break;
                 }
@@ -472,16 +478,30 @@ private:
                 auto data = file::read(command->depFile.cstr());
                 if(data.empty())
                 {
+                    // LOG std::cout << "dirty: \"" << command->depFile << "\" did not exist.\n";
                     command->dirty = true;
                 }
                 else
                 {
-                    command->dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
+                    bool dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
                     {
                         std::error_code ec;
                         auto inputTime = timeCache.get(path, ec);
+                        if(ec)
+                        {
+                            // LOG std::cout << "dirty: \"" << path << "\" did not exist.\n";
+                        }
+                        else if(inputTime > outputTime)
+                        {
+                            // LOG std::cout << "dirty: " << path << " was newer than output.\n";
+                        }
                         return ec || inputTime > outputTime;
                     });
+                    if(dirty)
+                    {
+                        // LOG std::cout << "dirty: Dependency file \"" << command->depFile << "\" returned true.\n";
+                    }
+                    command->dirty = dirty;
                 }            
             }
         }
@@ -662,18 +682,30 @@ public:
             }
             pos += includeTag.size();
             skipWhitespace();
-            if(!consume(':')) return true;
+            if(!consume(':'))
+            {
+                return true;
+            }
             skipWhitespace();
-            if(!consume('[')) return true;
+            if(!consume('['))
+            {
+                return true;
+            }
             
             while(pos < data.size())
             {
                 skipWhitespace();
-                if(!consume('"')) return true;
+                if(!consume('"'))
+                {
+                    return true;
+                }
 
                 auto pathString = readClPath();
 
-                if(!consume('"')) return true;
+                if(!consume('"'))
+                {
+                    return true;
+                }
 
                 if(pathString.empty())
                 {
@@ -695,7 +727,6 @@ public:
                     return true;
                 }
             }
-            return true;
         }
 
         return false;

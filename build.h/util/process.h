@@ -14,6 +14,8 @@
 #include <unistd.h>
 #endif
 
+#include "core/os.h"
+
 namespace process
 {
 
@@ -51,8 +53,34 @@ struct ProcessResult
 #define pclose _pclose
 #define read _read
 #define fileno _fileno
+#define execvp _execvp
 #define WEXITSTATUS
 #endif
+
+void runAndExit(const std::string& command)
+{
+    auto newCString = [](const std::string& str)
+    {
+        auto result = std::make_unique<char[]>(str.size()+1);
+        memcpy(result.get(), str.c_str(), str.size()+1);
+        return result;
+    };
+
+    std::vector<std::unique_ptr<char[]>> args;
+    args.push_back(newCString(OperatingSystem::current() == Windows ? "cmd" : "sh"));
+    args.push_back(newCString(OperatingSystem::current() == Windows ? "/C" : "-c"));
+    args.push_back(newCString(command));
+    args.push_back(nullptr);
+
+    std::vector<char*> cArgs;
+    cArgs.reserve(args.size());
+    for(auto& arg : args)
+    {
+        cArgs.push_back(arg.get());
+    }
+
+    execvp(cArgs[0], cArgs.data());
+}
 
 ProcessResult run(std::string command, bool echoOutput = false)
 {
@@ -94,6 +122,7 @@ ProcessResult run(std::string command, bool echoOutput = false)
 #undef pclose
 #undef read
 #undef fileno
+#undef execvp
 #undef WEXITSTATUS
 #endif
 
