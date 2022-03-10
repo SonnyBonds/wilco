@@ -17,12 +17,12 @@ void generate(cli::Context& cliContext)
 
     Project helloPrinter("HelloLibrary", StaticLib);
     helloPrinter.links = { &config };
-    helloPrinter += glob::sources("hellolib");
+    helloPrinter += glob::files("hellolib");
     helloPrinter[Public][IncludePaths] += "hellolib";
 
     Project hello("Hello", Executable);
     hello.links = { &helloPrinter };
-    hello += glob::sources("helloapp");
+    hello += glob::files("helloapp");
     hello[MacOS] += bundle();
 
     emitter->emit({&hello});

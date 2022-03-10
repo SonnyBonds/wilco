@@ -20,7 +20,8 @@ OptionCollection bundleResources(const std::filesystem::path& path, const std::f
     return result;
 }
 
-OptionCollection files(const std::filesystem::path& path, const std::vector<std::string>& extensions = {}, bool recurse = true)
+template<typename T>
+OptionCollection files(const std::filesystem::path& path, const T& filter, bool recurse = true)
 {
     OptionCollection result;
     auto& files = result[Files];
@@ -46,17 +47,9 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
             }
             if(!entry.is_regular_file()) continue;
 
-            if(extensions.empty())
+            if(filter(path))
             {
                 files += entry.path();
-            }
-            else
-            {
-                auto ext = entry.path().extension().string();
-                if(std::find(extensions.begin(), extensions.end(), ext) != extensions.end())
-                {
-                    files += entry.path();
-                }
             }
         }
     };
@@ -73,17 +66,9 @@ OptionCollection files(const std::filesystem::path& path, const std::vector<std:
     return result;
 }
 
-OptionCollection sources(const std::filesystem::path& path, bool recurse = true)
+OptionCollection files(const std::filesystem::path& path, bool recurse = true)
 {
-    // TODO: This should probably be target operating system rather than current, and also configurable.
-    if(OperatingSystem::current() == MacOS)
-    {
-        return files(path, { ".c", ".cpp", "*.m", ".mm", ".h", ".hpp" }, recurse);
-    }
-    else
-    {
-        return files(path, { ".c", ".cpp", ".h", ".hpp" }, recurse);
-    }
+    return files(path, [](const std::filesystem::path& path) { return true; }, recurse);
 }
 
 }
