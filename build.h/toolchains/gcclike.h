@@ -121,7 +121,17 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
             for(auto& path : resolvedOptions[Libs])
             {
-                flags += " -l" + path.string();
+                // It's hard to know if the user wants "libfoo.a" when they say "foo" or not.
+                // Might need better heuristics, but assuming having a path specified
+                // implies a specific name
+                if(path.has_parent_path())
+                {
+                    flags += " " + (pathOffset / path).string();
+                }
+                else
+                {
+                    flags += " -l" + path.string();
+                }
             }
 
             for(auto& framework : resolvedOptions[Frameworks])
