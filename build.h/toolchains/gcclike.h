@@ -266,7 +266,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
                 CommandEntry command;
                 command.command = getCompiler(project, resolvedOptions, pathOffset, lang::ObjectiveCpp) + 
                                   getCommonCompilerFlags(project, resolvedOptions, pathOffset, lang::ObjectiveCpp, true) + 
-                                  getCompilerFlags(project, resolvedOptions, pathOffset, lang::ObjectiveCpp, inputStr, outputStr);
+                                  getCompilerFlags(project, resolvedOptions, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
                 command.inputs = { input };
                 command.outputs = { outputObjC };
                 command.workingDirectory = workingDir;
@@ -300,8 +300,20 @@ struct GccLikeToolchainProvider : public ToolchainProvider
                 return it->second;
             }
 
-            return commonCompilerFlags[language] = str::quote(getCompiler(project, resolvedOptions, pathOffset, language)) +
-                                                   getCommonCompilerFlags(project, resolvedOptions, pathOffset, language, false);
+            auto flags = str::quote(getCompiler(project, resolvedOptions, pathOffset, language)) +
+                         getCommonCompilerFlags(project, resolvedOptions, pathOffset, language, false);
+            
+            // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
+            if(language == lang::Cpp)
+            {
+                flags += cppPchFlags;
+            }
+            else if(language == lang::ObjectiveCpp)
+            {
+                flags += objCppPchFlags;
+            }
+
+            return commonCompilerFlags[language] = flags;
         };
 
         auto linkerCommand = str::quote(getLinker(project, resolvedOptions, pathOffset)) + getCommonLinkerFlags(project, resolvedOptions, pathOffset);
@@ -314,16 +326,6 @@ struct GccLikeToolchainProvider : public ToolchainProvider
             {
                 continue;
             }
-
-            /*std::string langFlag;
-            if(ext == ".c")
-            {
-                langFlag = " -x c";
-            }
-            else if(ext == ".m")
-            {
-                langFlag = " -x objective-c";
-            }*/
 
             auto inputStr = (pathOffset / input.path).string();
             auto output = dataDir / std::filesystem::path("obj") / project.name / (input.path.string() + ".o");
