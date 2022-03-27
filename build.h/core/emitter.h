@@ -146,11 +146,11 @@ protected:
         project[IncludePaths] += BUILD_H_DIR;
         project[OutputPath] = tempOutput;
         project[Defines] += {
-            "START_DIR=\\\"" START_DIR "\\\"",
-            "BUILD_H_DIR=\\\"" BUILD_H_DIR "\\\"",
-            "BUILD_DIR=\\\"" BUILD_DIR "\\\"",
-            "BUILD_FILE=\\\"" BUILD_FILE "\\\"",
-            "BUILD_ARGS=\\\"" BUILD_ARGS "\\\"",
+            "START_DIR=\"" START_DIR "\"",
+            "BUILD_H_DIR=\"" BUILD_H_DIR "\"",
+            "BUILD_DIR=\"" BUILD_DIR "\"",
+            "BUILD_FILE=\"" BUILD_FILE "\"",
+            "BUILD_ARGS=\"" BUILD_ARGS "\"",
         };
         project[Files] += BUILD_FILE;
         project[Commands] += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");

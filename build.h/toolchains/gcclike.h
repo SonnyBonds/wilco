@@ -60,7 +60,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
         for(auto& define : resolvedOptions[Defines])
         {
-            flags += " -D\"" + define + "\"";
+            flags += " -D" + str::quote(define);
         }
         for(auto& path : resolvedOptions[IncludePaths])
         {
