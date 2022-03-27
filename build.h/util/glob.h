@@ -11,6 +11,12 @@ namespace glob
 OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
 {
     OptionCollection result;
+
+    if(!std::filesystem::exists(path))
+    {
+        return result;
+    }
+
     for(auto entry : std::filesystem::recursive_directory_iterator(path))
     {            
         if(!entry.is_regular_file()) continue;
