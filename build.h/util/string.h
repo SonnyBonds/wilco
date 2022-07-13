@@ -3,6 +3,26 @@
 namespace str
 {
 
+bool startsWith(std::string_view haystack, std::string_view needle)
+{
+    if(haystack.size() < needle.size())
+    {
+        return false;
+    }
+
+    return haystack.compare(0, needle.size(), needle) == 0;
+}
+
+bool endsWith(std::string_view haystack, std::string_view needle)
+{
+    if(haystack.size() < needle.size())
+    {
+        return false;
+    }
+
+    return haystack.compare(haystack.size() - needle.size(), needle.size(), needle) == 0;
+}
+
 std::string padLeft(std::string str, size_t padding, char padChar = ' ')
 {
     str.insert(str.begin(), padding, padChar);
@@ -35,6 +55,32 @@ std::string padRightToSize(std::string str, size_t size, char padChar = ' ')
     return padRight(std::move(str), padding, padChar);
 }
 
+std::string trimStart(std::string str)
+{
+    {
+        auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
+        if(it != str.begin())
+        {
+            str.erase(str.begin(), it);
+        }
+    }
+
+    return str;
+}
+
+std::string trimEnd(std::string str)
+{
+    {
+        auto it = std::find_if_not(str.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
+        if(it != str.rbegin())
+        {
+            str.erase(it.base(), str.end());
+        }
+    }
+
+    return str;
+}
+
 std::string trim(std::string str)
 {
     {
@@ -50,6 +96,32 @@ std::string trim(std::string str)
         if(it != str.rbegin())
         {
             str.erase(it.base(), str.end());
+        }
+    }
+
+    return str;
+}
+
+std::string_view trimStart(std::string_view str)
+{
+    {
+        auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
+        if(it != str.begin())
+        {
+            str = std::string_view(&*it, str.end()-it);
+        }
+    }
+    
+    return str;
+}
+
+std::string_view trimEnd(std::string_view str)
+{
+    {
+        auto it = std::find_if_not(str.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
+        if(it != str.rbegin())
+        {
+            str = std::string_view(&*str.begin(), it.base()-str.begin());
         }
     }
 
@@ -117,6 +189,39 @@ std::string quote(std::string str, char escapeChar = '\\', std::string_view esca
     str.insert(str.begin(), '"');
     str.insert(str.end(), '"');
     return str;
+}
+
+std::string wrap(std::string_view str, size_t maxLength, size_t indent)
+{
+    std::string result;
+    bool first = true;
+    while(true)
+    {
+        auto emit = [&](std::string_view v)
+        {
+            if(!first)
+            {
+                result += "\n";
+                result.insert(result.end(), indent, ' ');
+            }
+            result += v;
+            first = false;
+        };
+
+        if(str.size() <= maxLength)
+        {
+            emit(str);
+            break;
+        }
+
+        auto row = str.substr(0, maxLength);
+        auto space = std::find_if(row.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
+        size_t split = (size_t)std::distance(space, str.rend());
+        emit(trimEnd(str.substr(0, split)));
+        str = trimStart(str.substr(split));
+    }
+
+    return result;
 }
 
 }
