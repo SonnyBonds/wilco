@@ -10,47 +10,35 @@ class Query : public Emitter
 public:
     static Query instance;
 
-    enum Type : int
-    {
-        None,
-        Projects,
-        Configs
-    } type = None;
+    cli::BoolArgument listProjects{arguments, "projects", "List all defined projects."};
+    cli::BoolArgument listConfigs{arguments, "configs", "List all defined configurations."};
 
     Query()
-        : Emitter(
-            "query"
-        )
+        : Emitter("query", "Retrieve information about the build configuration.")
     {
-        argumentDefinitions += cli::selectionArgument({{"configs", Configs}, {"projects", Projects}}, type, "Select information to list.");
+        arguments.erase(std::remove(arguments.begin(), arguments.end(), &targetPath), arguments.end());
     }
 
-    virtual void emit(std::vector<Project*> projects) override
+    virtual void emit(Environment& env) override
     {
-        if(type == None)
+        if(!listProjects && !listConfigs)
         {
-            throw cli::argument_error("No valid query type specified.");  
+            throw cli::argument_error("No query type specified.");  
         }
 
-        projects = discoverProjects(projects);
-
-        switch(type)
+        if(listProjects)
         {
-        case Projects:
-            emitProjects(projects);
-            return;
-        case Configs:
-            emitConfigs(projects);
-            return;
-        case None:
-        default:
-            throw cli::argument_error("No query type specified.");  
+            emitProjects(env);
+        }
+        if(listConfigs)
+        {
+            emitConfigs(env);
         };
     }
 
-    void emitProjects(const std::vector<Project*>& projects)
+    void emitProjects(Environment& env)
     {
-        for(auto project : projects)
+        for(auto project : env.collectProjects())
         {
             if(project->type)
             {
@@ -59,10 +47,9 @@ public:
         }
     }
 
-    void emitConfigs(const std::vector<Project*>& projects)
+    void emitConfigs(Environment& env)
     {
-        auto configs = discoverConfigs(projects);
-        for(auto config : configs)
+        for(auto& config : env.collectConfigs())
         {
             std::cout << std::string(config) << "\n";
         }            

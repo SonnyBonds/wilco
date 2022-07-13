@@ -14,6 +14,10 @@ TEST_CASE( "String utils" ) {
     CHECK(str::padRightToSize("test", 10) == "test      ");
     CHECK(str::padLeftToSize("test", 2) == "test");
     CHECK(str::padRightToSize("test", 2) == "test");
+
+    CHECK(str::wrap("abcd efgh ijkl mnop qrst", 12, 5) == "abcd efgh\n     ijkl mnop\n     qrst");
+    //CHECK(str::wrap("abcd efgh ijkl mnop qrst", 9, 5) == "abcd efgh\n     ijkl mnop\n     qrst");
+    //CHECK(str::wrap("abcd efgh ijkl mnop qrst", 10, 5) == "abcd efgh\n     ijkl mnop\n     qrst");
 }
 
 TEST_CASE( "StringId" ) {
@@ -128,7 +132,8 @@ TEST_CASE( "Resolve Config" ) {
     StringId configA = "configA";
     StringId configB = "configB";
 
-    Project baseProject;
+    Environment env;
+    Project& baseProject = env.createProject();
     baseProject[LocalOption] += "None";
     baseProject[configA][LocalOption] += "A";
     baseProject[configB][LocalOption] += "B";
@@ -144,7 +149,7 @@ TEST_CASE( "Resolve Config" ) {
     baseProject[Public / StaticLib][TypeOption] += "Static On Base";
     baseProject[Public / Executable][TypeOption] += "Executable On Base";
 
-    Project noTypeProject;
+    Project& noTypeProject = env.createProject();
     noTypeProject.links += &baseProject;
     noTypeProject[Public / StaticLib][TypeOption] += "Static On None";
     noTypeProject[Public / Executable][TypeOption] += "Executable On None";
@@ -152,18 +157,16 @@ TEST_CASE( "Resolve Config" ) {
     noTypeProject[Public / configA][DuplicateOption] += { "None A 1", "None A 2"};
     noTypeProject[Public / configB][DuplicateOption] += { "None B 1", "None B 2"};
 
-    Project staticLibProject;
+    Project& staticLibProject = env.createProject("", StaticLib);
     staticLibProject.links += &noTypeProject;
-    staticLibProject.type = StaticLib;
     staticLibProject[Public / StaticLib][TypeOption] += "Static On Static";
     staticLibProject[Public / Executable][TypeOption] += "Executable On Static";
     staticLibProject[Public][DuplicateOption] += { "Static 1", "Static 2" };
     staticLibProject[Public / configA][DuplicateOption] += { "Static A 1", "Static A 2"};
     staticLibProject[Public / configB][DuplicateOption] += { "Static B 1", "Static B 2"};
 
-    Project executableProject;
+    Project& executableProject = env.createProject("", Executable);
     executableProject.links += &staticLibProject;
-    executableProject.type = Executable;
     executableProject[Public / StaticLib][TypeOption] += "Static On Executable";
     executableProject[Public / Executable][TypeOption] += "Executable On Executable";
     executableProject[Public][DuplicateOption] += { "Executable 1", "Executable 2" };

@@ -29,17 +29,15 @@ class DirectBuilder : public Emitter
 public:
     static DirectBuilder instance;
 
-    std::optional<StringId> selectedConfig;
+    cli::StringArgument selectedConfig{arguments, "config", "Specify a configuration to build."};
 
     DirectBuilder()
-        : Emitter("direct")
-    {
-        argumentDefinitions += targetPathDefinition;
-        argumentDefinitions += cli::stringArgument("--config", selectedConfig, "Specify a configuration to build.");
-    }
+        : Emitter("build", "Build output binaries.")
+    { }
 
-    virtual void emit(std::vector<Project*> projects) override
+    virtual void emit(Environment& env) override
     {
+#if TODO
         {
             auto [generator, buildOutput] = createGeneratorProject(targetPath);
 
@@ -69,9 +67,10 @@ public:
                 std::exit(EXIT_FAILURE);
             }
         }
+#endif
 
-        projects = discoverProjects(projects);
-        auto configs = discoverConfigs(projects);
+        auto projects = env.collectProjects();
+        auto configs = env.collectConfigs();
 
         if(selectedConfig)
         {
@@ -95,7 +94,7 @@ public:
 
             for(auto project : projects)
             {
-                collectCommands(pendingCommands, targetPath / config.cstr(), *project, config);
+                collectCommands(pendingCommands, *targetPath / config.cstr(), *project, config);
             }
             auto commands = processCommands(pendingCommands);
 

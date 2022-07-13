@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <string>
 #include <stdexcept>
 #include <utility>
 #include <variant>
 
 #include "core/emitter.h"
+#include "core/configurator.h"
 #include "util/string.h"
 
 namespace cli
@@ -21,156 +23,150 @@ struct argument_error : public std::runtime_error
     {}
 };
 
-struct ArgumentDefinition
+struct Argument
 {
-    // Processes the argument argStr and returns true if it was used
-    std::function<bool(std::string_view argStr)> argumentProcessor;
+    virtual bool tryExtractArgument(std::string_view argStr) = 0;
+
     std::string example;
     std::string description;
 };
 
-namespace detail
+struct BoolArgument : public Argument
 {
-    template<typename U>
-    std::optional<std::string> grabValue(const std::optional<U>& value)
+    BoolArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description)
     {
-        if(value)
-        {
-            return std::string(*value);
-        }
-        return {};
+        this->name = std::move(name);
+        this->example = "--" + this->name;
+        this->description = std::move(description);
+
+        argumentList.push_back(this);
     }
 
-    std::optional<std::string> grabValue(const std::filesystem::path& value)
+    bool tryExtractArgument(std::string_view argStr) override
     {
-        return value.string();
-    }
-
-    template<typename U>
-    std::optional<std::string> grabValue(const U& value)
-    {
-        return std::string(value);
-    }
-}
-
-template<typename T>
-ArgumentDefinition stringArgument(std::string trigger, T& value, std::string description)
-{
-    ArgumentDefinition def;
-    def.example = trigger + "=<value>";
-    def.description = description;
-
-    std::optional<std::string> defaultValue = detail::grabValue(value);
-    if(defaultValue)
-    {
-        def.description += " [default: \"" + *defaultValue + "\"]";
-    } 
-
-    def.argumentProcessor = [trigger, &value](std::string_view argStr)
-    {
-        if(argStr.compare(0, trigger.size(), trigger) != 0)
-        {
-            return false;
-        }
-
-        if(argStr.size() <= trigger.size())
-        {
-            throw argument_error("Expected value for option '" + trigger + "'.");
-        }
-        
-        if(argStr[trigger.size()] != '=')
-        {
-            return false;
-        }
-
-        value = argStr.substr(trigger.size()+1);
-        return true;
-    };
-
-    return def;
-}
-
-
-ArgumentDefinition boolArgument(std::string trigger, bool& value, std::string description)
-{
-    ArgumentDefinition def;
-    def.example = trigger;
-    def.description = description;
-
-    def.argumentProcessor = [trigger, &value](std::string_view argStr)
-    {
-        if(argStr == trigger)
+        if(argStr.size() == name.size() + 2 &&
+           argStr.substr(0, 2) == "--" &&
+           argStr.substr(2) == name)
         {
             value = true;
             return true;
         }
+
         return false;
-    };
-
-    return def;
-}
-
-template<typename T>
-ArgumentDefinition selectionArgument(std::vector<std::pair<StringId, T>> possibleValues, T& value, std::string description)
-{
-    ArgumentDefinition def;
-    def.description = description;
-
-    def.example = "{";
-    bool first = true;
-    for(auto& valuePair : possibleValues)
-    {
-        if(!first)
-        {
-            def.example += "|";                        
-        }
-        first = false;
-        def.example += std::string(valuePair.first);
     }
-    def.example += "}";
 
-    def.argumentProcessor = [possibleValues, &value](std::string_view argStr)
-    {
-        StringId argId(argStr);
-        for(auto valuePair : possibleValues)
-        {
-            if(argId == valuePair.first)
-            {
-                value = valuePair.second;
-                return true;
-            }
-        }
-        return false;
-    }; 
+    explicit operator bool() const { return value; }
 
-    return def;
-}
+    std::string name;
+    bool value = false;
+};
 
-void extractArguments(std::vector<std::string>& argumentStrings, const std::vector<ArgumentDefinition>& argumentDefinitions)
+struct StringArgument : public Argument
 {
-    auto it = argumentStrings.begin();
-    while(it != argumentStrings.end())
+    StringArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description, std::optional<std::string> defaultValue = {})
     {
-        auto& argStr = *it;
-        bool found = false;
-        for(auto& def : argumentDefinitions)
+        this->name = std::move(name);
+        this->example = "--" + this->name + "=<value>";
+        this->description = std::move(description);
+        
+        value = std::move(defaultValue);
+        if(value)
         {
-            if(def.argumentProcessor(argStr))
-            {
-                found = true;
-                break;
-            }
+            this->description += " [default:" + std::string(*value) + "]";
         }
-        if(found)
-        {
-            it = argumentStrings.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
+
+        argumentList.push_back(this);
     }
-}
+
+    bool tryExtractArgument(std::string_view argStr) override
+    {
+        if(argStr.size() < name.size() + 2 ||
+           argStr.substr(0, 2) != "--")
+        {
+            return false;
+        }
+        argStr = argStr.substr(2);
+
+        if(argStr.compare(0, name.size(), name) != 0)
+        {
+            return false;
+        }
+
+        if(argStr.size() <= name.size())
+        {
+            throw argument_error("Expected value for option '" + name + "'.");
+        }
+        
+        if(argStr[name.size()] != '=')
+        {
+            return false;
+        }
+
+        value = argStr.substr(name.size()+1);
+        return true;        
+    }
+
+    explicit operator bool() const { return value.has_value(); }
+
+    StringId& operator*() { return *value; }
+
+    std::string name;
+    std::optional<StringId> value;
+};
+
+struct PathArgument : public Argument
+{
+    PathArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description, std::optional<std::filesystem::path> defaultValue = {})
+    {
+        this->name = std::move(name);
+        this->example = "--" + this->name + "=<value>";
+        this->description = std::move(description);
+        
+        value = std::move(defaultValue);
+        if(value)
+        {
+            this->description += " [default:" + value->string() + "]";
+        }
+        
+        argumentList.push_back(this);
+    }
+
+    bool tryExtractArgument(std::string_view argStr) override
+    {
+        if(argStr.size() < name.size() + 2 ||
+           argStr.substr(0, 2) != "--")
+        {
+            return false;
+        }
+        argStr = argStr.substr(2);
+
+        if(argStr.compare(0, name.size(), name) != 0)
+        {
+            return false;
+        }
+
+        if(argStr.size() <= name.size())
+        {
+            throw argument_error("Expected value for option '" + name + "'.");
+        }
+        
+        if(argStr[name.size()] != '=')
+        {
+            return false;
+        }
+
+        value = argStr.substr(name.size()+1);
+        return true;        
+    }
+
+    explicit operator bool() const { return value.has_value(); }
+
+    std::filesystem::path& operator*() { return *value; }
+
+    std::string name;
+    std::optional<std::filesystem::path> value;
+};
+
 
 struct Context
 {
@@ -180,37 +176,45 @@ struct Context
         , allArguments(std::move(arguments))
     {
         unusedArguments = allArguments;
-    }
-
-    void addArgumentDescription(const std::string& argument, const std::string& doc, std::string prefix = "  ")
-    {
-        usage += prefix + str::padRightToSize(argument, 30) + "  " + doc + "\n";
-    }
-
-    void addArgumentDescriptions(const std::vector<ArgumentDefinition>& argumentDefinitions, std::string prefix = "  ")
-    {
-        bool first = true;
-        for(auto& def : argumentDefinitions)
+        if(!unusedArguments.empty() && !str::startsWith(unusedArguments[0], "--"))
         {
-            addArgumentDescription(def.example, def.description, prefix);
-            if(first)
-            {
-                first = false;
-                prefix = std::string(prefix.size(), ' ');
-            }
+            action = unusedArguments[0];
+            unusedArguments.erase(unusedArguments.begin());
         }
     }
 
-    void extractArguments(const std::vector<ArgumentDefinition>& argumentDefinitions)
+    void extractArguments(const std::vector<Argument*>& arguments)
     {
-        cli::extractArguments(unusedArguments, argumentDefinitions);
+        for(auto argument : arguments)
+        {
+            extractArgument(argument);
+        }
+    }
+    
+    bool extractArgument(Argument* argument)
+    {
+        auto it = unusedArguments.begin();
+        while(it != unusedArguments.end())
+        {
+            auto& argStr = *it;
+            bool found = false;
+            if(argument->tryExtractArgument(argStr))
+            {
+                found = true;
+                unusedArguments.erase(it);
+                return true;
+            }
+            ++it;
+        }
+
+        return false;
     }
 
     const std::filesystem::path startPath;
     const std::string invocation;
     const std::vector<std::string> allArguments;
     std::vector<std::string> unusedArguments;
-    std::string usage;
+    StringId action;
 };
 
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/environment.h"
 #include "core/option.h"
 #include "core/project.h"
 #include "core/stringid.h"

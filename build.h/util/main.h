@@ -3,68 +3,46 @@
 #include <filesystem>
 
 #include "core/emitter.h"
+#include "core/configurator.h"
 #include "util/cli.h"
 
-Emitter* processCommandLine(cli::Context& cliContext, std::vector<cli::ArgumentDefinition> generatorArguments = {})
+
+void printUsage(cli::Context& cliContext)
 {
-    auto& availableEmitters = Emitters::list();
-    if(availableEmitters.empty())
+    std::cout << "Usage: " + cliContext.invocation + " [action] [options]\n\n";
+
+    std::cout << "\nAvailable actions:\n";
+    for(auto emitter : Emitters::list())
     {
-        throw std::runtime_error("No emitters available.");
-    }
-
-    cliContext.usage += "Usage: " + cliContext.invocation + " [options to generator] <emitter> [options to emitter] \n";
-    cliContext.usage += "\nThese are the available emitters and their options:\n";
-    for(auto emitter : availableEmitters)
-    {
-        emitter->populateCliUsage(cliContext);
-    }
-
-    cliContext.usage += "Generator options:\n";
-    cliContext.addArgumentDescriptions(generatorArguments);
-    cliContext.usage += "\n";
-
-    cliContext.extractArguments(generatorArguments);
-
-    Emitter* selectedEmitter = nullptr;
-    {
-        auto it = cliContext.unusedArguments.begin();
-        while(it != cliContext.unusedArguments.end())
+        std::cout << "\n" << emitter->name << ": " << emitter->description << "\n";
+        for(auto argument : emitter->arguments)
         {
-            StringId argumentId = *it;
-            for(auto emitter : availableEmitters)
-            {
-                if(argumentId == emitter->name)
-                {
-                    selectedEmitter = emitter;
-                    cliContext.unusedArguments.erase(it);
-                    break;
-                }
-            }
-            if(selectedEmitter)
-            {
-                break;
-            }
-            ++it;
-        }
-
-        if(selectedEmitter == nullptr)
-        {
-            throw cli::argument_error("No emitters specified.");
+            std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
         }
     }
-    
-    selectedEmitter->initFromCli(cliContext);
+    std::cout << "\n";
 
-    if(!cliContext.unusedArguments.empty())
+    bool first = true;
+    for(auto configurator : Configurators::list())
     {
-        throw cli::argument_error("Unknown argument \"" + cliContext.unusedArguments.front() + "\"");
+        for(auto argument : configurator->arguments)
+        {
+            if(first)
+            {
+                std::cout << "Configuration options:\n";
+                first = false;
+            }
+            std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
+        }
     }
-    return selectedEmitter;
+    if(!first)
+    {
+        std::cout << "\n";
+    }
 }
 
 #ifndef CUSTOM_BUILD_H_MAIN
-void generate(cli::Context& cliContext);
+
 int main(int argc, const char** argv)
 {
     cli::Context cliContext(
@@ -74,12 +52,54 @@ int main(int argc, const char** argv)
 
     try
     {
+        auto& availableEmitters = Emitters::list();        
+
+        if(cliContext.action.empty())
+        {
+            throw cli::argument_error("No action specified.");
+        }
+
+        Emitter* chosenEmitter = nullptr;
+        for(auto emitter : availableEmitters)
+        {
+            if(emitter->name == cliContext.action)
+            {
+                chosenEmitter = emitter;
+                break;
+            }
+        }
+
+        if(!chosenEmitter)
+        {
+            throw cli::argument_error("Unknown action \"" + std::string(cliContext.action) + "\"");
+        }
+
+        for(auto configurator : Configurators::list())
+        {
+            for(auto argument : configurator->arguments)
+            {
+                cliContext.extractArgument(argument);
+            }
+        }
+
+        for(auto argument : chosenEmitter->arguments)
+        {
+            cliContext.extractArgument(argument);
+        }
+
         std::filesystem::current_path(BUILD_DIR);
-        generate(cliContext);
+
+        Environment env;
+        for(auto configurator : Configurators::list())
+        {
+            configurator->configure(env);
+        }
+
+        chosenEmitter->emit(env);
     }
     catch(const cli::argument_error& e)
     {
-        std::cout << cliContext.usage;
+        printUsage(cliContext);
         std::cerr << "ERROR: " << e.what() << '\n';
         return -1;
     }

@@ -22,20 +22,19 @@ public:
     static NinjaEmitter instance;
 
     NinjaEmitter()
-        : Emitter("ninja")
+        : Emitter("ninja", "Generate ninja build files.")
     {
-        argumentDefinitions += targetPathDefinition;
     }
 
-    virtual void emit(std::vector<Project*> projects) override
+    virtual void emit(Environment& env) override
     {
-        projects = discoverProjects(projects);
+        auto projects = env.collectProjects();
 
         std::vector<std::filesystem::path> outputs;
-        auto configs = discoverConfigs(projects);
+        auto configs = env.collectConfigs();
         for(auto& config : configs)
         {
-            std::filesystem::path configTargetPath = targetPath;
+            std::filesystem::path configTargetPath = *targetPath;
             if(!config.empty())
             {
                 configTargetPath = configTargetPath / config.cstr();
@@ -64,6 +63,7 @@ public:
                 }
             }
 
+#if TODO
             auto [generator, buildOutput] = createGeneratorProject(targetPath);
             outputs += "build.ninja";
             generatorDependencies += buildOutput;
@@ -75,9 +75,9 @@ public:
             }
             
             generator[Commands] += { str::quote((BUILD_DIR / buildOutput).string()) + argumentString, generatorDependencies, outputs, START_DIR, {}, "Running build generator." };
-        
             auto outputName = emitProject(configTargetPath, generator, "", true);
             ninja.subninja(outputName);        
+#endif
         }
     }
 

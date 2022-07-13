@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -115,19 +116,21 @@ ConfigSelector operator/(Transitivity transitivity, ProjectType type)
 
 struct Project
 {
-    std::string name;
-    std::optional<ProjectType> type;
+    const std::string name;
+    const std::optional<ProjectType> type;
+
     std::map<ConfigSelector, OptionCollection, std::less<>> configs;
     std::vector<Project*> links;
 
-    static Project defaults;
+    Project(std::string name, std::optional<ProjectType> type)
+        : name(std::move(name))
+        , type(type)
+    { }
 
-    Project(std::string name = {}, std::optional<ProjectType> type = {})
-        : name(std::move(name)), type(type)
-    {
-    }
+    Project(const Project& other) = delete;
 
-    Project(Project&&) = default;
+    ~Project()
+    { }
 
     OptionCollection resolve(StringId configName, OperatingSystem targetOS)
     {
@@ -174,19 +177,9 @@ private:
     {
         OptionCollection result;
 
-        if(links.empty())
+        for(auto& link : links)
         {
-            if(this != &defaults)
-            {
-                result.combine(defaults.internalResolve(projectType, configName, targetOS, false));
-            }
-        }
-        else
-        {
-            for(auto& link : links)
-            {
-                result.combine(link->internalResolve(projectType, configName, targetOS, false));
-            }
+            result.combine(link->internalResolve(projectType, configName, targetOS, false));
         }
 
         for(auto& entry : configs)
@@ -209,19 +202,3 @@ private:
         return result;
     }
 };
-
-Project Project::defaults = [](){
-    Project defaults;
-
-    defaults[Public][OutputDir] = "bin";
-    defaults[Public / Linux / Executable][OutputExtension] = "";
-    defaults[Public / Linux / StaticLib][OutputExtension] = ".a";
-    defaults[Public / Linux / SharedLib][OutputExtension] = ".so";
-    defaults[Public / MacOS / Executable][OutputExtension] = "";
-    defaults[Public / MacOS / StaticLib][OutputExtension] = ".a";
-    defaults[Public / MacOS / SharedLib][OutputExtension] = ".so";
-    defaults[Public / Windows / Executable][OutputExtension] = ".exe";
-    defaults[Public / Windows / StaticLib][OutputExtension] = ".lib";
-    defaults[Public / Windows / SharedLib][OutputExtension] = ".dll";
-    return defaults;
-}();

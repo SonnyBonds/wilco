@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "core/stringid.h"
+#include "core/environment.h"
 #include "core/emitter.h"
 #include "core/project.h"
 #include "core/stringid.h"
@@ -28,28 +29,28 @@ public:
     static CompileCommands instance;
 
     CompileCommands()
-        : Emitter("compilecommands")
-    {
-        argumentDefinitions += targetPathDefinition;
-    }
+        : Emitter("compilecommands", "Generate a compilecommands.json file.")
+    { }
 
-    virtual void emit(std::vector<Project*> projects) override
+    virtual void emit(Environment& env) override
     {
-        std::filesystem::create_directories(targetPath);
-        std::ofstream stream(targetPath / "compile_commands.json");
+        std::filesystem::create_directories(*targetPath.value);
+        std::ofstream stream(*targetPath.value / "compile_commands.json");
         
         stream << "[\n";
 
+#if TODO
         auto [generator, buildOutput] = createGeneratorProject(targetPath);
         emitCommands(stream, targetPath, generator, "", true);
+#endif
 
-        projects = discoverProjects(projects);
-        auto configs = discoverConfigs(projects);
+        auto projects = env.collectProjects();
+        auto configs = env.collectConfigs();
         for(auto config : configs)
         {
             for(auto project : projects)
             {
-                emitCommands(stream, targetPath, *project, config, false);
+                emitCommands(stream, *targetPath.value, *project, config, false);
             }
         }
         
