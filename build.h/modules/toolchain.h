@@ -30,6 +30,9 @@ private:
     }
 };
 
+struct Project;
+struct ProjectSettings;
+
 struct ToolchainProvider
 {
     StringId name;
@@ -39,7 +42,5 @@ struct ToolchainProvider
         Toolchains::install(this);
     }
 
-    virtual std::vector<std::filesystem::path> process(Project& project, OptionCollection& resolvedOptions, StringId config, const std::filesystem::path& workingDir) const = 0;
+    virtual std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const = 0;
 };
-
-Option<ToolchainProvider*> Toolchain{"Toolchain"};

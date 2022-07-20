@@ -14,7 +14,6 @@
 #include "modules/postprocess.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
-#include "util/operators.h"
 
 class NinjaEmitter : public Emitter
 {
@@ -59,7 +58,9 @@ public:
             {
                 for(auto& entry : project->configs)
                 {
-                    generatorDependencies += entry.second[GeneratorDependencies];
+#if TODO
+                    generatorDependencies += entry.second.generatorDependencies;
+#endif
                 }
             }
 
@@ -85,8 +86,9 @@ private:
     static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config, bool generator)
     {
         auto resolved = project.resolve(config, OperatingSystem::current());
-        resolved[DataDir] = root;
+        resolved.dataDir = root;
 
+#if TODO
         {
             // Avoiding range-based for loop here since it breaks
             // if a post processor adds more post processors. 
@@ -96,6 +98,7 @@ private:
                 postProcessors[i](project, resolved);
             }
         }
+#endif
 
         if(!project.type.has_value())
         {
@@ -119,15 +122,15 @@ private:
 
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
-        auto& commands = resolved[Commands];
-        if(project.type == Command && commands.empty())
+        auto& commands = resolved.commands;
+        if(project.type == Command && commands.value().empty())
         {
             throw std::runtime_error("Command project '" + project.name + "' has no commands.");
         }
 
         std::vector<std::string> projectOutputs;
 
-        const ToolchainProvider* toolchain = resolved[Toolchain];
+        const ToolchainProvider* toolchain = resolved.toolchain;
         if(!toolchain)
         {
             toolchain = defaultToolchain;
@@ -181,7 +184,7 @@ private:
                 }
             }
 
-            projectOutputs += outputStrs;
+            projectOutputs.insert(projectOutputs.end(), outputStrs.begin(), outputStrs.end());
 
             std::string depfileStr;
             if(!command.depFile.empty())

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <optional>
@@ -10,117 +11,102 @@
 #include "core/option.h"
 #include "core/os.h"
 #include "core/stringid.h"
-#include "modules/standardoptions.h"
-#include "util/operators.h"
+#include "modules/command.h"
+#include "modules/feature.h"
+#include "modules/toolchain.h"
+#include "modules/sourcefile.h"
 
-enum ProjectType
+struct Extension;
+struct Project;
+
+struct ProjectSettings : public PropertyBag
 {
-    Executable,
-    StaticLib,
-    SharedLib,
-    Command
-};
+    ListProperty<Project*> links{this};
+    ListProperty<CommandEntry> commands{this};
+    Property<StringId> platform{this};
+    ListProperty<std::filesystem::path> includePaths{this};
+    ListProperty<std::filesystem::path> libPaths{this};
+    ListProperty<SourceFile> files{this};
+    ListProperty<std::filesystem::path> generatorDependencies{this};
+    ListProperty<std::filesystem::path> libs{this};
+    ListProperty<std::string> defines{this};
+    ListProperty<Feature> features{this};
+    ListProperty<std::string> frameworks{this};
+    Property<std::filesystem::path> buildPch{this};
+    Property<std::filesystem::path> importPch{this};
+    Property<std::filesystem::path> dataDir{this};
+    Property<const ToolchainProvider*> toolchain{this};
 
-enum Transitivity
-{
-    Local,
-    Public,
-    PublicOnly
-};
-
-struct ConfigSelector
-{
-    ConfigSelector() {}
-    ConfigSelector(StringId name)
-        : name(name)
-    {}
-
-    ConfigSelector(const char* name)
-        : name(name)
-    {}
-
-    ConfigSelector(std::string name)
-        : name(std::move(name))
-    {}
-
-    ConfigSelector(Transitivity transitivity)
-        : transitivity(transitivity)
-    {}
-
-    ConfigSelector(ProjectType projectType)
-        : projectType(projectType)
-    {}
-
-    ConfigSelector(OperatingSystem targetOS)
-        : targetOS(targetOS)
-    {}
-
-    std::optional<Transitivity> transitivity;
-    std::optional<StringId> name;
-    std::optional<ProjectType> projectType;
-    std::optional<OperatingSystem> targetOS;
-
-    bool operator <(const ConfigSelector& other) const
+    struct Output : public PropertyGroup
     {
-        if(transitivity != other.transitivity) return transitivity < other.transitivity;
-        if(projectType != other.projectType) return projectType < other.projectType;
-        if(name != other.name) return name < other.name;
-        if(targetOS != other.targetOS) return targetOS < other.targetOS;
+        Property<std::filesystem::path> path{this};
+        Property<std::filesystem::path> dir{this};
+        Property<std::string> stem{this};
+        Property<std::string> extension{this};
+        Property<std::string> prefix{this};
+        Property<std::string> suffix{this};
+    } output{this};
 
-        return false;
+    template<typename ExtensionType>
+    ExtensionType& ext()
+    {
+        // TODO: Better key, maybe? hash_code doesn't have to be unique.
+        auto key = typeid(ExtensionType).hash_code();
+
+        auto it = _extensions.find(key);
+        if(it != _extensions.end())
+        {
+            return static_cast<ExtensionType&>(it->second->get());
+        }
+        ExtensionEntry* extensionEntry = new ExtensionEntryImpl<ExtensionType>();
+        _extensions.insert({key, std::unique_ptr<ExtensionEntry>(extensionEntry)});
+        return static_cast<ExtensionType&>(extensionEntry->get());
     }
+
+private:
+    struct ExtensionEntry
+    {
+        virtual ~ExtensionEntry() = default;
+        virtual Extension& get() = 0;
+        virtual std::unique_ptr<ExtensionEntry> clone() = 0;
+    };
+
+    template<typename ExtensionType>
+    struct ExtensionEntryImpl : public ExtensionEntry
+    {
+        virtual Extension& get() override
+        {
+            return extension;
+        }
+
+        virtual std::unique_ptr<ExtensionEntry> clone() override
+        {
+            auto newExtension = new ExtensionEntryImpl<ExtensionType>();
+            for(size_t i=0; i<extension.properties.size(); ++i)
+            {
+                newExtension->extension.properties[i]->applyOverlay(*extension.properties[i]);
+            }
+            return std::unique_ptr<ExtensionEntry>(newExtension);
+        }
+
+        ExtensionType extension;
+    };
+    
+    std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
+
+    friend class Project;
 };
 
-ConfigSelector operator/(ConfigSelector a, Transitivity b)
-{
-    if(a.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
-    a.transitivity = b;
+struct Extension : public PropertyBag
+{ };
 
-    return a;
-}
 
-ConfigSelector operator/(ConfigSelector a, ProjectType b)
-{
-    if(a.projectType) throw std::invalid_argument("Project type was specified twice.");
-    a.projectType = b;
-
-    return a;
-}
-
-ConfigSelector operator/(ConfigSelector a, StringId b)
-{
-    if(a.name) throw std::invalid_argument("Configuration name was specified twice.");
-    a.name = b;
-
-    return a;
-}
-
-ConfigSelector operator/(ConfigSelector a, OperatingSystem b)
-{
-    if(a.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
-    a.targetOS = b;
-
-    return a;
-}
-
-// Need explicit operators for enums since regular int / is a valid overload otherwise
-ConfigSelector operator/(ProjectType type, Transitivity transitivity)
-{
-    return ConfigSelector(type) / transitivity;
-}
-
-ConfigSelector operator/(Transitivity transitivity, ProjectType type)
-{
-    return ConfigSelector(type) / transitivity;
-}
-
-struct Project
+struct Project : public ProjectSettings
 {
     const std::string name;
     const std::optional<ProjectType> type;
 
-    std::map<ConfigSelector, OptionCollection, std::less<>> configs;
-    std::vector<Project*> links;
+    std::map<ConfigSelector, ProjectSettings> configs;
 
     Project(std::string name, std::optional<ProjectType> type)
         : name(std::move(name))
@@ -132,54 +118,46 @@ struct Project
     ~Project()
     { }
 
-    OptionCollection resolve(StringId configName, OperatingSystem targetOS)
+    ProjectSettings resolve(StringId configName, OperatingSystem targetOS)
     {
-        auto options = internalResolve(type, configName, targetOS, true);
-        options.deduplicate();
-        return options;
+        ProjectSettings result;
+        internalResolve(result, type, configName, targetOS, true);
+        return result;
     }
 
-    OptionCollection& operator[](ConfigSelector selector)
+    template<typename... Selectors>
+    ProjectSettings& operator()(ConfigSelector selector, Selectors... selectors)
     {
-        return configs[selector];
+        return configs[(selector + ... + ConfigSelector(selectors))];
     }
 
-    template<typename T>
-    T& operator[](Option<T> option)
+    std::filesystem::path calcOutputPath(ProjectSettings& resolvedSettings)
     {
-        return configs[{}][option];
-    }
-
-    void operator +=(const OptionCollection& collection)
-    {
-        configs[{}] += collection;
-    }
-
-    std::filesystem::path calcOutputPath(OptionCollection& resolvedOptions)
-    {
-        auto path = resolvedOptions[OutputPath];
-        if(!path.empty())
+        if(!resolvedSettings.output.path.value().empty())
         {
-            return path;
+            return resolvedSettings.output.path;
         }
 
-        auto stem = resolvedOptions[OutputStem];
+        std::string stem = resolvedSettings.output.stem;
         if(stem.empty())
         {
             stem = name;
         }
 
-        return resolvedOptions[OutputDir] / (resolvedOptions[OutputPrefix] + stem + resolvedOptions[OutputSuffix] + resolvedOptions[OutputExtension]);
+        return resolvedSettings.output.dir.value() / (resolvedSettings.output.prefix.value() + stem + resolvedSettings.output.suffix.value() + resolvedSettings.output.extension.value());
     }
 
 private:
-    OptionCollection internalResolve(std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
+    void internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
     {
-        OptionCollection result;
-
         for(auto& link : links)
         {
-            result.combine(link->internalResolve(projectType, configName, targetOS, false));
+            link->internalResolve(result, projectType, configName, targetOS, false);
+        }
+
+        if(local)
+        {
+            applyOverlay(result, *this);
         }
 
         for(auto& entry : configs)
@@ -196,9 +174,36 @@ private:
             if(entry.first.name && entry.first.name != configName) continue;
             if(entry.first.targetOS && entry.first.targetOS != targetOS) continue;
 
-            result.combine(entry.second);
+            applyOverlay(result, entry.second);
         }
+    }
+    
+    void applyOverlay(ProjectSettings& base, const ProjectSettings& overlay)
+    {
+        auto apply = [](PropertyBag& base, const PropertyBag& overlay)
+        {
+            // This whole thing doesn't have enforced safety,
+            // it just assumes caller knows what it's doing
+            assert(base.properties.size() == overlay.properties.size());
+            for(size_t i=0; i<base.properties.size(); ++i)
+            {
+                base.properties[i]->applyOverlay(*overlay.properties[i]);
+            }
+        };
 
-        return result;
+        apply(base, overlay);
+
+        for(auto& extension : overlay._extensions)
+        {
+            auto it = base._extensions.find(extension.first);
+            if(it != base._extensions.end())
+            {
+                apply(it->second->get(), extension.second->get());
+            }
+            else
+            {
+                base._extensions.insert({extension.first, extension.second->clone()});
+            }
+        }
     }
 };

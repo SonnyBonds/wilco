@@ -3,7 +3,6 @@
 #include <filesystem>
 
 #include "core/emitter.h"
-#include "core/configurator.h"
 #include "util/cli.h"
 
 
@@ -23,18 +22,16 @@ void printUsage(cli::Context& cliContext)
     std::cout << "\n";
 
     bool first = true;
-    for(auto configurator : Configurators::list())
+    for(auto argument : cli::Argument::globalList())
     {
-        for(auto argument : configurator->arguments)
+        if(first)
         {
-            if(first)
-            {
-                std::cout << "Configuration options:\n";
-                first = false;
-            }
-            std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
+            std::cout << "Configuration options:\n";
+            first = false;
         }
+        std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
     }
+
     if(!first)
     {
         std::cout << "\n";
@@ -43,13 +40,13 @@ void printUsage(cli::Context& cliContext)
 
 #ifndef CUSTOM_BUILD_H_MAIN
 
+void configure(Environment& env);
 int main(int argc, const char** argv)
 {
     cli::Context cliContext(
-        std::filesystem::proximate(std::filesystem::current_path(), BUILD_DIR), 
+        std::filesystem::current_path(),
         argc > 0 ? argv[0] : "", 
         std::vector<std::string>(argv+std::min(1, argc), argv+argc));
-
     try
     {
         auto& availableEmitters = Emitters::list();        
@@ -74,12 +71,9 @@ int main(int argc, const char** argv)
             throw cli::argument_error("Unknown action \"" + std::string(cliContext.action) + "\"");
         }
 
-        for(auto configurator : Configurators::list())
+        for(auto argument : cli::Argument::globalList())
         {
-            for(auto argument : configurator->arguments)
-            {
-                cliContext.extractArgument(argument);
-            }
+            cliContext.extractArgument(argument);
         }
 
         for(auto argument : chosenEmitter->arguments)
@@ -87,12 +81,13 @@ int main(int argc, const char** argv)
             cliContext.extractArgument(argument);
         }
 
-        std::filesystem::current_path(BUILD_DIR);
-
         Environment env;
-        for(auto configurator : Configurators::list())
+        std::filesystem::current_path(env.configurationFile.parent_path());
+        configure(env);
+
+        for(auto& argument : cliContext.unusedArguments)
         {
-            configurator->configure(env);
+            throw cli::argument_error("WARNING: Unknown argument \"" + argument + "\" was ignored.");
         }
 
         chosenEmitter->emit(env);

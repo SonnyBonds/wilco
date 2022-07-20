@@ -45,4 +45,3 @@ struct std::hash<CommandEntry>
     }
 };
 
-Option<std::vector<CommandEntry>> Commands{"Commands"};

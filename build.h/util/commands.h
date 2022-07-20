@@ -25,8 +25,8 @@ CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDes
         }        
 
         result.command += " && " + command.command;
-        result.inputs += command.inputs;
-        result.outputs += command.outputs;
+        result.inputs.insert(result.inputs.end(), command.inputs.begin(), command.inputs.end());
+        result.outputs.insert(result.outputs.end(), command.outputs.begin(), command.outputs.end());
 
         if(newDescription.empty())
         {

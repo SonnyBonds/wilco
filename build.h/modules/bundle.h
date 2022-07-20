@@ -51,9 +51,13 @@ struct VerbatimPlistValue
 
 using PlistValue = std::variant<std::string, bool, int, VerbatimPlistValue>;
 
-Option<std::vector<BundleEntry>> BundleContents{"BundleContents"};
-Option<std::map<std::string, PlistValue>> PlistEntries{"PlistEntries"}; 
+struct bundle
+{
+    Property<std::vector<BundleEntry>> contents;
+    Property<std::map<std::string, PlistValue>> plistEntries; 
+};
 
+#if 0
 std::string generatePlist(Project& project, OptionCollection& resolvedOptions)
 {
     std::string result;
@@ -142,3 +146,5 @@ OptionCollection bundle(std::optional<std::string> bundleExtension = {})
 
     return result;
 }
+
+#endif

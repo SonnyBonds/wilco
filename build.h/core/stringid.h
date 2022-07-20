@@ -29,6 +29,11 @@ struct StringId
         return _cstr;
     }
 
+    operator std::string_view() const
+    {
+        return _cstr;
+    }
+
     static size_t getStorageSize()
     {
         return getStorage().size();

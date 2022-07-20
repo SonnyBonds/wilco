@@ -119,121 +119,124 @@ struct std::hash<CompareEqualString>
 };
 
 TEST_CASE( "Resolve Config" ) {
-    
     using strvec = std::vector<std::string>;
     using streqvec = std::vector<CompareEqualString>;
 
-    Option<strvec> LocalOption{"LocalOption"};
-    Option<strvec> PublicOption{"PublicOption"};
-    Option<strvec> PublicOnlyOption{"PublicOnlyOption"};
-    Option<strvec> StaticLibOption{"StaticLibOption"};
-    Option<strvec> TypeOption{"TypeOption"};
-    Option<streqvec> DuplicateOption{"DuplicateOption"};
+    struct TestExt : public Extension
+    {
+        ListProperty<std::string> localOption{this};
+        ListProperty<std::string> publicOption{this};
+        ListProperty<std::string> publicOnlyOption{this};
+        ListProperty<std::string> staticLibOption{this};
+        ListProperty<std::string> typeOption{this};
+        ListProperty<CompareEqualString> duplicateOption{this};
+    };
+
     StringId configA = "configA";
     StringId configB = "configB";
 
     Environment env;
     Project& baseProject = env.createProject();
-    baseProject[LocalOption] += "None";
-    baseProject[configA][LocalOption] += "A";
-    baseProject[configB][LocalOption] += "B";
-    baseProject[Public][DuplicateOption] += { "Base 1", "Base 2" };
-    baseProject[Public / configA][DuplicateOption] += { "Base A 1", "Base A 2"};
-    baseProject[Public / configB][DuplicateOption] += { "Base B 1", "Base B 2"};
-    baseProject[Public][PublicOption] += "P None";
-    baseProject[Public / configA][PublicOption] += "P A";
-    baseProject[Public / configB][PublicOption] += "P B";
-    baseProject[PublicOnly][PublicOnlyOption] += "PO None";
-    baseProject[PublicOnly / configA][PublicOnlyOption] += "PO A";
-    baseProject[PublicOnly / configB][PublicOnlyOption] += "PO B";
-    baseProject[Public / StaticLib][TypeOption] += "Static On Base";
-    baseProject[Public / Executable][TypeOption] += "Executable On Base";
+    baseProject.ext<TestExt>().localOption += "None";
+    baseProject(configA).ext<TestExt>().localOption += "A";
+    baseProject(configB).ext<TestExt>().localOption += "B";
+    baseProject(Public).ext<TestExt>().duplicateOption += { "Base 1", "Base 2" };
+    baseProject(Public, configA).ext<TestExt>().duplicateOption += { "Base A 1", "Base A 2"};
+    baseProject(Public, configB).ext<TestExt>().duplicateOption += { "Base B 1", "Base B 2"};
+    baseProject(Public).ext<TestExt>().publicOption += "P None";
+    baseProject(Public, configA).ext<TestExt>().publicOption += "P A";
+    baseProject(Public, configB).ext<TestExt>().publicOption += "P B";
+    baseProject(PublicOnly).ext<TestExt>().publicOnlyOption += "PO None";
+    baseProject(PublicOnly, configA).ext<TestExt>().publicOnlyOption += "PO A";
+    baseProject(PublicOnly, configB).ext<TestExt>().publicOnlyOption += "PO B";
+    baseProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On Base";
+    baseProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Base";
 
     Project& noTypeProject = env.createProject();
-    noTypeProject.links += &baseProject;
-    noTypeProject[Public / StaticLib][TypeOption] += "Static On None";
-    noTypeProject[Public / Executable][TypeOption] += "Executable On None";
-    noTypeProject[Public][DuplicateOption] += { "None 1", "None 2" };
-    noTypeProject[Public / configA][DuplicateOption] += { "None A 1", "None A 2"};
-    noTypeProject[Public / configB][DuplicateOption] += { "None B 1", "None B 2"};
+    noTypeProject.links.push_back(&baseProject);
+    noTypeProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On None";
+    noTypeProject(Public, Executable).ext<TestExt>().typeOption += "Executable On None";
+    noTypeProject(Public).ext<TestExt>().duplicateOption += { "None 1", "None 2" };
+    noTypeProject(Public, configA).ext<TestExt>().duplicateOption += { "None A 1", "None A 2"};
+    noTypeProject(Public, configB).ext<TestExt>().duplicateOption += { "None B 1", "None B 2"};
 
     Project& staticLibProject = env.createProject("", StaticLib);
-    staticLibProject.links += &noTypeProject;
-    staticLibProject[Public / StaticLib][TypeOption] += "Static On Static";
-    staticLibProject[Public / Executable][TypeOption] += "Executable On Static";
-    staticLibProject[Public][DuplicateOption] += { "Static 1", "Static 2" };
-    staticLibProject[Public / configA][DuplicateOption] += { "Static A 1", "Static A 2"};
-    staticLibProject[Public / configB][DuplicateOption] += { "Static B 1", "Static B 2"};
+    staticLibProject.links.push_back(&noTypeProject);
+    staticLibProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On Static";
+    staticLibProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Static";
+    staticLibProject(Public).ext<TestExt>().duplicateOption += { "Static 1", "Static 2" };
+    staticLibProject(Public, configA).ext<TestExt>().duplicateOption += { "Static A 1", "Static A 2"};
+    staticLibProject(Public, configB).ext<TestExt>().duplicateOption += { "Static B 1", "Static B 2"};
 
     Project& executableProject = env.createProject("", Executable);
-    executableProject.links += &staticLibProject;
-    executableProject[Public / StaticLib][TypeOption] += "Static On Executable";
-    executableProject[Public / Executable][TypeOption] += "Executable On Executable";
-    executableProject[Public][DuplicateOption] += { "Executable 1", "Executable 2" };
-    executableProject[Public / configA][DuplicateOption] += { "Executable A 1", "Executable A 2"};
-    executableProject[Public / configB][DuplicateOption] += { "Executable B 1", "Executable B 2"};
+    executableProject.links.push_back(&staticLibProject);
+    executableProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On Executable";
+    executableProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Executable";
+    executableProject(Public).ext<TestExt>().duplicateOption += { "Executable 1", "Executable 2" };
+    executableProject(Public, configA).ext<TestExt>().duplicateOption += { "Executable A 1", "Executable A 2"};
+    executableProject(Public, configB).ext<TestExt>().duplicateOption += { "Executable B 1", "Executable B 2"};
 
     SECTION("base no config") {
         auto resolved = baseProject.resolve("", OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{"None"});
-        REQUIRE(resolved[PublicOption] == strvec{"P None"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{});
-        REQUIRE(resolved[TypeOption] == strvec{});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{"None"});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().typeOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("base config A") {
         auto resolved = baseProject.resolve(configA, OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{"None", "A"});
-        REQUIRE(resolved[PublicOption] == strvec{"P None", "P A"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{"None", "A"});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None", "P A"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("base config B") {
         auto resolved = baseProject.resolve(configB, OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{"None", "B"});
-        REQUIRE(resolved[PublicOption] == strvec{"P None", "P B"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{"None", "B"});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None", "P B"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("no type no config") {
         auto resolved = noTypeProject.resolve("", OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{});
-        REQUIRE(resolved[PublicOption] == strvec{"P None"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None"});
-        REQUIRE(resolved[TypeOption] == strvec{});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{"PO None"});
+        CHECK(resolved.ext<TestExt>().typeOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("no type config A") {
         auto resolved = noTypeProject.resolve(configA, OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{});
-        REQUIRE(resolved[PublicOption] == strvec{"P None", "P A"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None", "PO A"});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None", "P A"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{"PO None", "PO A"});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("no type config B") {
         auto resolved = noTypeProject.resolve(configB, OperatingSystem::current());
-        REQUIRE(resolved[LocalOption] == strvec{});
-        REQUIRE(resolved[PublicOption] == strvec{"P None", "P B"});
-        REQUIRE(resolved[PublicOnlyOption] == strvec{"PO None", "PO B"});
-        REQUIRE(resolved[TypeOption] == strvec{});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().localOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().publicOption.value() == strvec{"P None", "P B"});
+        CHECK(resolved.ext<TestExt>().publicOnlyOption.value() == strvec{"PO None", "PO B"});
+        CHECK(resolved.ext<TestExt>().typeOption.value() == strvec{});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("staticlib no config") {
         auto resolved = staticLibProject.resolve("", OperatingSystem::current());
-        REQUIRE(resolved[TypeOption] == strvec{"Static On Base", "Static On None", "Static On Static"});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().typeOption.value() == strvec{"Static On Base", "Static On None", "Static On Static"});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 
     SECTION("executable no config") {
         auto resolved = executableProject.resolve("", OperatingSystem::current());
-        REQUIRE(resolved[TypeOption] == strvec{"Executable On Base", "Executable On None", "Executable On Static", "Executable On Executable"});
-        REQUIRE(resolved[DuplicateOption] == streqvec{ "Single" });
+        CHECK(resolved.ext<TestExt>().typeOption.value() == strvec{"Executable On Base", "Executable On None", "Executable On Static", "Executable On Executable"});
+        CHECK(resolved.ext<TestExt>().duplicateOption.value() == streqvec{ "Single" });
     }
 }
 

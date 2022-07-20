@@ -28,18 +28,18 @@ struct ClToolchainProvider : public ToolchainProvider
     {
     }
 
-    virtual std::string getCompiler(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset, Language language) const 
+    virtual std::string getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const 
     {
         return compiler;
     }
 
-    virtual std::string getCommonCompilerFlags(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset, Language language) const
+    virtual std::string getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const
     {
         std::string flags;
 
         flags += " /nologo";
 
-        for(auto& define : resolvedOptions[Defines])
+        for(auto& define : resolvedSettings.defines)
         {
             flags += " /D\"" + define + "\"";
         }
@@ -47,7 +47,7 @@ struct ClToolchainProvider : public ToolchainProvider
         {
             flags += " /I\"" + path.string() + "\"";
         }
-        for(auto& path : resolvedOptions[IncludePaths])
+        for(auto& path : resolvedSettings.includePaths)
         {
             flags += " /I\"" + (pathOffset / path).string() + "\"";
         }
@@ -65,7 +65,7 @@ struct ClToolchainProvider : public ToolchainProvider
             { feature::FastMath, " /fp:fast"},
             { feature::Exceptions, " /EHsc"},
         };
-        for(auto& feature : resolvedOptions[Features])
+        for(auto& feature : resolvedSettings.features)
         {
             auto it = featureMap.find(feature);
             if(it != featureMap.end())
@@ -77,12 +77,12 @@ struct ClToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    virtual std::string getCompilerFlags(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
+    virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
     {
         return " /sourceDependencies \"" + output + ".d\" /c /Fd:\"" + output + "\".pdb /Fo:\"" + output + "\" " + str::quote(input);
     }
 
-    virtual std::string getLinker(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset) const
+    virtual std::string getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
     {
         if(project.type == StaticLib)
         {
@@ -94,7 +94,7 @@ struct ClToolchainProvider : public ToolchainProvider
         }
     }
 
-    virtual std::string getCommonLinkerFlags(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset) const
+    virtual std::string getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
     {
         std::string flags;
 
@@ -113,7 +113,7 @@ struct ClToolchainProvider : public ToolchainProvider
             {
                 flags += " /LIBPATH:\"" + path.string() + "\"";
             }
-            for(auto& path : resolvedOptions[Libs])
+            for(auto& path : resolvedSettings.libs)
             {
                 flags += " " + (pathOffset / path).string();
             }
@@ -121,7 +121,7 @@ struct ClToolchainProvider : public ToolchainProvider
             std::map<Feature, std::string> featureMap = {
                 { feature::DebugSymbols, " /DEBUG"},
             };
-            for(auto& feature : resolvedOptions[Features])
+            for(auto& feature : resolvedSettings.features)
             {
                 auto it = featureMap.find(feature);
                 if(it != featureMap.end())
@@ -136,7 +136,7 @@ struct ClToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    virtual std::string getLinkerFlags(Project& project, OptionCollection& resolvedOptions, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
+    virtual std::string getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
     {
         std::string flags;
 
@@ -164,9 +164,9 @@ struct ClToolchainProvider : public ToolchainProvider
         return flags;
     }
 
-    std::vector<std::filesystem::path> process(Project& project, OptionCollection& resolvedOptions, StringId config, const std::filesystem::path& workingDir) const override
+    std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override
     {
-        Option<std::vector<std::filesystem::path>> LinkedOutputs{"_LinkedCLOutputs"};
+        //Option<std::vector<std::filesystem::path>> LinkedOutputs{"_LinkedCLOutputs"};
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
         if(project.type != Executable &&
@@ -176,7 +176,7 @@ struct ClToolchainProvider : public ToolchainProvider
             return {};
         }
 
-        auto dataDir = resolvedOptions[DataDir];
+        auto dataDir = resolvedSettings.dataDir;
 
         std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerFlags;
         auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
@@ -186,18 +186,18 @@ struct ClToolchainProvider : public ToolchainProvider
                 return it->second;
             }
 
-            return commonCompilerFlags[language] = str::quote(getCompiler(project, resolvedOptions, pathOffset, language)) +
-                                                   getCommonCompilerFlags(project, resolvedOptions, pathOffset, language);
+            return commonCompilerFlags[language] = str::quote(getCompiler(project, resolvedSettings, pathOffset, language)) +
+                                                   getCommonCompilerFlags(project, resolvedSettings, pathOffset, language);
         };
 
-        auto linkerCommand = str::quote(getLinker(project, resolvedOptions, pathOffset)) + getCommonLinkerFlags(project, resolvedOptions, pathOffset);
+        auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
 
-        auto buildPch = resolvedOptions[BuildPch];
-        auto importPch = resolvedOptions[ImportPch];
+        auto buildPch = resolvedSettings.buildPch;
+        auto importPch = resolvedSettings.importPch;
         // TODO: PCH
 
         std::vector<std::filesystem::path> linkerInputs;
-        for(auto& input : resolvedOptions[Files])
+        for(auto& input : resolvedSettings.files)
         {
             auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
             if(language == lang::None)
@@ -211,13 +211,13 @@ struct ClToolchainProvider : public ToolchainProvider
 
             CommandEntry command;
             command.command = getCommonCompilerCommand(language) + 
-                              getCompilerFlags(project, resolvedOptions, pathOffset, language, inputStr, outputStr);
+                              getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
             command.inputs = { input.path };
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.depFile = output.string() + ".d";
             command.description = "Compiling " + project.name + ": " + input.path.string();
-            resolvedOptions[Commands] += std::move(command);
+            resolvedSettings.commands += std::move(command);
 
             linkerInputs.push_back(output);
         }
@@ -226,10 +226,12 @@ struct ClToolchainProvider : public ToolchainProvider
 
         if(!linker.empty())
         {
-            for(auto& output : resolvedOptions[LinkedOutputs])
+#if TODO
+            for(auto& output : resolvedSettings[LinkedOutputs])
             {
                 linkerInputs.push_back(output);
             }
+#endif
 
             std::vector<std::string> linkerInputStrs;
             linkerInputStrs.reserve(linkerInputs.size());
@@ -246,22 +248,24 @@ struct ClToolchainProvider : public ToolchainProvider
                 }
             }
 
-            auto output = project.calcOutputPath(resolvedOptions);
+            auto output = project.calcOutputPath(resolvedSettings);
             auto outputStr = (pathOffset / output).string();
 
             CommandEntry command;
-            command.command = linkerCommand + getLinkerFlags(project, resolvedOptions, pathOffset, linkerInputStrs, outputStr);
+            command.command = linkerCommand + getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
             command.inputs = std::move(linkerInputs);
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.description = "Linking " + project.name + ": " + output.string();
-            resolvedOptions[Commands] += std::move(command);
+            resolvedSettings.commands += std::move(command);
 
             outputs.push_back(output);
 
             if(project.type == StaticLib)
             {
+#if TODO
                 project[Public / config][LinkedOutputs] += output;
+#endif
             }
         }
 

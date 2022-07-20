@@ -191,6 +191,11 @@ std::string quote(std::string str, char escapeChar = '\\', std::string_view esca
     return str;
 }
 
+std::string quote(std::string_view str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
+{
+    return quote(std::string(str), escapeChar, escapedChars);
+}
+
 std::string wrap(std::string_view str, size_t maxLength, size_t indent)
 {
     std::string result;

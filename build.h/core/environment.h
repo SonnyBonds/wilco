@@ -3,22 +3,26 @@
 #include <memory>
 
 #include "core/project.h"
+#include "util/process.h"
 
 struct Environment
 {
     Environment()
         : defaults(createProject())
+        , configurationFile(process::findCurrentModulePath().replace_extension(".cpp")) // Wish this was a bit more robust but __BASE_FILE__ isn't available everywhere...
+        , startupDir(std::filesystem::current_path())
+        , buildHDir(std::filesystem::absolute(__FILE__).parent_path().parent_path())
     {
-        defaults[Public][OutputDir] = "bin";
-        defaults[Public / Linux / Executable][OutputExtension] = "";
-        defaults[Public / Linux / StaticLib][OutputExtension] = ".a";
-        defaults[Public / Linux / SharedLib][OutputExtension] = ".so";
-        defaults[Public / MacOS / Executable][OutputExtension] = "";
-        defaults[Public / MacOS / StaticLib][OutputExtension] = ".a";
-        defaults[Public / MacOS / SharedLib][OutputExtension] = ".so";
-        defaults[Public / Windows / Executable][OutputExtension] = ".exe";
-        defaults[Public / Windows / StaticLib][OutputExtension] = ".lib";
-        defaults[Public / Windows / SharedLib][OutputExtension] = ".dll";
+        defaults(Public).output.dir = "bin";
+        defaults(Public, Linux, Executable).output.extension = "";
+        defaults(Public, Linux, StaticLib).output.extension = ".a";
+        defaults(Public, Linux, SharedLib).output.extension = ".so";
+        defaults(Public, MacOS, Executable).output.extension = "";
+        defaults(Public, MacOS, StaticLib).output.extension = ".a";
+        defaults(Public, MacOS, SharedLib).output.extension = ".so";
+        defaults(Public, Windows, Executable).output.extension = ".exe";
+        defaults(Public, Windows, StaticLib).output.extension = ".lib";
+        defaults(Public, Windows, SharedLib).output.extension = ".dll";
     }
 
     ~Environment()
@@ -98,4 +102,7 @@ private:
 
 public:
     Project& defaults;
+    const std::filesystem::path configurationFile;
+    const std::filesystem::path startupDir;
+    const std::filesystem::path buildHDir;
 };

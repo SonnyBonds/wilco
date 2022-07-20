@@ -18,7 +18,6 @@
 #include "modules/postprocess.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
-#include "util/operators.h"
 #include "util/process.h"
 #include "util/file.h"
 #include "util/string.h"
@@ -62,6 +61,7 @@ private:
     {
         auto resolved = project.resolve(config, OperatingSystem::current());
 
+#if TODO
         {
             // Avoiding range-based for loop here since it breaks
             // if a post processor adds more post processors. 
@@ -71,6 +71,7 @@ private:
                 postProcessors[i](project, resolved);
             }
         }
+#endif
 
         if(!project.type.has_value())
         {
@@ -82,13 +83,13 @@ private:
             throw std::runtime_error("Trying to build project with no name.");
         }
 
-        auto& commands = resolved[Commands];
-        if(project.type == Command && commands.empty())
+        auto& commands = resolved.commands;
+        if(project.type == Command && commands.value().empty())
         {
             throw std::runtime_error("Command project '" + project.name + "' has no commands.");
         }
 
-        const ToolchainProvider* toolchain = resolved[Toolchain];
+        const ToolchainProvider* toolchain = resolved.toolchain;
         if(!toolchain)
         {
             toolchain = defaultToolchain;

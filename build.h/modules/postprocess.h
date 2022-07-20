@@ -5,6 +5,7 @@
 #include "core/option.h"
 #include "core/project.h"
 
+#if 0
 struct PostProcessor
 {
     std::function<void(Project& project, OptionCollection& resolvedOptions)> func;
@@ -46,3 +47,4 @@ struct std::hash<PostProcessor>
 };
 
 Option<std::vector<PostProcessor>> PostProcess{"PostProcess"};
+#endif

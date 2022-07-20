@@ -8,6 +8,7 @@
 namespace glob
 {
 
+#if TODO
 OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
 {
     OptionCollection result;
@@ -25,16 +26,14 @@ OptionCollection bundleResources(const std::filesystem::path& path, const std::f
 
     return result;
 }
+#endif
 
 template<typename T>
-OptionCollection files(const std::filesystem::path& path, const T& filter, bool recurse = true)
+std::vector<std::filesystem::path> files(const std::filesystem::path& path, const T& filter, bool recurse = true)
 {
-    OptionCollection result;
-    auto& files = result[Files];
-    auto& generatorDeps = result[GeneratorDependencies];
+    std::vector<std::filesystem::path> result;
 
-    // Add the directory as a dependency to rescan if the contents change
-    generatorDeps += path;
+    // TODO: Add path as a configuration dependency  
 
     if(!std::filesystem::exists(path))
     {
@@ -45,17 +44,15 @@ OptionCollection files(const std::filesystem::path& path, const T& filter, bool 
     {
         for(auto entry : iterator)
         {
-            if(entry.is_directory())
-            {
-                // Add subdirectories as dependencies to rescan if the contents change
-                generatorDeps += path;
+            if(entry.is_directory()) {
+                // TODO: Add entry as a configuration dependency  
                 continue;
             }
             if(!entry.is_regular_file()) continue;
 
-            if(filter(path))
+            if(filter(entry.path()))
             {
-                files += entry.path();
+                result.push_back(entry.path());
             }
         }
     };
@@ -72,7 +69,7 @@ OptionCollection files(const std::filesystem::path& path, const T& filter, bool 
     return result;
 }
 
-OptionCollection files(const std::filesystem::path& path, bool recurse = true)
+std::vector<std::filesystem::path> files(const std::filesystem::path& path, bool recurse = true)
 {
     return files(path, [](const std::filesystem::path& path) { return true; }, recurse);
 }

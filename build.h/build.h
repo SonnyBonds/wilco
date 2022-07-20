@@ -13,7 +13,6 @@
 #include "modules/bundle.h"
 #include "modules/command.h"
 #include "modules/postprocess.h"
-#include "modules/standardoptions.h"
 #include "modules/toolchain.h"
 
 #include "toolchains/cl.h"
@@ -25,6 +24,5 @@
 #include "util/file.h"
 #include "util/glob.h"
 #include "util/main.h"
-#include "util/operators.h"
 #include "util/process.h"
 #include "util/string.h"

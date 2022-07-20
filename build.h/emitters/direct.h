@@ -4,15 +4,16 @@
 #include <assert.h>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <set>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
 #include "core/emitter.h"
 #include "core/project.h"
-#include "core/stringid.h"
 #include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/postprocess.h"
@@ -20,7 +21,6 @@
 #include "toolchains/detected.h"
 #include "util/cli.h"
 #include "util/file.h"
-#include "util/operators.h"
 #include "util/process.h"
 #include "util/string.h"
 
@@ -133,8 +133,9 @@ private:
     static void collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
     {
         auto resolved = project.resolve(config, OperatingSystem::current());
-        resolved[DataDir] = root;
+        resolved.dataDir = root;
 
+#if TODO
         {
             // Avoiding range-based for loop here since it breaks
             // if a post processor adds more post processors. 
@@ -144,6 +145,7 @@ private:
                 postProcessors[i](project, resolved);
             }
         }
+#endif
 
         if(!project.type.has_value())
         {
@@ -158,13 +160,13 @@ private:
         std::filesystem::create_directories(root);
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
-        auto& commands = resolved[Commands];
-        if(project.type == Command && commands.empty())
+        auto& commands = resolved.commands;
+        if(project.type == Command && commands.value().empty())
         {
             throw std::runtime_error("Command project '" + project.name + "' has no commands.");
         }
 
-        const ToolchainProvider* toolchain = resolved[Toolchain];
+        const ToolchainProvider* toolchain = resolved.toolchain;
         if(!toolchain)
         {
             toolchain = defaultToolchain;
@@ -193,7 +195,7 @@ private:
         }
         std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
 
-        pendingCommands.reserve(pendingCommands.size() + commands.size());
+        pendingCommands.reserve(pendingCommands.size() + commands.value().size());
         for(auto& command : commands)
         {
             std::filesystem::path cwd = command.workingDirectory;
@@ -249,7 +251,6 @@ private:
 
     static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands)
     {
-        auto currentModule = process::findCurrentModulePath();
         size_t count = 0;
         size_t completed = 0;
         size_t firstPending = 0;
@@ -331,7 +332,7 @@ private:
                     }
 
                     std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
-                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands, &currentModule](){
+                    command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
                         for(auto& output : command->outputs)
                         {
                             std::filesystem::path path(output.cstr());
@@ -417,7 +418,7 @@ private:
             {
                 if(dependency->depth < depth+1)
                 {
-                    stack += {dependency, depth+1};
+                    stack.push_back({dependency, depth+1});
                 }
             }
         }

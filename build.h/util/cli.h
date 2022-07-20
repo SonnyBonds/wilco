@@ -10,7 +10,6 @@
 #include <variant>
 
 #include "core/emitter.h"
-#include "core/configurator.h"
 #include "util/string.h"
 
 namespace cli
@@ -29,10 +28,20 @@ struct Argument
 
     std::string example;
     std::string description;
+
+    static inline std::vector<cli::Argument*>& globalList()
+    {
+        static std::vector<cli::Argument*> arguments;
+        return arguments;
+    }
 };
 
 struct BoolArgument : public Argument
 {
+    BoolArgument(std::string name, std::string description)
+        : BoolArgument(Argument::globalList(), name, description)
+    { }
+
     BoolArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description)
     {
         this->name = std::move(name);
@@ -63,6 +72,10 @@ struct BoolArgument : public Argument
 
 struct StringArgument : public Argument
 {
+    StringArgument(std::string name, std::string description, std::optional<std::string> defaultValue = {})
+        : StringArgument(Argument::globalList(), name, description, defaultValue)
+    { }
+
     StringArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description, std::optional<std::string> defaultValue = {})
     {
         this->name = std::move(name);
@@ -108,7 +121,7 @@ struct StringArgument : public Argument
 
     explicit operator bool() const { return value.has_value(); }
 
-    StringId& operator*() { return *value; }
+    StringId operator*() { return *value; }
 
     std::string name;
     std::optional<StringId> value;
@@ -116,6 +129,10 @@ struct StringArgument : public Argument
 
 struct PathArgument : public Argument
 {
+    PathArgument(std::string name, std::string description, std::optional<std::filesystem::path> defaultValue = {})
+        : PathArgument(Argument::globalList(), name, description, defaultValue)
+    { }
+
     PathArgument(std::vector<cli::Argument*>& argumentList, std::string name, std::string description, std::optional<std::filesystem::path> defaultValue = {})
     {
         this->name = std::move(name);
@@ -126,6 +143,7 @@ struct PathArgument : public Argument
         if(value)
         {
             this->description += " [default:" + value->string() + "]";
+            value = std::filesystem::absolute(*value);
         }
         
         argumentList.push_back(this);
@@ -155,8 +173,8 @@ struct PathArgument : public Argument
             return false;
         }
 
-        value = argStr.substr(name.size()+1);
-        return true;        
+        value = std::filesystem::absolute(argStr.substr(name.size()+1));
+        return true;
     }
 
     explicit operator bool() const { return value.has_value(); }

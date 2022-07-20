@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <iostream>
 #include <future>
 #include <stdio.h>
 #include <string>

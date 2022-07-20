@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -7,216 +8,329 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/os.h"
 #include "core/stringid.h"
 
-template<typename T>
-struct Option : public StringId
+enum ProjectType
 {
-    using ValueType = T;
+    Executable,
+    StaticLib,
+    SharedLib,
+    Command
 };
 
-template<typename T>
-struct OptionHash
+enum Transitivity
 {
-    template<typename U>
-    std::enable_if_t<std::is_base_of_v<StringId, U>, size_t> operator()(const U& a) const
-    { 
-        return std::hash<StringId>()(a);
-    };
-
-    template<typename U>
-    std::enable_if_t<!std::is_base_of_v<StringId, U>, size_t> operator()(const U& a) const
-    { 
-        return std::hash<T>()(a);
-    };
+    Local,
+    Public,
+    PublicOnly
 };
 
-template<>
-struct OptionHash<std::filesystem::path>
+struct ConfigSelector
 {
-    size_t operator()(const std::filesystem::path& a) const
-    { 
-        return std::filesystem::hash_value(a);
-    };
+    ConfigSelector() {}
+    ConfigSelector(StringId name)
+        : name(name)
+    {}
+
+    ConfigSelector(const char* name)
+        : name(name)
+    {}
+
+    ConfigSelector(std::string name)
+        : name(std::move(name))
+    {}
+
+    ConfigSelector(Transitivity transitivity)
+        : transitivity(transitivity)
+    {}
+
+    ConfigSelector(ProjectType projectType)
+        : projectType(projectType)
+    {}
+
+    ConfigSelector(OperatingSystem targetOS)
+        : targetOS(targetOS)
+    {}
+
+    ConfigSelector operator+(Transitivity b)
+    {
+        ConfigSelector a = *this;
+        if(a.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
+        a.transitivity = b;
+
+        return a;
+    }
+
+    ConfigSelector operator+(ProjectType b)
+    {
+        ConfigSelector a = *this;
+        if(a.projectType) throw std::invalid_argument("Project type was specified twice.");
+        a.projectType = b;
+
+        return a;
+    }
+
+    ConfigSelector operator+(StringId b)
+    {
+        ConfigSelector a = *this;
+        if(a.name) throw std::invalid_argument("Configuration name was specified twice.");
+        a.name = b;
+
+        return a;
+    }
+
+    ConfigSelector operator+(OperatingSystem b)
+    {
+        ConfigSelector a = *this;
+        if(a.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
+        a.targetOS = b;
+
+        return a;
+    }
+
+    ConfigSelector operator+(const ConfigSelector& b)
+    {
+        ConfigSelector a = *this;
+        if(b.name) a = a + *b.name;
+        if(b.transitivity) a = a + *b.transitivity;
+        if(b.projectType) a = a + *b.projectType;
+        if(b.targetOS) a = a + *b.targetOS;
+
+        return a;
+    }
+
+    std::optional<Transitivity> transitivity;
+    std::optional<StringId> name;
+    std::optional<ProjectType> projectType;
+    std::optional<OperatingSystem> targetOS;
+
+    bool operator <(const ConfigSelector& other) const
+    {
+        if(transitivity != other.transitivity) return transitivity < other.transitivity;
+        if(projectType != other.projectType) return projectType < other.projectType;
+        if(name != other.name) return name < other.name;
+        if(targetOS != other.targetOS) return targetOS < other.targetOS;
+
+        return false;
+    }
 };
 
-struct OptionStorage
+struct PropertyBase;
+struct PropertyBag;
+
+struct PropertyGroup
 {
-    using Data = std::unique_ptr<void, void(*)(const void*)>;
+    PropertyGroup(PropertyBag* parent = nullptr)
+        : bag(parent)
+    { }
 
-    OptionStorage()
-        : _data{nullptr, &OptionStorage::nullDeleter}
-    {
-    }
+    PropertyGroup(PropertyGroup* group = nullptr)
+        : bag(group->bag)
+    { }
 
-    OptionStorage(OptionStorage&&) = default;
-    OptionStorage& operator=(OptionStorage&&) = default;
+protected:
+    PropertyBag* bag = nullptr;
 
-    template<typename T> 
-    T& get() const
-    {
-        if(!_data)
-        {
-            static T empty;
-            return empty;
-        }
-        return *static_cast<T*>(_data.get());
-    }
-
-    template<typename T> 
-    T& getOrAdd()
-    {
-        if(!_data)
-        {
-            static auto deleter = [](const void* data)
-            {
-                delete static_cast<const T*>(data);
-            };
-            _data = Data(new T{}, deleter);
-
-            static auto cloner = [](const OptionStorage& b)
-            {
-                OptionStorage clone;
-                clone.getOrAdd<T>() = b.get<T>();
-                return clone;
-            };
-            _cloner = cloner;
-
-            static auto combiner = [](OptionStorage& a, const OptionStorage& b)
-            {
-                combineValues(a.getOrAdd<T>(), b.get<T>());
-            };
-            _combiner = combiner;
-
-            static auto deduplicator = [](OptionStorage& a)
-            {
-                deduplicateValues(a.get<T>());
-            };
-            _deduplicator = deduplicator;
-        }
-        return *static_cast<T*>(_data.get());
-    }
-
-    void combine(const OptionStorage& other)
-    {
-        _combiner(*this, other);
-    }
-
-    void deduplicate()
-    {
-        _deduplicator(*this);
-    }
-
-    OptionStorage clone() const
-    {
-        return _cloner(*this);
-    }
-
-private:
-    template<typename U>
-    static void combineValues(U& a, U b)
-    {
-        a = b;
-    }
-
-    template<typename U, typename V>
-    static void combineValues(std::map<U, V>& a, std::map<U, V> b)
-    {
-        a.merge(b);
-    }
-
-    template<typename U>
-    static void combineValues(std::vector<U>& a, std::vector<U> b)
-    {
-        a.insert(a.end(), std::make_move_iterator(b.begin()), std::make_move_iterator(b.end()));
-    }
-
-    template<typename U>
-    static void deduplicateValues(U& v)
-    {
-    }
-
-    template<typename U>
-    static void deduplicateValues(std::vector<U>& v)
-    {
-        // Tested a few methods and this was the fastest one I came up with that's also pretty simple
-
-        // Could probably also use a custom insertion ordered set instead of vectors to hold options
-        // from the start, but this was simpler (and some quick tests indicated possibly faster)
- 
-        struct DerefEqual
-        {
-            bool operator ()(const U* a, const U* b) const
-            {
-                return *a == *b;
-            }
-        };
-
-        struct DerefHash
-        {
-            size_t operator ()(const U* a) const
-            {
-                return OptionHash<U>()(*a);
-            }
-        };
-
-        std::unordered_set<const U*, DerefHash, DerefEqual> dups;
-        dups.reserve(v.size());
-        v.erase(std::remove_if(v.begin(), v.end(), [&dups](const U& a) { 
-            return !dups.insert(&a).second;
-        }), v.end());
-    }
-
-    static void nullDeleter(const void*) {}
-
-    OptionStorage(*_cloner)(const OptionStorage&);
-    void(*_combiner)(OptionStorage&, const OptionStorage&);
-    void(*_deduplicator)(OptionStorage&);
-    Data _data;
+    friend struct PropertyBase;
 };
 
-struct OptionCollection
+struct PropertyBag : public PropertyGroup
 {
-    OptionCollection() {}
-    OptionCollection(OptionCollection&&) = default;
-    OptionCollection& operator=(OptionCollection&&) = default;
+    PropertyBag()
+        : PropertyGroup(this)
+    { }
 
-    template<typename T>
-    T& operator[](Option<T> option)
+    std::vector<PropertyBase*> properties;
+protected:
+
+    friend struct Project;
+    friend struct PropertyBase;
+};
+
+struct PropertyBase
+{
+    PropertyBase(PropertyGroup* group)
     {
-        return _storage[option].template getOrAdd<T>();
+        group->bag->properties.push_back(this);
     }
 
-    OptionCollection& operator+=(const OptionCollection& other)
+    virtual void applyOverlay(const PropertyBase& other) = 0;
+};
+
+template<typename ValueType>
+struct Property : public PropertyBase
+{
+    Property(PropertyGroup* group)
+        : PropertyBase(group)
+    { }
+
+    template<typename U>
+    Property& operator =(U&& v)
     {
-        combine(other);
+        _value = std::forward<U>(v);
+        _set = true;
         return *this;
     }
 
-    void combine(const OptionCollection& other)
+    operator const ValueType&() const
     {
-        for(auto& entry : other._storage)
+        return _value;
+    }
+
+    const ValueType& value() const
+    {
+        return _value;
+    }
+  
+private:
+    void applyOverlay(const PropertyBase& other)
+    {
+        auto& otherProperty = static_cast<const Property&>(other);
+        if(otherProperty._set)
         {
-            auto it = _storage.find(entry.first);
-            if(it != _storage.end())
-            {
-                it->second.combine(entry.second);
-            }
-            else
-            {
-                _storage[entry.first] = entry.second.clone();
-            }
+            _value = otherProperty._value;
         }
     }
 
-    void deduplicate()
+    ValueType _value{};
+    bool _set = false;
+};
+
+template<typename ValueType>
+struct ListProperty : public PropertyBase
+{
+    ListProperty(PropertyGroup* group, bool allowDuplicates = false)
+        : PropertyBase(group)
+        , _allowDuplicates(allowDuplicates)
+        , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
+    { }
+
+    template<typename T>
+    ListProperty& operator =(T other)
     {
-        for(auto& entry : _storage)
+        if(_allowDuplicates)
         {
-            entry.second.deduplicate();
+            _value = std::move(other);
         }
+        else
+        {
+            _value.clear();
+            _value.reserve(other.size());
+            for(auto& e : other)
+            {
+                *this += std::move(e);
+            }
+        }
+        return *this;
+    }
+
+    template<typename T>
+    ListProperty& operator +=(T other) {
+        _value.push_back(std::move(other));
+        if(!_allowDuplicates)
+        {
+            if(!_duplicateTracker.insert(_value.size()-1).second)
+            {
+                _value.pop_back();
+            }
+        }
+        return *this;
+    }
+
+    template<typename T>
+    ListProperty& operator +=(std::initializer_list<T> other) {
+        _value.reserve(_value.size() + other.size());
+        for(auto& e : other)
+        {
+            *this += std::move(e);
+        }
+        return *this;
+    }
+
+    template<typename T>
+    ListProperty& operator +=(std::vector<T> other) {
+        _value.reserve(_value.size() + other.size());
+        for(auto& e : other)
+        {
+            *this += std::move(e);
+        }
+        return *this;
+    }
+
+    auto begin() const
+    {
+        return _value.begin();
+    }
+
+    auto end() const
+    {
+        return _value.end();
+    }
+
+    operator const std::vector<ValueType>&() const
+    {
+        return _value;
+    }
+
+    const std::vector<ValueType>& value() const
+    {
+        return _value;
     }
 
 private:
-    std::map<const char*, OptionStorage> _storage;
+    struct IndexedValueEquals
+    {
+        IndexedValueEquals(const std::vector<ValueType>& values)
+            : _values(values)
+        { }
+
+        bool operator()(int a, int b) const
+        {
+            return _values[a] == _values[b];
+        }
+
+    private:
+        const std::vector<ValueType>& _values;
+    };
+
+    struct IndexedValueHash
+    {
+        IndexedValueHash(const std::vector<ValueType>& values)
+            : _values(values)
+        { }
+
+        size_t operator()(int i) const
+        {
+            if constexpr (std::is_base_of_v<StringId, ValueType>)
+            {
+                return std::hash<StringId>{}(_values[i]);                
+            }
+            else if constexpr (std::is_same_v<std::filesystem::path, ValueType>)
+            {
+                return std::filesystem::hash_value(_values[i]);
+            }
+            else
+            {
+                return std::hash<ValueType>{}(_values[i]);
+            }
+        }
+
+    private:
+        const std::vector<ValueType>& _values;
+    };
+
+    void applyOverlay(const PropertyBase& other)
+    {
+        auto& otherListProperty = static_cast<const ListProperty&>(other);
+        _value.reserve(_value.size() + otherListProperty.value().size());
+        for(auto& e : otherListProperty)
+        {
+            *this += e;
+        }
+    }
+
+    bool _allowDuplicates = false;
+    std::vector<ValueType> _value{};
+    std::unordered_set<int, IndexedValueHash, IndexedValueEquals> _duplicateTracker;
 };

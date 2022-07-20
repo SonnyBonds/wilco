@@ -44,7 +44,6 @@ struct Emitter
 
     cli::PathArgument targetPath{arguments, "output-path", "Target path for build files.", "buildfiles"};
 
-
     Emitter(StringId name, std::string description)
         : name(name)
         , description(std::move(description))
