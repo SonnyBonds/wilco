@@ -81,7 +81,7 @@ int main(int argc, const char** argv)
             cliContext.extractArgument(argument);
         }
 
-        Environment env;
+        Environment env(cliContext);
         std::filesystem::current_path(env.configurationFile.parent_path());
         configure(env);
 

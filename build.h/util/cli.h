@@ -9,7 +9,6 @@
 #include <utility>
 #include <variant>
 
-#include "core/emitter.h"
 #include "util/string.h"
 
 namespace cli

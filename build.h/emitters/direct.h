@@ -37,12 +37,11 @@ public:
 
     virtual void emit(Environment& env) override
     {
-#if TODO
         {
-            auto [generator, buildOutput] = createGeneratorProject(targetPath);
+            auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
 
             std::vector<PendingCommand> pendingCommands;
-            collectCommands(pendingCommands, targetPath, generator, "");
+            collectCommands(pendingCommands, *targetPath, *generator, "");
             auto commands = processCommands(pendingCommands);
 
             if(!commands.empty())
@@ -55,11 +54,11 @@ public:
                 {
                     std::cout << "Restarting build.\n\n" << std::flush;
                     std::string argumentString;
-                    for(auto& arg : generatorCliArguments)
+                    for(auto& arg : env.cliContext.allArguments)
                     {
                         argumentString += " " + str::quote(arg);
                     }
-                    process::runAndExit("cd " + str::quote(START_DIR) + " && " + str::quote((BUILD_DIR / buildOutput).string()) + argumentString);
+                    process::runAndExit("cd " + str::quote(env.startupDir) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
                     std::cout << "Build restart failed.\n" << std::flush;
                 }
 
@@ -67,7 +66,6 @@ public:
                 std::exit(EXIT_FAILURE);
             }
         }
-#endif
 
         auto projects = env.collectProjects();
         auto configs = env.collectConfigs();

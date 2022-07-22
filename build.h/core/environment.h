@@ -3,15 +3,17 @@
 #include <memory>
 
 #include "core/project.h"
+#include "util/cli.h"
 #include "util/process.h"
 
 struct Environment
 {
-    Environment()
+    Environment(cli::Context& cliContext)
         : defaults(createProject())
         , configurationFile(process::findCurrentModulePath().replace_extension(".cpp")) // Wish this was a bit more robust but __BASE_FILE__ isn't available everywhere...
         , startupDir(std::filesystem::current_path())
         , buildHDir(std::filesystem::absolute(__FILE__).parent_path().parent_path())
+        , cliContext(cliContext)
     {
         defaults(Public).output.dir = "bin";
         defaults(Public, Linux, Executable).output.extension = "";
@@ -105,4 +107,5 @@ public:
     const std::filesystem::path configurationFile;
     const std::filesystem::path startupDir;
     const std::filesystem::path buildHDir;
+    cli::Context& cliContext;
 };

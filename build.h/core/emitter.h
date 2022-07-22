@@ -58,8 +58,7 @@ struct Emitter
 
 protected:
 
-#if TODO
-    static std::pair<Project, std::filesystem::path> createGeneratorProject(std::filesystem::path targetPath)
+    static std::pair<Project*, std::filesystem::path> createGeneratorProject(Environment& env, std::filesystem::path targetPath)
     {
         targetPath = targetPath / ".build.h";
         std::string ext;
@@ -67,24 +66,16 @@ protected:
         {
             ext = ".exe";
         }
-        auto tempOutput = targetPath / std::filesystem::path(BUILD_FILE).filename().replace_extension(ext);
-        auto prevOutput = targetPath / std::filesystem::path(BUILD_FILE).filename().replace_extension(ext + ".prev");
-        auto buildOutput = std::filesystem::path(BUILD_FILE).replace_extension(ext);
-        Project project("_generator", Executable);
-        project[Features] += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions };
-        project[IncludePaths] += BUILD_H_DIR;
-        project[OutputPath] = tempOutput;
-        project[Defines] += {
-            "START_DIR=\"" START_DIR "\"",
-            "BUILD_H_DIR=\"" BUILD_H_DIR "\"",
-            "BUILD_DIR=\"" BUILD_DIR "\"",
-            "BUILD_FILE=\"" BUILD_FILE "\"",
-            "BUILD_ARGS=\"" BUILD_ARGS "\"",
-        };
-        project[Files] += BUILD_FILE;
-        project[Commands] += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
+        auto tempOutput = targetPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext);
+        auto prevOutput = targetPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + ".prev");
+        auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
+        Project& project = env.createProject("_generator", Executable);
+        project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions };
+        project.includePaths += env.buildHDir;
+        project.output.path = tempOutput;
+        project.files += env.configurationFile;
+        project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
-        return { std::move(project), buildOutput };
+        return { &project, buildOutput };
     }
-#endif
 };
