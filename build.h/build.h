@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/environment.h"
-#include "core/option.h"
 #include "core/project.h"
+#include "core/property.h"
 #include "core/stringid.h"
 
 #include "emitters/compilecommands.h"

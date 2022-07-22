@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "core/option.h"
 #include "core/project.h"
+#include "core/property.h"
 #include "modules/language.h"
 
 struct ToolchainProvider;

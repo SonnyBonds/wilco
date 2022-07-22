@@ -4,8 +4,8 @@
 #include <string>
 #include <variant>
 
-#include "core/option.h"
 #include "core/project.h"
+#include "core/property.h"
 #include "modules/feature.h"
 #include "modules/postprocess.h"
 #include "util/commands.h"

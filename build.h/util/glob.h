@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-#include "core/option.h"
+#include "core/property.h"
 #include "modules/bundle.h"
 
 namespace glob

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "core/option.h"
+#include "core/property.h"
 
 struct CommandEntry
 {

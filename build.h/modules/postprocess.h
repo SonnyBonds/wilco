@@ -2,8 +2,8 @@
 
 #include <functional>
 
-#include "core/option.h"
 #include "core/project.h"
+#include "core/property.h"
 
 #if 0
 struct PostProcessor

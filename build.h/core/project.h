@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "core/option.h"
 #include "core/os.h"
+#include "core/property.h"
 #include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/feature.h"
