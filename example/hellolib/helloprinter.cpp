@@ -7,5 +7,5 @@
 
 void printHello()
 {
-    std::cout << MESSAGE;
+    std::cout << MESSAGE << "\n";
 }
