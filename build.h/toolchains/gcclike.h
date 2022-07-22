@@ -12,7 +12,7 @@
 
 namespace extensions
 {
-    struct Gcc : public Extension
+    struct Gcc : public PropertyBag
     {
         ListProperty<StringId> compilerFlags{this};
         ListProperty<StringId> linkerFlags{this};
@@ -228,7 +228,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
     std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override
     {
-        struct GccInternal : public Extension
+        struct GccInternal : public PropertyBag
         {
             ListProperty<std::filesystem::path> linkedOutputs{this, true};
         };

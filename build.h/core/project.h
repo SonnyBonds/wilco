@@ -16,7 +16,6 @@
 #include "modules/toolchain.h"
 #include "modules/sourcefile.h"
 
-struct Extension;
 struct Project;
 
 struct ProjectSettings : public PropertyBag
@@ -63,23 +62,68 @@ struct ProjectSettings : public PropertyBag
         return static_cast<ExtensionType&>(extensionEntry->get());
     }
 
+    ProjectSettings& operator +=(const ProjectSettings& other)
+    {
+        auto apply = [](PropertyBag& base, const PropertyBag& overlay)
+        {
+            // This whole thing doesn't have enforced safety,
+            // it just assumes caller knows what it's doing
+            assert(base.properties.size() == overlay.properties.size());
+            for(size_t i=0; i<base.properties.size(); ++i)
+            {
+                base.properties[i]->applyOverlay(*overlay.properties[i]);
+            }
+        };
+
+        apply(*this, other);
+
+        for(auto& extension : other._extensions)
+        {
+            auto it = _extensions.find(extension.first);
+            if(it != _extensions.end())
+            {
+                apply(it->second->get(), extension.second->get());
+            }
+            else
+            {
+                _extensions.insert({extension.first, extension.second->clone()});
+            }
+        }
+
+        return *this;
+    }
+
+    ProjectSettings operator+(const ProjectSettings& other) const
+    {
+        ProjectSettings result;
+        result += *this;
+        result += other;
+        return result;
+    }
+
 private:
     struct ExtensionEntry
     {
         virtual ~ExtensionEntry() = default;
-        virtual Extension& get() = 0;
-        virtual std::unique_ptr<ExtensionEntry> clone() = 0;
+        virtual PropertyBag& get() = 0;
+        virtual const PropertyBag& get() const = 0;
+        virtual std::unique_ptr<ExtensionEntry> clone() const = 0;
     };
 
     template<typename ExtensionType>
     struct ExtensionEntryImpl : public ExtensionEntry
     {
-        virtual Extension& get() override
+        virtual PropertyBag& get() override
         {
             return extension;
         }
 
-        virtual std::unique_ptr<ExtensionEntry> clone() override
+        virtual const PropertyBag& get() const override
+        {
+            return extension;
+        }
+
+        virtual std::unique_ptr<ExtensionEntry> clone() const override
         {
             auto newExtension = new ExtensionEntryImpl<ExtensionType>();
             for(size_t i=0; i<extension.properties.size(); ++i)
@@ -96,10 +140,6 @@ private:
 
     friend class Project;
 };
-
-struct Extension : public PropertyBag
-{ };
-
 
 struct Project : public ProjectSettings
 {
@@ -157,7 +197,7 @@ private:
 
         if(local)
         {
-            applyOverlay(result, *this);
+            result += *this;
         }
 
         for(auto& entry : configs)
@@ -174,36 +214,7 @@ private:
             if(entry.first.name && entry.first.name != configName) continue;
             if(entry.first.targetOS && entry.first.targetOS != targetOS) continue;
 
-            applyOverlay(result, entry.second);
-        }
-    }
-    
-    void applyOverlay(ProjectSettings& base, const ProjectSettings& overlay)
-    {
-        auto apply = [](PropertyBag& base, const PropertyBag& overlay)
-        {
-            // This whole thing doesn't have enforced safety,
-            // it just assumes caller knows what it's doing
-            assert(base.properties.size() == overlay.properties.size());
-            for(size_t i=0; i<base.properties.size(); ++i)
-            {
-                base.properties[i]->applyOverlay(*overlay.properties[i]);
-            }
-        };
-
-        apply(base, overlay);
-
-        for(auto& extension : overlay._extensions)
-        {
-            auto it = base._extensions.find(extension.first);
-            if(it != base._extensions.end())
-            {
-                apply(it->second->get(), extension.second->get());
-            }
-            else
-            {
-                base._extensions.insert({extension.first, extension.second->clone()});
-            }
+            result += entry.second;
         }
     }
 };
