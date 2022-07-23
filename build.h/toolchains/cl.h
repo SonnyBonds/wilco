@@ -166,7 +166,11 @@ struct ClToolchainProvider : public ToolchainProvider
 
     std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override
     {
-        //Option<std::vector<std::filesystem::path>> LinkedOutputs{"_LinkedCLOutputs"};
+        struct ClInternal : public PropertyBag
+        {
+            ListProperty<std::filesystem::path> linkedOutputs{this, true};
+        };
+
         std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
         if(project.type != Executable &&
@@ -226,12 +230,10 @@ struct ClToolchainProvider : public ToolchainProvider
 
         if(!linker.empty())
         {
-#if TODO
-            for(auto& output : resolvedSettings[LinkedOutputs])
+            for(auto& output : resolvedSettings.ext<ClInternal>().linkedOutputs)
             {
                 linkerInputs.push_back(output);
             }
-#endif
 
             std::vector<std::string> linkerInputStrs;
             linkerInputStrs.reserve(linkerInputs.size());
@@ -263,27 +265,10 @@ struct ClToolchainProvider : public ToolchainProvider
 
             if(project.type == StaticLib)
             {
-#if TODO
-                project[Public / config][LinkedOutputs] += output;
-#endif
+                project(PublicOnly, config).ext<ClInternal>().linkedOutputs += output;
             }
         }
 
         return outputs;
     }
 };
-
-#if 0
-struct ClToolchainProvider : public ClToolchainProviderBase
-{
-    using ClToolchainProviderBase::ClToolchainProviderBase;
-    static ClToolchainProvider* getInstance()
-    {
-        static ClToolchainProvider instance("msvc", "cl", "link", "lib", {}, {});
-        return &instance;
-    }
-    static Toolchains::Token installToken;
-};
-
-Toolchains::Token ClToolchainProvider::installToken = Toolchains::install(ClToolchainProvider::getInstance());
-#endif
