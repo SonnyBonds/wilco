@@ -102,6 +102,14 @@ struct ProjectSettings : public PropertyBag
         return result;
     }
 
+    ProjectSettings()
+    { }
+
+    ProjectSettings(const ProjectSettings& other)
+    {
+        *this += other;
+    }
+    
 private:
     struct ExtensionEntry
     {

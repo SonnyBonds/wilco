@@ -176,7 +176,7 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
             if(project.type == SharedLib)
             {
-                auto features = resolvedSettings.features;
+                auto& features = resolvedSettings.features;
                 if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
                 {
                     flags += " -bundle";

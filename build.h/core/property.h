@@ -206,6 +206,11 @@ struct ListProperty : public PropertyBase
         , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
     { }
 
+    ListProperty(const ListProperty& other) = delete;
+    ListProperty(ListProperty&& other) = delete;
+    ListProperty& operator=(const ListProperty& other) = delete;
+    ListProperty& operator=(ListProperty&& other) = delete;
+
     template<typename T>
     ListProperty& operator =(T other)
     {
