@@ -41,15 +41,15 @@ struct ClToolchainProvider : public ToolchainProvider
 
         for(auto& define : resolvedSettings.defines)
         {
-            flags += " /D\"" + define + "\"";
+            flags += " /D" + str::quote(define) + "";
         }
         for(auto& path : sysIncludePaths)
         {
-            flags += " /I\"" + path.string() + "\"";
+            flags += " /I" + str::quote(path.string()) + "";
         }
         for(auto& path : resolvedSettings.includePaths)
         {
-            flags += " /I\"" + (pathOffset / path).string() + "\"";
+            flags += " /I" + str::quote((pathOffset / path).string());
         }
 
         std::map<Feature, std::string> featureMap = {
@@ -79,7 +79,7 @@ struct ClToolchainProvider : public ToolchainProvider
 
     virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
     {
-        return " /sourceDependencies \"" + output + ".d\" /c /Fd:\"" + output + "\".pdb /Fo:\"" + output + "\" " + str::quote(input);
+        return " /sourceDependencies " + str::quote(output) + ".d /c /Fd:" + str::quote(output) + ".pdb /Fo:" + str::quote(output) + " " + str::quote(input);
     }
 
     virtual std::string getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
