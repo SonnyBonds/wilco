@@ -7,6 +7,7 @@
 
 #include "emitters/compilecommands.h"
 #include "emitters/direct.h"
+#include "emitters/msvc.h"
 #include "emitters/ninja.h"
 #include "emitters/query.h"
 

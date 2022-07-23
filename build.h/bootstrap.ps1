@@ -120,7 +120,7 @@ function Find-Cl {
     $toolchains[$Id] = @{
         Description = $description
         Command = $CL
-        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
+        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi", "/MP") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
         Declaration = "inline ClToolchainProvider ${Id}(`"$Id`", `"$CL`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
     }
 

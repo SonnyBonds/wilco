@@ -196,6 +196,7 @@ private:
         if(otherProperty._set)
         {
             _value = otherProperty._value;
+            _set = true;
         }
     }
 
