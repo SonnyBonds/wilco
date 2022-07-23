@@ -122,7 +122,7 @@ TEST_CASE( "Resolve Config" ) {
     using strvec = std::vector<std::string>;
     using streqvec = std::vector<CompareEqualString>;
 
-    struct TestExt : public Extension
+    struct TestExt : public PropertyBag
     {
         ListProperty<std::string> localOption{this};
         ListProperty<std::string> publicOption{this};
@@ -135,7 +135,8 @@ TEST_CASE( "Resolve Config" ) {
     StringId configA = "configA";
     StringId configB = "configB";
 
-    Environment env;
+    cli::Context cliContext({}, {}, {});
+    Environment env(cliContext);
     Project& baseProject = env.createProject();
     baseProject.ext<TestExt>().localOption += "None";
     baseProject(configA).ext<TestExt>().localOption += "A";
@@ -153,7 +154,7 @@ TEST_CASE( "Resolve Config" ) {
     baseProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Base";
 
     Project& noTypeProject = env.createProject();
-    noTypeProject.links.push_back(&baseProject);
+    noTypeProject.links += &baseProject;
     noTypeProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On None";
     noTypeProject(Public, Executable).ext<TestExt>().typeOption += "Executable On None";
     noTypeProject(Public).ext<TestExt>().duplicateOption += { "None 1", "None 2" };
@@ -161,7 +162,7 @@ TEST_CASE( "Resolve Config" ) {
     noTypeProject(Public, configB).ext<TestExt>().duplicateOption += { "None B 1", "None B 2"};
 
     Project& staticLibProject = env.createProject("", StaticLib);
-    staticLibProject.links.push_back(&noTypeProject);
+    staticLibProject.links += &noTypeProject;
     staticLibProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On Static";
     staticLibProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Static";
     staticLibProject(Public).ext<TestExt>().duplicateOption += { "Static 1", "Static 2" };
@@ -169,7 +170,7 @@ TEST_CASE( "Resolve Config" ) {
     staticLibProject(Public, configB).ext<TestExt>().duplicateOption += { "Static B 1", "Static B 2"};
 
     Project& executableProject = env.createProject("", Executable);
-    executableProject.links.push_back(&staticLibProject);
+    executableProject.links += &staticLibProject;
     executableProject(Public, StaticLib).ext<TestExt>().typeOption += "Static On Executable";
     executableProject(Public, Executable).ext<TestExt>().typeOption += "Executable On Executable";
     executableProject(Public).ext<TestExt>().duplicateOption += { "Executable 1", "Executable 2" };
