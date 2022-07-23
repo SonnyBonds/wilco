@@ -10,7 +10,7 @@ struct Language : public StringId {
     static Language getByExtension(StringId extension);
     static Language getByPath(const std::filesystem::path& path)
     {
-        return getByExtension(StringId(path.extension()));
+        return getByExtension(StringId(path.extension().string()));
     }
 };
 

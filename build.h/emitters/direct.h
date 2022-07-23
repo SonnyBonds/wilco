@@ -58,7 +58,7 @@ public:
                     {
                         argumentString += " " + str::quote(arg);
                     }
-                    process::runAndExit("cd " + str::quote(env.startupDir) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
+                    process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
                     std::cout << "Build restart failed.\n" << std::flush;
                 }
 
