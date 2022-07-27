@@ -17,16 +17,16 @@ struct Language : public StringId {
 namespace lang
 {
 
-Language Auto{"Auto"};
-Language C{"C"};
-Language Cpp{"C++"};
-Language ObjectiveC{"Objective-C"};
-Language ObjectiveCpp{"Objective-C++"};
-Language None{"None"};
+inline Language Auto{"Auto"};
+inline Language C{"C"};
+inline Language Cpp{"C++"};
+inline Language ObjectiveC{"Objective-C"};
+inline Language ObjectiveCpp{"Objective-C++"};
+inline Language None{"None"};
 
 }
 
-std::unordered_map<StringId, Language> Language::extensionMap = 
+inline std::unordered_map<StringId, Language> Language::extensionMap = 
 {
     { ".c", lang::C },
     { ".cpp", lang::Cpp },
@@ -35,7 +35,7 @@ std::unordered_map<StringId, Language> Language::extensionMap =
     { ".mm", lang::ObjectiveCpp },
 };
 
-Language Language::getByExtension(StringId extension)
+inline Language Language::getByExtension(StringId extension)
 {
     auto it = extensionMap.find(extension);
     if(it != extensionMap.end())

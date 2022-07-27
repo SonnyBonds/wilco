@@ -8,7 +8,7 @@
 namespace file
 {
 
-std::string read(std::filesystem::path path)
+inline std::string read(std::filesystem::path path)
 {
     std::ifstream stream(path);
     if(!stream)
@@ -26,7 +26,7 @@ std::string read(std::filesystem::path path)
     return buffer;
 }
 
-bool write(std::filesystem::path path, const std::string& data)
+inline bool write(std::filesystem::path path, const std::string& data)
 {
     bool upToDate = false;
     std::error_code ec;

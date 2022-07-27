@@ -3,7 +3,7 @@
 namespace str
 {
 
-bool startsWith(std::string_view haystack, std::string_view needle)
+inline bool startsWith(std::string_view haystack, std::string_view needle)
 {
     if(haystack.size() < needle.size())
     {
@@ -13,7 +13,7 @@ bool startsWith(std::string_view haystack, std::string_view needle)
     return haystack.compare(0, needle.size(), needle) == 0;
 }
 
-bool endsWith(std::string_view haystack, std::string_view needle)
+inline bool endsWith(std::string_view haystack, std::string_view needle)
 {
     if(haystack.size() < needle.size())
     {
@@ -23,13 +23,13 @@ bool endsWith(std::string_view haystack, std::string_view needle)
     return haystack.compare(haystack.size() - needle.size(), needle.size(), needle) == 0;
 }
 
-std::string padLeft(std::string str, size_t padding, char padChar = ' ')
+inline std::string padLeft(std::string str, size_t padding, char padChar = ' ')
 {
     str.insert(str.begin(), padding, padChar);
     return str;
 }
 
-std::string padLeftToSize(std::string str, size_t size, char padChar = ' ')
+inline std::string padLeftToSize(std::string str, size_t size, char padChar = ' ')
 {
     if(str.size() >= size)
     {
@@ -39,13 +39,13 @@ std::string padLeftToSize(std::string str, size_t size, char padChar = ' ')
     return padLeft(std::move(str), padding, padChar);
 }
 
-std::string padRight(std::string str, size_t padding, char padChar = ' ')
+inline std::string padRight(std::string str, size_t padding, char padChar = ' ')
 {
     str.insert(str.end(), padding, padChar);
     return str;
 }
 
-std::string padRightToSize(std::string str, size_t size, char padChar = ' ')
+inline std::string padRightToSize(std::string str, size_t size, char padChar = ' ')
 {
     if(str.size() >= size)
     {
@@ -55,7 +55,7 @@ std::string padRightToSize(std::string str, size_t size, char padChar = ' ')
     return padRight(std::move(str), padding, padChar);
 }
 
-std::string trimStart(std::string str)
+inline std::string trimStart(std::string str)
 {
     {
         auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
@@ -68,7 +68,7 @@ std::string trimStart(std::string str)
     return str;
 }
 
-std::string trimEnd(std::string str)
+inline std::string trimEnd(std::string str)
 {
     {
         auto it = std::find_if_not(str.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
@@ -81,7 +81,7 @@ std::string trimEnd(std::string str)
     return str;
 }
 
-std::string trim(std::string str)
+inline std::string trim(std::string str)
 {
     {
         auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
@@ -102,7 +102,7 @@ std::string trim(std::string str)
     return str;
 }
 
-std::string_view trimStart(std::string_view str)
+inline std::string_view trimStart(std::string_view str)
 {
     {
         auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
@@ -115,7 +115,7 @@ std::string_view trimStart(std::string_view str)
     return str;
 }
 
-std::string_view trimEnd(std::string_view str)
+inline std::string_view trimEnd(std::string_view str)
 {
     {
         auto it = std::find_if_not(str.rbegin(), str.rend(), [](char c) { return std::isspace(c); });
@@ -128,7 +128,7 @@ std::string_view trimEnd(std::string_view str)
     return str;
 }
 
-std::string_view trim(std::string_view str)
+inline std::string_view trim(std::string_view str)
 {
     {
         auto it = std::find_if_not(str.begin(), str.end(), [](char c) { return std::isspace(c); });
@@ -149,7 +149,7 @@ std::string_view trim(std::string_view str)
     return str;
 }
 
-std::pair<std::string_view, std::string_view> split(std::string_view str, char delimiter)
+inline std::pair<std::string_view, std::string_view> split(std::string_view str, char delimiter)
 {
     auto pos = str.find(delimiter);
     if(pos != str.npos)
@@ -162,7 +162,7 @@ std::pair<std::string_view, std::string_view> split(std::string_view str, char d
     }
 }
 
-std::pair<std::string, std::string> split(const std::string& str, char delimiter)
+inline std::pair<std::string, std::string> split(const std::string& str, char delimiter)
 {
     auto pos = str.find(delimiter);
     if(pos != str.npos)
@@ -175,7 +175,7 @@ std::pair<std::string, std::string> split(const std::string& str, char delimiter
     }
 }
 
-std::string quote(std::string str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
+inline std::string quote(std::string str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
 {
     for(auto it = str.begin(); it != str.end(); ++it)
     {
@@ -191,12 +191,12 @@ std::string quote(std::string str, char escapeChar = '\\', std::string_view esca
     return str;
 }
 
-std::string quote(std::string_view str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
+inline std::string quote(std::string_view str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
 {
     return quote(std::string(str), escapeChar, escapedChars);
 }
 
-std::string wrap(std::string_view str, size_t maxLength, size_t indent)
+inline std::string wrap(std::string_view str, size_t maxLength, size_t indent)
 {
     std::string result;
     bool first = true;

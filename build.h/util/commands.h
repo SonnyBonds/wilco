@@ -8,7 +8,7 @@
 namespace commands
 {
 
-CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDescription = {})
+inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDescription = {})
 {
     if(commands.empty())
     {
@@ -47,7 +47,7 @@ CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDes
     return result;
 }
 
-CommandEntry mkdir(std::filesystem::path dir)
+inline CommandEntry mkdir(std::filesystem::path dir)
 {
     CommandEntry commandEntry;
 
@@ -64,7 +64,7 @@ CommandEntry mkdir(std::filesystem::path dir)
     return commandEntry;
 }
 
-CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
+inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -91,7 +91,7 @@ CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
     return commandEntry;
 }
 
-CommandEntry move(std::filesystem::path from, std::filesystem::path to)
+inline CommandEntry move(std::filesystem::path from, std::filesystem::path to)
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };

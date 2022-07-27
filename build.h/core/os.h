@@ -6,9 +6,9 @@ struct OperatingSystem : public StringId {
     static inline OperatingSystem current();
 };
 
-OperatingSystem Windows{"Windows"};
-OperatingSystem MacOS{"MacOS"};
-OperatingSystem Linux{"Linux"};
+inline OperatingSystem Windows{"Windows"};
+inline OperatingSystem MacOS{"MacOS"};
+inline OperatingSystem Linux{"Linux"};
 
 inline OperatingSystem OperatingSystem::current()
 {

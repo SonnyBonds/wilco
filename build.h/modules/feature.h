@@ -5,17 +5,17 @@ struct Feature : public StringId {};
 namespace feature
 {
 
-Feature Cpp11{"Cpp11"};
-Feature Cpp14{"Cpp14"};
-Feature Cpp17{"Cpp17"};
-Feature Cpp20{"Cpp20"};
-Feature Cpp23{"Cpp23"};
-Feature WarningsAsErrors{"WarningsAsErrors"};
-Feature FastMath{"FastMath"};
-Feature DebugSymbols{"DebugSymbols"};
-Feature Exceptions{"Exceptions"};
-Feature Optimize{"Optimize"};
-Feature OptimizeSize{"OptimizeSize"};
-Feature MacOSBundle{"MacOSBundle"};
+inline Feature Cpp11{"Cpp11"};
+inline Feature Cpp14{"Cpp14"};
+inline Feature Cpp17{"Cpp17"};
+inline Feature Cpp20{"Cpp20"};
+inline Feature Cpp23{"Cpp23"};
+inline Feature WarningsAsErrors{"WarningsAsErrors"};
+inline Feature FastMath{"FastMath"};
+inline Feature DebugSymbols{"DebugSymbols"};
+inline Feature Exceptions{"Exceptions"};
+inline Feature Optimize{"Optimize"};
+inline Feature OptimizeSize{"OptimizeSize"};
+inline Feature MacOSBundle{"MacOSBundle"};
 
 }

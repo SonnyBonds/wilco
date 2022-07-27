@@ -21,7 +21,7 @@ namespace process
 {
 
 #if _WIN32
-static std::filesystem::path findCurrentModulePath()
+inline static std::filesystem::path findCurrentModulePath()
 {
 	wchar_t moduleFileName[2048];
 
@@ -33,7 +33,7 @@ static std::filesystem::path findCurrentModulePath()
 	return moduleFileName;
 }
 #else
-static std::filesystem::path findCurrentModulePath()
+inline static std::filesystem::path findCurrentModulePath()
 {
     Dl_info info;
 	dladdr((void*)&findCurrentModulePath, &info);
@@ -58,7 +58,7 @@ struct ProcessResult
 #define WEXITSTATUS
 #endif
 
-void runAndExit(const std::string& command)
+inline void runAndExit(const std::string& command)
 {
     auto newCString = [](const std::string& str)
     {
@@ -83,7 +83,7 @@ void runAndExit(const std::string& command)
     execvp(cArgs[0], cArgs.data());
 }
 
-ProcessResult run(std::string command, bool echoOutput = false)
+inline ProcessResult run(std::string command, bool echoOutput = false)
 {
     ProcessResult result;
     {

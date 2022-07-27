@@ -9,7 +9,7 @@ namespace glob
 {
 
 #if TODO
-OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
+inline OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
 {
     OptionCollection result;
 
@@ -69,7 +69,7 @@ std::vector<std::filesystem::path> files(const std::filesystem::path& path, cons
     return result;
 }
 
-std::vector<std::filesystem::path> files(const std::filesystem::path& path, bool recurse = true)
+inline std::vector<std::filesystem::path> files(const std::filesystem::path& path, bool recurse = true)
 {
     return files(path, [](const std::filesystem::path& path) { return true; }, recurse);
 }
