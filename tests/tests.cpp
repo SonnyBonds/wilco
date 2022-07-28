@@ -4,6 +4,8 @@
 #undef INPUT
 #include "catch2/catch.hpp"
 
+#include "src/dependencyparser.h"
+
 TEST_CASE( "String utils" ) {
     CHECK(str::padLeft("test", 4) == "    test");
     CHECK(str::padLeft("test", 4, '#') == "####test");
@@ -261,7 +263,7 @@ TEST_CASE( "Dependency Parser" ) {
         endoffile)--";
 
         std::vector<std::string> result;
-        REQUIRE(!DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+        REQUIRE(!parseDependencyData(dependencyData, [&result](std::string_view path){
             result.push_back(std::string(path));
             return false;
         }));
@@ -300,7 +302,7 @@ TEST_CASE( "Dependency Parser" ) {
         )--";
 
         std::vector<std::string> result;
-        REQUIRE(!DirectBuilder::parseDependencyData(dependencyData, [&result](std::string_view path){
+        REQUIRE(!parseDependencyData(dependencyData, [&result](std::string_view path){
             result.push_back(std::string(path));
             return false;
         }));
