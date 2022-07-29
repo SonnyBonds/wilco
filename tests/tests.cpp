@@ -318,3 +318,10 @@ TEST_CASE( "Dependency Parser" ) {
         });
     }
 }
+
+TEST_CASE( "Hash" ) {
+    CHECK(hash::md5String("asdfasdfasdfasdf") == "08afd6f9ae0c6017d105b4ce580de885");
+    CHECK(hash::md5String("Hello world") == "3e25960a79dbc69b674cd4ec67a72c62");
+    CHECK(hash::md5String("md5") == "1bc29b36f623ba82aaf6724fd3b16718");
+    CHECK(hash::md5String("A slightly longer text string of text to hash.") == "69f519d9eca214b238de1f92e52e9e1d");
+}
