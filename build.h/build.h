@@ -27,3 +27,4 @@
 #include "util/main.h"
 #include "util/process.h"
 #include "util/string.h"
+#include "util/uuid.h"
