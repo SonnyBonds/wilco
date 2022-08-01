@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "core/project.h"
 
 Project::Project(std::string name, std::optional<ProjectType> type)

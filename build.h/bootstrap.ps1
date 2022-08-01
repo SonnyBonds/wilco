@@ -120,8 +120,8 @@ function Find-Cl {
     $toolchains[$Id] = @{
         Description = $description
         Command = $CL
-        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi") + $include_flags + $define_flags + ($params["INPUT_CPP"], ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
-        Declaration = "static ClToolchainProvider ${Id}(`"$Id`", `"$CL`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
+        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
+        Declaration = "inline ClToolchainProvider ${Id}(`"$Id`", `"$CL`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
     }
 
     if(-not $script:selected_toolchain)
@@ -166,8 +166,8 @@ function Find-Clang {
         Description = $Description + $where
         
         Command = "$COMPILER"
-        Args = (,"-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], "-o", $params["OUTPUT"])
-        Declaration = "static GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`",  `"$LINKER`",  `"$ARCHIVER`");`n"
+        Args = (,"-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
+        Declaration = "inline GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`",  `"$LINKER`",  `"$ARCHIVER`");`n"
     }
 }
 
@@ -205,7 +205,7 @@ foreach ($id in $toolchains.Keys)
     $toolchain_contents += $toolchains[$id]["Declaration"]    
 }
 
-$toolchain_contents += "`n}`n`nToolchainProvider* defaultToolchain = &detected_toolchains::${selected_toolchain};`n"
+$toolchain_contents += "`n}`n`ninline ToolchainProvider* defaultToolchain = &detected_toolchains::${selected_toolchain};`n"
 
 Set-Content -Path ($params["BUILD_H_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
 

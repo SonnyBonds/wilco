@@ -122,7 +122,7 @@ bool uuid::operator==(const uuid& other) const {
     return data == other.data;
 }
 
-uuid generateV3(uuid nameSpace, const std::string& name) {
+uuid generateV3(uuid nameSpace, std::string_view name) {
     std::string str;
     memcpy(str.data(), nameSpace.data.data(), 16);
     str.reserve(16 + name.size());

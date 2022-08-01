@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <string_view>
 
 namespace uuid
 {
@@ -19,5 +20,5 @@ namespace uuid
         operator std::string() const;
     };
 
-    uuid generateV3(uuid nameSpace, const std::string& name);
+    uuid generateV3(uuid nameSpace, std::string_view name);
 }
