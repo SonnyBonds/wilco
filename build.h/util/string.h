@@ -229,4 +229,42 @@ inline std::string wrap(std::string_view str, size_t maxLength, size_t indent)
     return result;
 }
 
+inline void replaceFirstInPlace(std::string& input, std::string_view searchString, std::string_view replacementString)
+{
+    size_t pos = input.find(searchString);
+    if(pos != std::string::npos)
+    {
+        input.replace(pos, searchString.size(), replacementString.data(), replacementString.size());
+    }
+}
+
+inline void replaceAllInPlace(std::string& input, std::string_view searchString, std::string_view replacementString)
+{
+    size_t pos = 0;
+    while(pos < input.size())
+    {
+        pos = input.find(searchString, pos);
+        if(pos == std::string::npos)
+        {
+            break;
+        }
+
+        input.replace(pos, searchString.size(), replacementString.data(), replacementString.size());
+        // Avoid infinite loop in case we replace with something containing the search string
+        pos += replacementString.size();
+    }
+}
+
+inline std::string replaceFirst(std::string input, std::string_view searchString, std::string_view replacementString)
+{
+    replaceFirstInPlace(input, searchString, replacementString);
+    return input;
+}
+
+inline std::string replaceAll(std::string input, std::string_view searchString, std::string_view replacementString)
+{
+    replaceAllInPlace(input, searchString, replacementString);
+    return input;
+}
+
 }
