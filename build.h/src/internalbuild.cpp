@@ -27,6 +27,8 @@ DirectBuilder::DirectBuilder()
 
 void DirectBuilder::emit(Environment& env)
 {
+    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+
     {
         auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
 
@@ -37,7 +39,7 @@ void DirectBuilder::emit(Environment& env)
         if(!commands.empty())
         {
             std::cout << "Generator has changed. Rebuilding...";
-            size_t completedCommands = runCommands(commands, 1);
+            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
             int exitCode = 0;
             if(completedCommands == commands.size())
@@ -98,7 +100,6 @@ void DirectBuilder::emit(Environment& env)
         }
         else
         {
-            size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
             std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
             size_t completedCommands = runCommands(commands, maxConcurrentCommands);
 
