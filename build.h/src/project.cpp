@@ -1,6 +1,7 @@
 #include <assert.h>
 
 #include "core/project.h"
+#include "core/eventhandler.h"
 
 Project::Project(std::string name, std::optional<ProjectType> type)
     : name(std::move(name))
@@ -14,6 +15,11 @@ ProjectSettings Project::resolve(StringId configName, OperatingSystem targetOS)
 {
     ProjectSettings result;
     internalResolve(result, type, configName, targetOS, true);
+
+    for(auto eventHandler : EventHandlers::list())
+    {
+        eventHandler->postResolve(result, type, configName, targetOS);
+    }
     return result;
 }
 

@@ -32,18 +32,6 @@ void CompileCommands::emitCommands(std::ostream& stream, const std::filesystem::
 {
     auto resolved = project.resolve(config, OperatingSystem::current());
 
-#if TODO
-    {
-        // Avoiding range-based for loop here since it breaks
-        // if a post processor adds more post processors. 
-        auto postProcessors = resolved[PostProcess];
-        for(size_t i = 0; i < postProcessors.size(); ++i)
-        {
-            postProcessors[i](project, resolved);
-        }
-    }
-#endif
-
     if(!project.type.has_value())
     {
         return;
