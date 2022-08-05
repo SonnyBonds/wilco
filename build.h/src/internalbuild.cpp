@@ -353,7 +353,7 @@ size_t DirectBuilder::runCommands(const std::vector<PendingCommand*>& commands, 
 
     std::cout << "\n" << std::flush;
 
-    return count;
+    return completed;
 }
 
 std::vector<PendingCommand*> DirectBuilder::processCommands(std::vector<PendingCommand>& pendingCommands)
