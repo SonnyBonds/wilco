@@ -6,6 +6,7 @@
 #include <map>
 #include <type_traits>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include "core/os.h"
@@ -182,6 +183,11 @@ struct Property : public PropertyBase
     {
         return _value;
     }
+
+    bool isSet() const
+    {
+        return _set;
+    }
   
 private:
     void applyOverlay(const PropertyBase& other)
@@ -338,4 +344,87 @@ private:
     bool _allowDuplicates = false;
     std::vector<ValueType> _value{};
     std::unordered_set<int, IndexedValueHash, IndexedValueEquals> _duplicateTracker;
+};
+
+template<typename KeyType, typename ValueType>
+struct MapProperty : public PropertyBase
+{
+    MapProperty(PropertyGroup* group)
+        : PropertyBase(group)
+    { }
+
+    MapProperty(const MapProperty& other) = delete;
+    MapProperty(MapProperty&& other) = delete;
+    MapProperty& operator=(const MapProperty& other) = delete;
+    MapProperty& operator=(MapProperty&& other) = delete;
+
+    template<typename T>
+    MapProperty& operator =(T other)
+    {
+        _value.clear();
+        _value.reserve(other.size());
+        for(auto& e : other)
+        {
+            (*this)[e.first] += std::move(e.second);
+        }
+        return *this;
+    }
+
+    MapProperty& operator +=(std::pair<KeyType, ValueType> other) {
+        _value[std::move(other.first)] = std::move(other.second);
+        return *this;
+    }
+
+    MapProperty& operator +=(std::initializer_list<std::pair<KeyType, ValueType>> other) {
+        _value.reserve(_value.size() + other.size());
+        for(auto& e : other)
+        {
+            _value[std::move(e.first)] = std::move(e.second);
+        }
+        return *this;
+    }
+
+    auto begin() const
+    {
+        return _value.begin();
+    }
+
+    auto end() const
+    {
+        return _value.end();
+    }
+
+    ValueType& operator[](const KeyType& key)
+    {
+        return _value[key];
+    }
+
+    ValueType& operator[](KeyType&& key)
+    {
+        return _value[std::move(key)];
+    }
+
+    operator const std::unordered_map<KeyType, ValueType>&() const
+    {
+        return _value;
+    }
+
+    const std::unordered_map<KeyType, ValueType>& value() const
+    {
+        return _value;
+    }
+
+private:
+
+    void applyOverlay(const PropertyBase& other)
+    {
+        auto& otherMapProperty = static_cast<const MapProperty&>(other);
+        _value.reserve(_value.size() + otherMapProperty.value().size());
+        for(auto& e : otherMapProperty)
+        {
+            _value[e.first] = e.second;
+        }
+    }
+
+    std::unordered_map<KeyType, ValueType> _value{};
 };

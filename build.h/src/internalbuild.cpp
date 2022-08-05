@@ -21,95 +21,6 @@ private:
     std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
 };
 
-DirectBuilder::DirectBuilder()
-    : Emitter("build", "Build output binaries.")
-{ }
-
-void DirectBuilder::emit(Environment& env)
-{
-    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
-
-    {
-        auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
-
-        std::vector<PendingCommand> pendingCommands;
-        collectCommands(pendingCommands, *targetPath, *generator, "");
-        auto commands = processCommands(pendingCommands);
-
-        if(!commands.empty())
-        {
-            std::cout << "Generator has changed. Rebuilding...";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
-
-            int exitCode = 0;
-            if(completedCommands == commands.size())
-            {
-                std::cout << "Restarting build.\n\n" << std::flush;
-                std::string argumentString;
-                for(auto& arg : env.cliContext.allArguments)
-                {
-                    argumentString += " " + str::quote(arg);
-                }
-                process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
-                std::cout << "Build restart failed.\n" << std::flush;
-            }
-
-            // TODO: Exit more gracefully?
-            std::exit(EXIT_FAILURE);
-        }
-    }
-
-    auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
-
-    if(selectedConfig)
-    {
-        if(std::find(configs.begin(), configs.end(), *selectedConfig) == configs.end())
-        {
-            throw std::runtime_error("Selected config '" + std::string(*selectedConfig) + "' has not been used in build configuration.");
-        }
-    }
-
-    std::vector<PendingCommand> pendingCommands;
-    for(auto config : configs)
-    {
-        if(selectedConfig && config != *selectedConfig)
-        {
-            continue;
-        }
-        
-        std::string configPrefix = config.empty() ? "" : std::string(config) + ": ";
-
-        pendingCommands.clear();
-
-        for(auto project : projects)
-        {
-            // TODO: This has already been processed separately above, and should
-            // probably not even be part of the main list.
-            if(project->name == "_generator")
-            {
-                continue;
-            }
-            collectCommands(pendingCommands, *targetPath / config.cstr(), *project, config);
-        }
-        auto commands = processCommands(pendingCommands);
-
-        if(commands.empty())
-        {
-            std::cout << configPrefix + "Nothing to do. (Everything up to date.)\n" << std::flush;
-        }
-        else
-        {
-            std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
-
-            std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
-
-            // TODO: Error exit code on failure
-        }
-    }
-}
-
 struct PendingCommand
 {
     std::vector<StringId> inputs;
@@ -123,10 +34,10 @@ struct PendingCommand
     std::future<process::ProcessResult> result;
 };
 
-void DirectBuilder::collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config)
+static void collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
 {
-    auto resolved = project.resolve(config, OperatingSystem::current());
-    resolved.dataDir = root;
+    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
+    auto root = resolved.dataDir;
 
     if(!project.type.has_value())
     {
@@ -230,7 +141,7 @@ void DirectBuilder::collectCommands(std::vector<PendingCommand>& pendingCommands
     }
 }
 
-size_t DirectBuilder::runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands)
+static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands)
 {
     size_t count = 0;
     size_t completed = 0;
@@ -345,7 +256,7 @@ size_t DirectBuilder::runCommands(const std::vector<PendingCommand*>& commands, 
     return completed;
 }
 
-std::vector<PendingCommand*> DirectBuilder::processCommands(std::vector<PendingCommand>& pendingCommands)
+static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>& pendingCommands)
 {
     std::unordered_map<StringId, PendingCommand*> commandMap;
     for(auto& command : pendingCommands)
@@ -490,6 +401,95 @@ std::vector<PendingCommand*> DirectBuilder::processCommands(std::vector<PendingC
     outputCommands.erase(std::remove_if(outputCommands.begin(), outputCommands.end(), [](auto command) { return !command->dirty; }), outputCommands.end());
 
     return outputCommands;
+}
+
+DirectBuilder::DirectBuilder()
+    : Emitter("build", "Build output binaries.")
+{ }
+
+void DirectBuilder::emit(Environment& env)
+{
+    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+
+    {
+        auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
+
+        std::vector<PendingCommand> pendingCommands;
+        collectCommands(pendingCommands, *targetPath, *generator, "");
+        auto commands = processCommands(pendingCommands);
+
+        if(!commands.empty())
+        {
+            std::cout << "Generator has changed. Rebuilding...";
+            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
+
+            int exitCode = 0;
+            if(completedCommands == commands.size())
+            {
+                std::cout << "Restarting build.\n\n" << std::flush;
+                std::string argumentString;
+                for(auto& arg : env.cliContext.allArguments)
+                {
+                    argumentString += " " + str::quote(arg);
+                }
+                process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
+                std::cout << "Build restart failed.\n" << std::flush;
+            }
+
+            // TODO: Exit more gracefully?
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
+    auto projects = env.collectProjects();
+    auto configs = env.collectConfigs();
+
+    if(selectedConfig)
+    {
+        if(std::find(configs.begin(), configs.end(), *selectedConfig) == configs.end())
+        {
+            throw std::runtime_error("Selected config '" + std::string(*selectedConfig) + "' has not been used in build configuration.");
+        }
+    }
+
+    std::vector<PendingCommand> pendingCommands;
+    for(auto config : configs)
+    {
+        if(selectedConfig && config != *selectedConfig)
+        {
+            continue;
+        }
+        
+        std::string configPrefix = config.empty() ? "" : std::string(config) + ": ";
+
+        pendingCommands.clear();
+
+        for(auto project : projects)
+        {
+            // TODO: This has already been processed separately above, and should
+            // probably not even be part of the main list.
+            if(project->name == "_generator")
+            {
+                continue;
+            }
+            collectCommands(pendingCommands, *targetPath / config.cstr(), *project, config);
+        }
+        auto commands = processCommands(pendingCommands);
+
+        if(commands.empty())
+        {
+            std::cout << configPrefix + "Nothing to do. (Everything up to date.)\n" << std::flush;
+        }
+        else
+        {
+            std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
+            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
+
+            std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
+
+            // TODO: Error exit code on failure
+        }
+    }
 }
 
 DirectBuilder DirectBuilder::instance;

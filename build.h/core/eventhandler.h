@@ -21,6 +21,6 @@ struct EventHandler
     EventHandler(const EventHandler& other) = delete;
     EventHandler& operator=(const EventHandler& other) = delete;
 
-    virtual void postResolve(ProjectSettings& resolvedSettings, std::optional<ProjectType> type, StringId configName, OperatingSystem targetOS)
+    virtual void postResolve(const Project& project, ProjectSettings& resolvedSettings, std::optional<ProjectType> type, StringId configName, OperatingSystem targetOS)
     { }
 };

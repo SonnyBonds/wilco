@@ -35,9 +35,4 @@ public:
     DirectBuilder();
 
     virtual void emit(Environment& env) override;
-
-private:
-    static void collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& root, Project& project, StringId config);
-    static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands);
-    static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>& pendingCommands);
 };

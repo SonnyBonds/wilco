@@ -11,19 +11,20 @@ Project::Project(std::string name, std::optional<ProjectType> type)
 Project::~Project()
 { }
 
-ProjectSettings Project::resolve(StringId configName, OperatingSystem targetOS)
+ProjectSettings Project::resolve(std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const
 {
     ProjectSettings result;
+    result.dataDir = suggestedDataDir;
     internalResolve(result, type, configName, targetOS, true);
 
     for(auto eventHandler : EventHandlers::list())
     {
-        eventHandler->postResolve(result, type, configName, targetOS);
+        eventHandler->postResolve(*this, result, type, configName, targetOS);
     }
     return result;
 }
 
-std::filesystem::path Project::calcOutputPath(ProjectSettings& resolvedSettings)
+std::filesystem::path Project::calcOutputPath(ProjectSettings& resolvedSettings) const
 {
     if(!resolvedSettings.output.path.value().empty())
     {
@@ -39,7 +40,7 @@ std::filesystem::path Project::calcOutputPath(ProjectSettings& resolvedSettings)
     return resolvedSettings.output.dir.value() / (resolvedSettings.output.prefix.value() + stem + resolvedSettings.output.suffix.value() + resolvedSettings.output.extension.value());
 }
 
-void Project::internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local)
+void Project::internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local) const
 {
     for(auto& link : links)
     {

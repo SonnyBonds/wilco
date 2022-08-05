@@ -28,9 +28,9 @@ void CompileCommands::emit(Environment& env)
     stream << "\n]\n";
 }
 
-void CompileCommands::emitCommands(std::ostream& stream, const std::filesystem::path& root, Project& project, StringId config, bool first)
+void CompileCommands::emitCommands(std::ostream& stream, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool first)
 {
-    auto resolved = project.resolve(config, OperatingSystem::current());
+    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
 
     if(!project.type.has_value())
     {

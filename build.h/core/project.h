@@ -61,6 +61,15 @@ struct ProjectSettings : public PropertyBag
         return static_cast<ExtensionType&>(extensionEntry->get());
     }
 
+    template<typename ExtensionType>
+    bool hasExt() const
+    {
+        // TODO: Better key, maybe? hash_code doesn't have to be unique.
+        auto key = typeid(ExtensionType).hash_code();
+
+        return _extensions.find(key) != _extensions.end();
+    }
+
     ProjectSettings& operator +=(const ProjectSettings& other);
 
     ProjectSettings operator+(const ProjectSettings& other) const;
@@ -124,7 +133,7 @@ struct Project : public ProjectSettings
     Project(const Project& other) = delete;
     ~Project();
 
-    ProjectSettings resolve(StringId configName, OperatingSystem targetOS);
+    ProjectSettings resolve(std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const;
 
     template<typename... Selectors>
     ProjectSettings& operator()(ConfigSelector selector, Selectors... selectors)
@@ -132,8 +141,8 @@ struct Project : public ProjectSettings
         return configs[(selector + ... + ConfigSelector(selectors))];
     }
 
-    std::filesystem::path calcOutputPath(ProjectSettings& resolvedSettings);
+    std::filesystem::path calcOutputPath(ProjectSettings& resolvedSettings) const;
 
 private:
-    void internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local);
+    void internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local) const;
 };

@@ -82,72 +82,10 @@ struct NinjaWriter
     }
 };
 
-NinjaEmitter NinjaEmitter::instance;
-
-NinjaEmitter::NinjaEmitter()
-    : Emitter("ninja", "Generate ninja build files.")
+static std::string emitProject(const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
 {
-}
-
-void NinjaEmitter::emit(Environment& env)
-{
-    auto projects = env.collectProjects();
-
-    std::vector<std::filesystem::path> outputs;
-    auto configs = env.collectConfigs();
-    for(auto& config : configs)
-    {
-        std::filesystem::path configTargetPath = *targetPath;
-        if(!config.empty())
-        {
-            configTargetPath = configTargetPath / config.cstr();
-        }
-        std::filesystem::create_directories(configTargetPath);
-
-        auto outputFile = configTargetPath / "build.ninja";
-        NinjaWriter ninja(outputFile);
-
-        for(auto project : projects)
-        {
-            auto outputName = emitProject(configTargetPath, *project, config, false);
-            if(!outputName.empty())
-            {
-                ninja.subninja(outputName);
-                outputs.push_back(outputName);
-            }
-        }
-
-        std::vector<std::filesystem::path> generatorDependencies;
-        for(auto& project : projects)
-        {
-            for(auto& entry : project->configs)
-            {
-#if TODO
-                generatorDependencies += entry.second.generatorDependencies;
-#endif
-            }
-        }
-
-        auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
-        outputs.push_back("build.ninja");
-        generatorDependencies.push_back(buildOutput);
-
-        std::string argumentString;
-        for(auto& arg : env.cliContext.allArguments)
-        {
-            argumentString += " " + str::quote(arg);
-        }
-        
-        generator->commands += CommandEntry{ str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString, generatorDependencies, outputs, env.startupDir, {}, "Running build generator." };
-        auto outputName = emitProject(configTargetPath, *generator, "", true);
-        ninja.subninja(outputName);
-    }
-}
-
-std::string NinjaEmitter::emitProject(const std::filesystem::path& root, Project& project, StringId config, bool generator)
-{
-    auto resolved = project.resolve(config, OperatingSystem::current());
-    resolved.dataDir = root;
+    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
+    auto root = resolved.dataDir;
 
     if(!project.type.has_value())
     {
@@ -258,5 +196,67 @@ std::string NinjaEmitter::emitProject(const std::filesystem::path& root, Project
     }
 
     return ninjaName;
+}
+
+NinjaEmitter NinjaEmitter::instance;
+
+NinjaEmitter::NinjaEmitter()
+    : Emitter("ninja", "Generate ninja build files.")
+{
+}
+
+void NinjaEmitter::emit(Environment& env)
+{
+    auto projects = env.collectProjects();
+
+    std::vector<std::filesystem::path> outputs;
+    auto configs = env.collectConfigs();
+    for(auto& config : configs)
+    {
+        std::filesystem::path configTargetPath = *targetPath;
+        if(!config.empty())
+        {
+            configTargetPath = configTargetPath / config.cstr();
+        }
+        std::filesystem::create_directories(configTargetPath);
+
+        auto outputFile = configTargetPath / "build.ninja";
+        NinjaWriter ninja(outputFile);
+
+        for(auto project : projects)
+        {
+            auto outputName = emitProject(configTargetPath, *project, config, false);
+            if(!outputName.empty())
+            {
+                ninja.subninja(outputName);
+                outputs.push_back(outputName);
+            }
+        }
+
+        std::vector<std::filesystem::path> generatorDependencies;
+        for(auto& project : projects)
+        {
+            for(auto& entry : project->configs)
+            {
+#if TODO
+                generatorDependencies += entry.second.generatorDependencies;
+#endif
+            }
+        }
+
+        auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
+        outputs.push_back("build.ninja");
+        generatorDependencies.push_back(buildOutput);
+
+        std::string argumentString;
+        for(auto& arg : env.cliContext.allArguments)
+        {
+            argumentString += " " + str::quote(arg);
+        }
+        
+        generator->commands += CommandEntry{ str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString, generatorDependencies, outputs, env.startupDir, {}, "Running build generator." };
+        auto outputName = emitProject(configTargetPath, *generator, "", true);
+        ninja.subninja(outputName);
+    }
 }
 

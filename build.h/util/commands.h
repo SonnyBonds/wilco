@@ -4,6 +4,7 @@
 #include <string>
 
 #include "modules/command.h"
+#include "util/string.h"
 
 namespace commands
 {

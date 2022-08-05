@@ -22,7 +22,4 @@ public:
     NinjaEmitter();
 
     virtual void emit(Environment& env) override;
-
-private:
-    static std::string emitProject(const std::filesystem::path& root, Project& project, StringId config, bool generator);
 };
