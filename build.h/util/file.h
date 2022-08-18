@@ -29,7 +29,6 @@ inline std::string read(std::filesystem::path path)
 
 inline bool write(std::filesystem::path path, const std::string& data)
 {
-    bool upToDate = false;
     std::error_code ec;
     size_t fileSize = std::filesystem::file_size(path, ec);
     if(!ec && fileSize == data.size())
@@ -61,7 +60,7 @@ inline bool write(std::filesystem::path path, const std::string& data)
     {
         std::filesystem::create_directories(path.parent_path());
     }
-    std::ofstream stream(path);
+    std::ofstream stream(path, std::ios::trunc | std::ios::binary);
     stream.write(data.data(), data.size());
     return true;
 }
