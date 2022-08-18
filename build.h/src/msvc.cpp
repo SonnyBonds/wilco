@@ -171,7 +171,7 @@ static std::vector<ProjectReference> collectDependencyReferences(const Project& 
     return result;
 }
 
-static std::string emitProject(std::ostream& solutionStream, const std::filesystem::path& root, Project& project, std::vector<StringId> configs)
+static std::string emitProject(std::ostream& solutionStream, const std::filesystem::path& suggestedDataDir, Project& project, std::vector<StringId> configs)
 {
     struct ResolvedConfig
     {
@@ -182,16 +182,18 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
     std::vector<ResolvedConfig> resolvedConfigs;
     if(configs.empty())
     {
-        resolvedConfigs.push_back({"", project.resolve("", OperatingSystem::current())});
+        resolvedConfigs.push_back({"", project.resolve(suggestedDataDir, "", OperatingSystem::current())});
     }
     else
     {
         resolvedConfigs.reserve(configs.size());
         for(auto& config : configs)
         {
-            resolvedConfigs.push_back({config, project.resolve(config, OperatingSystem::current())});
+            resolvedConfigs.push_back({config, project.resolve(suggestedDataDir, config, OperatingSystem::current())});
         }
     }
+
+    auto root = resolvedConfigs.front().properties.dataDir;
 
 #if TODO
     {

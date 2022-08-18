@@ -11,7 +11,6 @@
 #include "core/project.h"
 #include "core/stringid.h"
 #include "modules/command.h"
-#include "modules/postprocess.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
 #include "util/string.h"
