@@ -195,18 +195,6 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
 
     auto root = resolvedConfigs.front().properties.dataDir;
 
-#if TODO
-    {
-        // Avoiding range-based for loop here since it breaks
-        // if a post processor adds more post processors. 
-        auto postProcessors = resolved[PostProcess];
-        for(size_t i = 0; i < postProcessors.size(); ++i)
-        {
-            postProcessors[i](project, resolved);
-        }
-    }
-#endif
-
     if(!project.type.has_value())
     {
         return {};
@@ -236,6 +224,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
             {"ToolsVersion", "16.0"}, 
             {"xmlns", "http://schemas.microsoft.com/developer/msbuild/2003"}
         });
+
         {
             auto tag = xml.tag("ItemGroup", {{"Label", "ProjectConfigurations"}});
             for(auto& config : configs)
@@ -335,6 +324,8 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     defines += define + ";";
                 }
                 xml.shortTag("PreprocessorDefinitions", {}, defines + "%(PreprocessorDefinitions)");
+                    
+                xml.shortTag("MultiProcessorCompilation", {}, "true");
 
                 std::map<Feature, std::string> featureMap = {
                     { feature::Cpp11, "<LanguageStandard>stdcpp11</LanguageStandard>"},
@@ -417,8 +408,12 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                 {
                     continue;
                 }
-
-                xml.shortTag("ClCompile", {{"Include", (pathOffset / input.path).string()}});
+                
+                auto tag = xml.tag("ClCompile", {{"Include", (pathOffset / input.path).string()}});
+                std::string objPath = input.path.string();
+                str::replaceAllInPlace(objPath, ":", "_");
+                str::replaceAllInPlace(objPath, "..", "__");
+                xml.shortTag("ObjectFileName", {}, "$(IntDir)\\" + objPath + ".obj");
             }
         }
 
@@ -453,6 +448,65 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         }
     }
 
+    SimpleXmlWriter filtersXml(root / (vcprojName + ".filters"));
+    {
+        auto tag = filtersXml.tag("Project", {
+            {"ToolsVersion", "16.0"},
+            {"xmlns", "http://schemas.microsoft.com/developer/msbuild/2003"}
+        });
+
+        std::set<std::filesystem::path> existingFilters;
+        {
+            auto tag = filtersXml.tag("ItemGroup");
+
+            for (auto& input : resolvedConfigs.front().properties.files)
+            {
+                auto filterPath = input.path.lexically_normal();
+                while (filterPath.has_parent_path() && filterPath.has_relative_path())
+                {
+                    filterPath = filterPath.parent_path();
+                    if (!existingFilters.insert(filterPath).second)
+                    {
+                        continue;
+                    }
+                    auto filterPathStr = filterPath.string();
+                    auto tag = filtersXml.tag("Filter", { {"Include", filterPathStr} });
+                    filtersXml.shortTag("UniqueIdentifier", {}, uuidStr(uuid::generateV3(namespaceUuid, filterPathStr)));
+                }
+            }
+        }
+
+        {
+            auto tag = filtersXml.tag("ItemGroup");
+            for (auto& input : resolvedConfigs.front().properties.files)
+            {
+                auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
+                if (language != lang::C && language != lang::Cpp)
+                {
+                    continue;
+                }
+
+                auto tag = filtersXml.tag("ClCompile", { {"Include", (pathOffset / input.path).string()} });
+                filtersXml.shortTag("Filter", {}, input.path.lexically_normal().parent_path().string());
+            }
+        }
+
+        {
+            auto tag = filtersXml.tag("ItemGroup");
+            for (auto& input : resolvedConfigs.front().properties.files)
+            {
+                auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
+                if (language == lang::C || language == lang::Cpp)
+                {
+                    continue;
+                }
+
+                auto tag = filtersXml.tag("None", { {"Include", (pathOffset / input.path).string()} });
+                filtersXml.shortTag("Filter", {}, input.path.lexically_normal().parent_path().string());
+            }
+        }
+    }
+
     solutionStream << "Project(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"" << project.name << "\", \"" << vcprojName << "\", \"" << projectUuid << "\"\n";
     if(!dependencies.empty())
     {
@@ -478,10 +532,11 @@ void MsvcEmitter::emit(Environment& env)
         std::string argumentString;
         for(auto& arg : env.cliContext.allArguments)
         {
-            argumentString += " " + str::quote(arg);
+            argumentString += " " + str::quote(arg);    
         }
 
         auto buildPath = env.configurationFile.parent_path() / buildOutput;
+
         CommandEntry runCommand;
         runCommand.inputs = { buildPath };
         runCommand.command = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote(buildPath.string()) + argumentString;
