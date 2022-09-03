@@ -21,8 +21,6 @@
 
 #include "util/cli.h"
 #include "util/commands.h"
-#include "util/file.h"
-#include "util/glob.h"
 #include "util/hash.h"
 #include "util/main.h"
 #include "util/process.h"

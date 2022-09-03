@@ -19,7 +19,6 @@
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
 #include "util/cli.h"
-#include "util/file.h"
 #include "util/process.h"
 #include "util/string.h"
 

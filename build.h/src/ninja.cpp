@@ -82,9 +82,9 @@ struct NinjaWriter
     }
 };
 
-static std::string emitProject(const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
 {
-    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
+    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
     auto root = resolved.dataDir;
 
     if(!project.type.has_value())
@@ -225,7 +225,7 @@ void NinjaEmitter::emit(Environment& env)
 
         for(auto project : projects)
         {
-            auto outputName = emitProject(configTargetPath, *project, config, false);
+            auto outputName = emitProject(env, configTargetPath, *project, config, false);
             if(!outputName.empty())
             {
                 ninja.subninja(outputName);
@@ -233,20 +233,12 @@ void NinjaEmitter::emit(Environment& env)
             }
         }
 
-        std::vector<std::filesystem::path> generatorDependencies;
-        for(auto& project : projects)
-        {
-            for(auto& entry : project->configs)
-            {
-#if TODO
-                generatorDependencies += entry.second.generatorDependencies;
-#endif
-            }
-        }
+        std::vector<std::filesystem::path> configurationDependencies;
+        configurationDependencies.insert(configurationDependencies.end(), env.configurationDependencies.begin(), env.configurationDependencies.end());
 
         auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
         outputs.push_back("build.ninja");
-        generatorDependencies.push_back(buildOutput);
+        configurationDependencies.push_back(buildOutput);
 
         std::string argumentString;
         for(auto& arg : env.cliContext.allArguments)
@@ -254,8 +246,8 @@ void NinjaEmitter::emit(Environment& env)
             argumentString += " " + str::quote(arg);
         }
         
-        generator->commands += CommandEntry{ str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString, generatorDependencies, outputs, env.startupDir, {}, "Running build generator." };
-        auto outputName = emitProject(configTargetPath, *generator, "", true);
+        generator->commands += CommandEntry{ str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString, configurationDependencies, outputs, env.startupDir, {}, "Running build generator." };
+        auto outputName = emitProject(env, configTargetPath, *generator, "", true);
         ninja.subninja(outputName);
     }
 }

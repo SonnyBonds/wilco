@@ -1,5 +1,7 @@
 #include "core/environment.h"
 #include "util/process.h"
+#include "fileutil.h"
+#include <fstream>
 
 Environment::Environment(cli::Context& cliContext)
     : defaults(createProject())
@@ -77,6 +79,59 @@ std::vector<StringId> Environment::collectConfigs()
     }
 
     return result;
+}
+
+std::string Environment::readFile(std::filesystem::path path)
+{
+    addConfigurationDependency(path);
+    return ::readFile(path);
+}
+
+bool Environment::writeFile(std::filesystem::path path, const std::string& data)
+{
+    return ::writeFile(path, data);
+}
+
+std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem::path& path, bool recurse)
+{
+    std::vector<std::filesystem::path> result;
+
+    addConfigurationDependency(path);
+
+    if(!std::filesystem::exists(path))
+    {
+        return result;
+    }
+
+    auto scan = [&](auto&& iterator)
+    {
+        for(auto entry : iterator)
+        {
+            if(entry.is_directory()) {
+                addConfigurationDependency(path);
+                continue;
+            }
+            if(!entry.is_regular_file()) continue;
+
+            result.push_back(entry.path());
+        }
+    };
+
+    if(recurse)
+    {
+        scan(std::filesystem::recursive_directory_iterator(path));
+    }
+    else
+    {
+        scan(std::filesystem::directory_iterator(path));
+    }
+
+    return result;
+}
+
+void Environment::addConfigurationDependency(std::filesystem::path path)
+{
+    configurationDependencies.insert(path);    
 }
 
 void Environment::collectOrderedProjects(Project* project, std::set<Project*>& collectedProjects, std::vector<Project*>& orderedProjects)

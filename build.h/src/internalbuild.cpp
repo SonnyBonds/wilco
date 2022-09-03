@@ -34,9 +34,27 @@ struct PendingCommand
     std::future<process::ProcessResult> result;
 };
 
-static void collectCommands(std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
+static std::string readFile(std::filesystem::path path)
 {
-    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
+    std::ifstream stream(path);
+    if(!stream)
+    {
+        return {};
+    }
+    
+    stream.seekg(0, std::ios_base::end);
+    size_t size = stream.tellg();
+    stream.seekg(0, std::ios_base::beg);
+
+    std::string buffer;
+    buffer.resize(size);
+    stream.read(buffer.data(), size);
+    return buffer;
+}
+
+static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
+{
+    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
     auto root = resolved.dataDir;
 
     if(!project.type.has_value())
@@ -74,7 +92,7 @@ static void collectCommands(std::vector<PendingCommand>& pendingCommands, const 
     prologue += "cd \"$cwd\" && ";
 
     auto cmdFilePath = root / (project.name + ".cmdlines");
-    auto cmdData = file::read(cmdFilePath);
+    auto cmdData = readFile(cmdFilePath);
     std::unordered_map<StringId, std::string_view> cmdLines;
 
     auto cmdDataView = std::string_view(cmdData);
@@ -367,7 +385,7 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
 
         if(!command->depFile.empty())
         {
-            auto data = file::read(command->depFile.cstr());
+            auto data = readFile(command->depFile.cstr());
             if(data.empty())
             {
                 // LOG std::cout << "dirty: \"" << command->depFile << "\" did not exist.\n";
@@ -415,7 +433,7 @@ void DirectBuilder::emit(Environment& env)
         auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
 
         std::vector<PendingCommand> pendingCommands;
-        collectCommands(pendingCommands, *targetPath, *generator, "");
+        collectCommands(env, pendingCommands, *targetPath, *generator, "");
         auto commands = processCommands(pendingCommands);
 
         if(!commands.empty())
@@ -472,7 +490,7 @@ void DirectBuilder::emit(Environment& env)
             {
                 continue;
             }
-            collectCommands(pendingCommands, *targetPath / config.cstr(), *project, config);
+            collectCommands(env, pendingCommands, *targetPath / config.cstr(), *project, config);
         }
         auto commands = processCommands(pendingCommands);
 

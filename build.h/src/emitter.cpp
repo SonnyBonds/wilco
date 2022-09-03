@@ -1,5 +1,5 @@
 #include "core/emitter.h"
-#include "util/glob.h"
+#include "util/commands.h"
 
 static std::vector<Emitter*>& getEmitters()
 {
@@ -41,7 +41,7 @@ std::pair<Project*, std::filesystem::path> Emitter::createGeneratorProject(Envir
     project.includePaths += env.buildHDir;
     project.output.path = tempOutput;
     project.files += env.configurationFile;
-    project.files += glob::files(env.buildHDir / "src");
+    project.files += env.listFiles(env.buildHDir / "src");
     project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
     return { &project, buildOutput };

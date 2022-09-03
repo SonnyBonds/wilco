@@ -11,7 +11,7 @@ Project::Project(std::string name, std::optional<ProjectType> type)
 Project::~Project()
 { }
 
-ProjectSettings Project::resolve(std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const
+ProjectSettings Project::resolve(Environment& env, std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const
 {
     ProjectSettings result;
     result.dataDir = suggestedDataDir;
@@ -19,7 +19,7 @@ ProjectSettings Project::resolve(std::filesystem::path suggestedDataDir, StringI
 
     for(auto eventHandler : EventHandlers::list())
     {
-        eventHandler->postResolve(*this, result, type, configName, targetOS);
+        eventHandler->postResolve(env, *this, result, type, configName, targetOS);
     }
     return result;
 }

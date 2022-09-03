@@ -8,7 +8,6 @@
 #include "core/property.h"
 #include "modules/feature.h"
 #include "util/commands.h"
-#include "util/file.h"
 
 struct VerbatimPlistValue
 {
@@ -60,3 +59,23 @@ namespace extensions
         ListProperty<BundleEntry> contents{this};
     };
 }
+
+#if TODO
+inline OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
+{
+    OptionCollection result;
+
+    if(!std::filesystem::exists(path))
+    {
+        return result;
+    }
+
+    for(auto entry : std::filesystem::recursive_directory_iterator(path))
+    {            
+        if(!entry.is_regular_file()) continue;
+        result[BundleContents] += BundleEntry{ entry.path(), "Contents/Resources/" / subPath / std::filesystem::relative(entry, path) };
+    }
+
+    return result;
+}
+#endif

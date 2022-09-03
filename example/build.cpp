@@ -13,12 +13,12 @@ void configure(Environment& env)
     env.defaults(Public, release).features += feature::Optimize;
     
     Project& helloPrinter = env.createProject("HelloLibrary", StaticLib);
-    helloPrinter.files += glob::files("hellolib");
+    helloPrinter.files += env.listFiles("hellolib");
     helloPrinter.defines += "MESSAGE=" + str::quote(*printerMessage);
     helloPrinter(Public).includePaths += "hellolib";
 
     Project& hello = env.createProject("Hello", Executable);
     hello.links += &helloPrinter;
-    hello.files += glob::files("helloapp");
+    hello.files += env.listFiles("helloapp");
 
 }

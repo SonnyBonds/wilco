@@ -15,6 +15,7 @@
 #include "modules/toolchain.h"
 #include "modules/sourcefile.h"
 
+struct Environment;
 struct Project;
 
 struct ProjectSettings : public PropertyBag
@@ -25,7 +26,6 @@ struct ProjectSettings : public PropertyBag
     ListProperty<std::filesystem::path> includePaths{this};
     ListProperty<std::filesystem::path> libPaths{this};
     ListProperty<SourceFile> files{this};
-    ListProperty<std::filesystem::path> generatorDependencies{this};
     ListProperty<std::filesystem::path> libs{this};
     ListProperty<std::string> defines{this};
     ListProperty<Feature> features{this};
@@ -133,7 +133,7 @@ struct Project : public ProjectSettings
     Project(const Project& other) = delete;
     ~Project();
 
-    ProjectSettings resolve(std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const;
+    ProjectSettings resolve(Environment& env, std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const;
 
     template<typename... Selectors>
     ProjectSettings& operator()(ConfigSelector selector, Selectors... selectors)

@@ -21,16 +21,16 @@ void CompileCommands::emit(Environment& env)
     {
         for(auto project : projects)
         {
-            emitCommands(stream, *targetPath.value, *project, config, false);
+            emitCommands(env, stream, *targetPath.value, *project, config, false);
         }
     }
     
     stream << "\n]\n";
 }
 
-void CompileCommands::emitCommands(std::ostream& stream, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool first)
+void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool first)
 {
-    auto resolved = project.resolve(suggestedDataDir, config, OperatingSystem::current());
+    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
 
     if(!project.type.has_value())
     {

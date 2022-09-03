@@ -1,7 +1,7 @@
 #include "emitters/msvc.h"
 #include "util/commands.h"
-#include "util/file.h"
 #include "util/uuid.h"
+#include "fileutil.h"
 #include <sstream>
 
 static uuid::uuid namespaceUuid(0x8a168540, 0x2d194237, 0x99da3cc8, 0xae8b0d4e);
@@ -51,7 +51,7 @@ struct SimpleXmlWriter
 
     ~SimpleXmlWriter()
     {
-        file::write(path, stream.str());
+        writeFile(path, stream.str());
     }
 
     void escape(std::string& input)
@@ -171,7 +171,7 @@ static std::vector<ProjectReference> collectDependencyReferences(const Project& 
     return result;
 }
 
-static std::string emitProject(std::ostream& solutionStream, const std::filesystem::path& suggestedDataDir, Project& project, std::vector<StringId> configs)
+static std::string emitProject(Environment& env, std::ostream& solutionStream, const std::filesystem::path& suggestedDataDir, Project& project, std::vector<StringId> configs)
 {
     struct ResolvedConfig
     {
@@ -182,14 +182,14 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
     std::vector<ResolvedConfig> resolvedConfigs;
     if(configs.empty())
     {
-        resolvedConfigs.push_back({"", project.resolve(suggestedDataDir, "", OperatingSystem::current())});
+        resolvedConfigs.push_back({"", project.resolve(env, suggestedDataDir, "", OperatingSystem::current())});
     }
     else
     {
         resolvedConfigs.reserve(configs.size());
         for(auto& config : configs)
         {
-            resolvedConfigs.push_back({config, project.resolve(suggestedDataDir, config, OperatingSystem::current())});
+            resolvedConfigs.push_back({config, project.resolve(env, suggestedDataDir, config, OperatingSystem::current())});
         }
     }
 
@@ -566,7 +566,7 @@ void MsvcEmitter::emit(Environment& env)
 
     for(auto project : projects)
     {
-        emitProject(solutionStream, *targetPath, *project, configs);
+        emitProject(env, solutionStream, *targetPath, *project, configs);
     }
 
     solutionStream << "Global\n";
@@ -599,5 +599,5 @@ void MsvcEmitter::emit(Environment& env)
     solutionStream << "\tEndGlobalSection\n";
     solutionStream << "EndGlobal\n";
 
-    file::write(*targetPath / (solutionName + ".sln"), solutionStream.str());
+    writeFile(*targetPath / (solutionName + ".sln"), solutionStream.str());
 }

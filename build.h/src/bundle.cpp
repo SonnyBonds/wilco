@@ -1,4 +1,5 @@
 #include "core/eventhandler.h"
+#include "core/environment.h"
 #include "core/project.h"
 #include "modules/bundle.h"
 
@@ -38,7 +39,7 @@ static std::string generatePlist(const extensions::MacOSBundle& bundleSettings)
 
 struct BundleEventHandler : public EventHandler
 {
-    void postResolve(const Project& project, ProjectSettings& resolvedSettings, std::optional<ProjectType> type, StringId configName, OperatingSystem targetOS) override
+    void postResolve(Environment& env, const Project& project, ProjectSettings& resolvedSettings, std::optional<ProjectType> type, StringId configName, OperatingSystem targetOS) override
     {
         if(targetOS != MacOS || !resolvedSettings.hasExt<extensions::MacOSBundle>())
         {
@@ -80,7 +81,7 @@ struct BundleEventHandler : public EventHandler
 
         std::filesystem::path dataDir = resolvedSettings.dataDir;
         auto plistPath = dataDir / project.name / "Info.plist";
-        file::write(plistPath, generatePlist(bundleExt));
+        env.writeFile(plistPath, generatePlist(bundleExt));
 
         resolvedSettings.commands += commands::copy(projectOutput, bundleOutput / "Contents/MacOS" / bundleBinary);
         resolvedSettings.commands += commands::copy(plistPath, bundleOutput / "Contents/Info.plist");
