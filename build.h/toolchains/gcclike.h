@@ -17,6 +17,13 @@ namespace extensions
         ListProperty<StringId> compilerFlags{this};
         ListProperty<StringId> linkerFlags{this};
         ListProperty<StringId> archiverFlags{this};
+    
+        struct Pch : public PropertyGroup
+        {
+            Property<std::filesystem::path> build{ this };
+            Property<std::filesystem::path> use{ this };
+            ListProperty<std::filesystem::path> ignoredFiles{ this };
+        } pch{ this };
     };
 }
 

@@ -218,8 +218,9 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
     auto dataDir = resolvedSettings.dataDir;
 
-    auto buildPch = resolvedSettings.buildPch;
-    auto importPch = resolvedSettings.importPch;
+    const auto& gccExt = resolvedSettings.ext<extensions::Gcc>();
+    const auto& buildPch = gccExt.pch.build;
+    const auto& importPch = gccExt.pch.use;
 
     // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
     if(!buildPch.value().empty())

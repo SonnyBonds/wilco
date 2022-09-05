@@ -10,6 +10,23 @@
 #include "modules/toolchain.h"
 #include "util/string.h"
 
+namespace extensions
+{
+    struct Msvc : public PropertyBag
+    {
+        ListProperty<StringId> compilerFlags{ this };
+        ListProperty<StringId> linkerFlags{ this };
+        ListProperty<StringId> archiverFlags{ this };
+
+        struct Pch : public PropertyGroup
+        {
+            Property<std::filesystem::path> header{ this };
+            Property<std::filesystem::path> source{ this };
+            ListProperty<std::filesystem::path> ignoredFiles{ this };
+        } pch{ this };
+    };
+}
+
 struct ClToolchainProvider : public ToolchainProvider
 {
     const std::string compiler;

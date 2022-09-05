@@ -115,6 +115,11 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
         break;
     }
 
+    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().compilerFlags)
+    {
+        flags += " " + std::string(flag);
+    }
+
     return flags;
 }
 
@@ -141,6 +146,11 @@ std::string ClToolchainProvider::getLinkerFlags(Project& project, ProjectSetting
             flags += " \"" + input + "\"";
         }
         break;
+    }
+
+    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().compilerFlags)
+    {
+        flags += " " + std::string(flag);
     }
 
     return flags;
@@ -178,8 +188,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
     auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
 
-    auto buildPch = resolvedSettings.buildPch;
-    auto importPch = resolvedSettings.importPch;
+    const auto& msvcExt = resolvedSettings.ext<extensions::Msvc>();
     // TODO: PCH
 
     std::vector<std::filesystem::path> linkerInputs;

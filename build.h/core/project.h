@@ -30,8 +30,6 @@ struct ProjectSettings : public PropertyBag
     ListProperty<std::string> defines{this};
     ListProperty<Feature> features{this};
     ListProperty<std::string> frameworks{this};
-    Property<std::filesystem::path> buildPch{this};
-    Property<std::filesystem::path> importPch{this};
     Property<std::filesystem::path> dataDir{this};
     Property<const ToolchainProvider*> toolchain{this};
 

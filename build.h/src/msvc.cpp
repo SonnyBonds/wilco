@@ -327,6 +327,13 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     
                 xml.shortTag("MultiProcessorCompilation", {}, "true");
 
+                auto& pchHeader = config.properties.ext<extensions::Msvc>().pch.header;
+                if (pchHeader.isSet())
+                {
+                    xml.shortTag("PrecompiledHeader", {}, "Use");
+                    xml.shortTag("PrecompiledHeaderFile", {}, pchHeader.value().filename().string());
+                }
+
                 std::map<Feature, std::string> featureMap = {
                     { feature::Cpp11, "<LanguageStandard>stdcpp11</LanguageStandard>"},
                     { feature::Cpp14, "<LanguageStandard>stdcpp14</LanguageStandard>"},
@@ -344,15 +351,37 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     }
                 }
 
+                std::string extraFlags;
+                for (auto& flag : config.properties.ext<extensions::Msvc>().compilerFlags)
+                {
+                    extraFlags += std::string(flag) + " ";
+                }
+                xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
+
                 // TODO: Convert more features to project option
             }
 
+            if(project.type == StaticLib)
             {
                 auto tag = xml.tag("Lib");
-            }
 
+                std::string extraFlags;
+                for (auto& flag : config.properties.ext<extensions::Msvc>().archiverFlags)
+                {
+                    extraFlags += std::string(flag) + " ";
+                }
+                xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
+            }
+            else
             {
                 auto tag = xml.tag("Link");
+
+                std::string extraFlags;
+                for (auto& flag : config.properties.ext<extensions::Msvc>().compilerFlags)
+                {
+                    extraFlags += std::string(flag) + " ";
+                }
+                xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
             }
         
             if(!config.properties.commands.value().empty())
@@ -400,6 +429,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         }
 
         {
+            std::set<std::string> objFiles;
             auto tag = xml.tag("ItemGroup");
             for(auto& input : resolvedConfigs.front().properties.files)
             {
@@ -410,10 +440,29 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 }
                 
                 auto tag = xml.tag("ClCompile", {{"Include", (pathOffset / input.path).string()}});
-                std::string objPath = input.path.string();
-                str::replaceAllInPlace(objPath, ":", "_");
-                str::replaceAllInPlace(objPath, "..", "__");
-                xml.shortTag("ObjectFileName", {}, "$(IntDir)\\" + objPath + ".obj");
+                // Disambiguate files with the same name. Don't do this for all files, because msbuild
+                // only compiles files in parallel that have the exact same compile settings, and specific obj output
+                // will cause them to differ.
+                if (!objFiles.insert(input.path.filename().string()).second)
+                {
+                    std::string objPath = input.path.string();
+                    str::replaceAllInPlace(objPath, ":", "_");
+                    str::replaceAllInPlace(objPath, "..", "__");
+                    xml.shortTag("ObjectFileName", {}, "$(IntDir)\\" + objPath + ".obj");
+                }
+
+                for (auto& config : resolvedConfigs)
+                {
+                    const auto& msvcExt = config.properties.ext<extensions::Msvc>();
+                    if (msvcExt.pch.source.isSet() && msvcExt.pch.source == input.path.string())
+                    {
+                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
+                    }
+                    /*else if(msvcExt.pch.ignoredFiles.value())
+                    {
+                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
+                    }*/
+                }
             }
         }
 
