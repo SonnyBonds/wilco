@@ -1,4 +1,5 @@
 #include "emitters/msvc.h"
+#include "toolchains/cl.h"
 #include "util/commands.h"
 #include "util/uuid.h"
 #include "fileutil.h"
@@ -185,7 +186,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     {
         StringId name;
         ProjectSettings properties;
-        std::unordered_set<std::filesystem::path> ignorePch;
+        std::unordered_set<StringId> ignorePch;
     };
     
     std::vector<ResolvedConfig> resolvedConfigs;
@@ -512,7 +513,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
                     }
-                    else if(config.ignorePch.find(input.path) != config.ignorePch.end())
+                    else if(config.ignorePch.find(StringId(input.path.string())) != config.ignorePch.end())
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
                     }
