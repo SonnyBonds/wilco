@@ -19,7 +19,8 @@ namespace lang
 
 inline Language Auto{"Auto"};
 inline Language C{"C"};
-inline Language Cpp{"C++"};
+inline Language Cpp{ "C++" };
+inline Language Rc{"Rc"};
 inline Language ObjectiveC{"Objective-C"};
 inline Language ObjectiveCpp{"Objective-C++"};
 inline Language None{"None"};
@@ -33,6 +34,7 @@ inline std::unordered_map<StringId, Language> Language::extensionMap =
     { ".cxx", lang::Cpp },
     { ".m", lang::ObjectiveC },
     { ".mm", lang::ObjectiveCpp },
+    { ".rc", lang::Rc},
 };
 
 inline Language Language::getByExtension(StringId extension)

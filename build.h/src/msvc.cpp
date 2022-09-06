@@ -316,30 +316,30 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 {"Label", "PropertySheets"}
             });
 
+            std::string includePaths;
+            for (auto path : config.properties.includePaths)
+            {
+                if (path.is_absolute())
+                {
+                    includePaths += path.string() + ";";
+                }
+                else
+                {
+                    includePaths += (pathOffset / path).string() + ";";
+                }
+            }
+
+            std::string defines;
+            for (auto define : config.properties.defines)
+            {
+                defines += define + ";";
+            }
+
             {
                 auto tag = xml.tag("ClCompile");
 
-                std::string includePaths;
-                for(auto path : config.properties.includePaths)
-                {
-                    if(path.is_absolute())
-                    {
-                        includePaths += path.string() + ";";
-                    }
-                    else
-                    {
-                        includePaths += (pathOffset / path).string() + ";";
-                    }
-                }
                 xml.shortTag("AdditionalIncludeDirectories", {}, includePaths + "%(AdditionalIncludeDirectories)");
-
-                std::string defines;
-                for(auto define : config.properties.defines)
-                {
-                    defines += define + ";";
-                }
                 xml.shortTag("PreprocessorDefinitions", {}, defines + "%(PreprocessorDefinitions)");
-                    
                 xml.shortTag("MultiProcessorCompilation", {}, "true");
 
                 auto& pchHeader = config.properties.ext<extensions::Msvc>().pch.header;
@@ -355,6 +355,10 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     { feature::Cpp17, "<LanguageStandard>stdcpp17</LanguageStandard>"},
                     { feature::Cpp20, "<LanguageStandard>stdcpp20</LanguageStandard>"},
                     { feature::Cpp23, "<LanguageStandard>stdcpp23</LanguageStandard>"},
+                    { feature::msvc::StaticRuntime, "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>"},
+                    { feature::msvc::StaticDebugRuntime, "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>"},
+                    { feature::msvc::SharedRuntime, "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>"},
+                    { feature::msvc::SharedDebugRuntime, "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>"},
                 };
 
                 for(auto& feature : config.properties.features)
@@ -362,7 +366,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     auto it = featureMap.find(feature);
                     if(it != featureMap.end())
                     {
-                        xml.stream << str::padLeft(it->second, xml.indent);
+                        xml.stream << str::padLeft(it->second, xml.indent) << "\n";
                     }
                 }
 
@@ -372,8 +376,16 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     extraFlags += std::string(flag) + " ";
                 }
                 xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
+                xml.shortTag("CompileAs", {}, "CompileAsCpp");
 
                 // TODO: Convert more features to project option
+            }
+
+            {
+                auto tag = xml.tag("ResourceCompile");
+            
+                xml.shortTag("AdditionalIncludeDirectories", {}, includePaths + "%(AdditionalIncludeDirectories)");
+                xml.shortTag("PreprocessorDefinitions", {}, defines + "%(PreprocessorDefinitions)");
             }
 
             if(project.type == StaticLib)
@@ -389,14 +401,36 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
             }
             else
             {
-                auto tag = xml.tag("Link");
-
-                std::string extraFlags;
-                for (auto& flag : config.properties.ext<extensions::Msvc>().compilerFlags)
                 {
-                    extraFlags += std::string(flag) + " ";
+                    auto tag = xml.tag("Link");
+
+                    std::string additionalDependencies;
+                    for (auto& lib : config.properties.libs)
+                    {
+                        std::string suffix;
+                        if (!lib.has_parent_path() && lib.is_relative())
+                        {
+                            additionalDependencies += lib.string();
+                        }
+                        else
+                        {
+                            additionalDependencies += (pathOffset / lib).string();
+                        }
+                        if (!lib.has_extension())
+                        {
+                            additionalDependencies += ".lib";
+                        }
+                        additionalDependencies += ";";
+                    }
+                    xml.shortTag("AdditionalDependencies", {}, additionalDependencies + "%(AdditionalDependencies)");
+
+                    std::string extraFlags;
+                    for (auto& flag : config.properties.ext<extensions::Msvc>().linkerFlags)
+                    {
+                        extraFlags += std::string(flag) + " ";
+                    }
+                    xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
                 }
-                xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
             }
         
             if(!config.properties.commands.value().empty())
@@ -466,6 +500,11 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     xml.shortTag("ObjectFileName", {}, "$(IntDir)\\" + objPath + ".obj");
                 }
 
+                if (language == lang::C)
+                {
+                    xml.shortTag("CompileAs", {}, "CompileAsC");
+                }
+
                 for (auto& config : resolvedConfigs)
                 {
                     const auto& msvcExt = config.properties.ext<extensions::Msvc>();
@@ -483,10 +522,24 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
         {
             auto tag = xml.tag("ItemGroup");
+            for (auto& input : resolvedConfigs.front().properties.files)
+            {
+                auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
+                if (language != lang::Rc)
+                {
+                    continue;
+                }
+
+                xml.shortTag("ResourceCompile", { {"Include", (pathOffset / input.path).string()} });
+            }
+        }
+
+        {
+            auto tag = xml.tag("ItemGroup");
             for(auto& input : resolvedConfigs.front().properties.files)
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-                if(language == lang::C || language == lang::Cpp)
+                if(language == lang::C || language == lang::Cpp || language == lang::Rc)
                 {
                     continue;
                 }

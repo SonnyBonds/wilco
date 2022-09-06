@@ -113,7 +113,7 @@ std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem:
             }
             if(!entry.is_regular_file()) continue;
 
-            result.push_back(entry.path());
+            result.push_back(entry.path().lexically_normal());
         }
     };
 

@@ -236,14 +236,17 @@ struct ListProperty : public PropertyBase
         }
         return *this;
     }
-
+    
     template<typename T>
     ListProperty& operator +=(T other) {
         _value.push_back(std::move(other));
         if(!_allowDuplicates)
         {
-            if(!_duplicateTracker.insert(_value.size()-1).second)
+            auto it = _duplicateTracker.insert(_value.size() - 1);
+            if (!it.second)
             {
+                // If it already existed, we still update it because there are cases where items have the same main value/hash but still wants secondary values/options overwritten
+                _value[*it.first] = std::move(_value.back());
                 _value.pop_back();
             }
         }
