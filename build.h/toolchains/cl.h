@@ -17,6 +17,7 @@ namespace extensions
         ListProperty<StringId> compilerFlags{ this };
         ListProperty<StringId> linkerFlags{ this };
         ListProperty<StringId> archiverFlags{ this };
+        Property<std::string> solutionFolder{ this };
 
         struct Pch : public PropertyGroup
         {

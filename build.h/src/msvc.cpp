@@ -4,7 +4,10 @@
 #include "fileutil.h"
 #include <sstream>
 
-static uuid::uuid namespaceUuid(0x8a168540, 0x2d194237, 0x99da3cc8, 0xae8b0d4e);
+static uuid::uuid projectNamespaceUuid(0x8a168540, 0x2d194237, 0x99da3cc8, 0xae8b0d4e);
+static uuid::uuid filterNamespaceUuid(0x4d136782, 0x745f4680, 0xb816b3e3, 0x636a84c3);
+static uuid::uuid folderNamespaceUuid(0xcfa5f3b8, 0xd0d646ad, 0x941dbb03, 0xedc6ddee);
+static uuid::uuid solutionNamespaceUuid(0xd9842b84, 0xee2e4abc, 0x89c9656a, 0x2373e7d7);
 static std::string platformStr = "x64"; // TODO: More platform support?
 
 static std::string uuidStr(uuid::uuid uuid)
@@ -16,7 +19,12 @@ static std::string uuidStr(uuid::uuid uuid)
 
 static std::string calcProjectUuid(const Project& project)
 {
-    return uuidStr(uuid::generateV3(namespaceUuid, project.name));
+    return uuidStr(uuid::generateV3(projectNamespaceUuid, project.name));
+}
+
+static std::string calcFolderUuid(std::string folder)
+{
+    return uuidStr(uuid::generateV3(folderNamespaceUuid, folder));
 }
 
 static std::string calcProjectName(const Project& project)
@@ -177,6 +185,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     {
         StringId name;
         ProjectSettings properties;
+        std::unordered_set<std::filesystem::path> ignorePch;
     };
     
     std::vector<ResolvedConfig> resolvedConfigs;
@@ -191,6 +200,12 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         {
             resolvedConfigs.push_back({config, project.resolve(env, suggestedDataDir, config, OperatingSystem::current())});
         }
+    }
+
+    for (auto& config : resolvedConfigs)
+    {
+        const auto& msvcExt = config.properties.ext<extensions::Msvc>();
+        config.ignorePch.insert(msvcExt.pch.ignoredFiles.begin(), msvcExt.pch.ignoredFiles.end());
     }
 
     auto root = resolvedConfigs.front().properties.dataDir;
@@ -458,10 +473,10 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
                     }
-                    /*else if(msvcExt.pch.ignoredFiles.value())
+                    else if(config.ignorePch.find(input.path) != config.ignorePch.end())
                     {
-                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
-                    }*/
+                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
+                    }
                 }
             }
         }
@@ -520,7 +535,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     }
                     auto filterPathStr = filterPath.string();
                     auto tag = filtersXml.tag("Filter", { {"Include", filterPathStr} });
-                    filtersXml.shortTag("UniqueIdentifier", {}, uuidStr(uuid::generateV3(namespaceUuid, filterPathStr)));
+                    filtersXml.shortTag("UniqueIdentifier", {}, uuidStr(uuid::generateV3(filterNamespaceUuid, filterPathStr)));
                 }
             }
         }
@@ -613,9 +628,21 @@ void MsvcEmitter::emit(Environment& env)
     solutionStream << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
     solutionStream << "# Visual Studio Version 17\n";
 
+    std::set<std::string> folders;
     for(auto project : projects)
     {
+        auto& folder = project->ext<extensions::Msvc>().solutionFolder;
+        if (!folder.value().empty())
+        {
+            folders.insert(folder);
+        }
         emitProject(env, solutionStream, *targetPath, *project, configs);
+    }
+
+    for (auto& folder : folders)
+    {
+        auto quotedFolder = str::quote(folder);
+        solutionStream << "Project(\"{2150E333-8FDC-42A3-9474-1A3956D46DE8}\") = " + quotedFolder + ", " + quotedFolder + ", \"" + calcFolderUuid(folder) + "\"\nEndProject\n";
     }
 
     solutionStream << "Global\n";
@@ -626,6 +653,7 @@ void MsvcEmitter::emit(Environment& env)
         solutionStream << "\t\t" << cfgStr << " = " << cfgStr << "\n";
     }
     solutionStream << "\tEndGlobalSection\n";
+
     solutionStream << "\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n";
     for(auto project : projects)
     {
@@ -643,8 +671,23 @@ void MsvcEmitter::emit(Environment& env)
         }
     }
     solutionStream << "\tEndGlobalSection\n";
+
+    if (!folders.empty())
+    {
+        solutionStream << "\tGlobalSection(NestedProjects) = preSolution\n";
+        for (auto& project : projects)
+        {
+            auto& folder = project->ext<extensions::Msvc>().solutionFolder;
+            if (!folder.value().empty())
+            {
+                solutionStream << "\t\t" << calcProjectUuid(*project) + " = " + calcFolderUuid(folder) + "\n";
+            }
+        }
+        solutionStream << "\tEndGlobalSection\n";
+    }
+
     solutionStream << "\tGlobalSection(ExtensibilityGlobals) = postSolution\n";
-    solutionStream << "\t\tSolutionGuid = " << uuidStr(uuid::generateV3(namespaceUuid, solutionName)) << "\n";
+    solutionStream << "\t\tSolutionGuid = " << uuidStr(uuid::generateV3(solutionNamespaceUuid, solutionName)) << "\n";
     solutionStream << "\tEndGlobalSection\n";
     solutionStream << "EndGlobal\n";
 
