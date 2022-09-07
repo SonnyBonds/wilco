@@ -206,7 +206,11 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     for (auto& config : resolvedConfigs)
     {
         const auto& msvcExt = config.properties.ext<extensions::Msvc>();
-        config.ignorePch.insert(msvcExt.pch.ignoredFiles.begin(), msvcExt.pch.ignoredFiles.end());
+        config.ignorePch.reserve(msvcExt.pch.ignoredFiles.value().size());
+        for (auto& file : msvcExt.pch.ignoredFiles)
+        {
+            config.ignorePch.insert(StringId(file.string()));
+        }
     }
 
     auto root = resolvedConfigs.front().properties.dataDir;
