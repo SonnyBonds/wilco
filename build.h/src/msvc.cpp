@@ -209,7 +209,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         config.ignorePch.reserve(msvcExt.pch.ignoredFiles.value().size());
         for (auto& file : msvcExt.pch.ignoredFiles)
         {
-            config.ignorePch.insert(StringId(file.string()));
+            config.ignorePch.insert(StringId(file.lexically_normal().string()));
         }
     }
 

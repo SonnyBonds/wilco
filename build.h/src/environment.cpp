@@ -108,7 +108,7 @@ std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem:
         for(auto entry : iterator)
         {
             if(entry.is_directory()) {
-                addConfigurationDependency(path);
+                addConfigurationDependency(entry.path());
                 continue;
             }
             if(!entry.is_regular_file()) continue;
