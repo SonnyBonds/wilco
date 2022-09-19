@@ -268,9 +268,9 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                         }
                     }
 
-                    std::ofstream stream;
                     if(!command->rspFile.empty())
                     {
+                        std::ofstream stream;
                         stream.open(command->rspFile, std::ios::trunc | std::ios::binary);
                         stream.write(command->rspContents.data(), command->rspContents.size());
                     }
