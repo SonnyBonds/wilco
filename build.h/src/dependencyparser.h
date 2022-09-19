@@ -17,7 +17,7 @@ bool parseDependencyData(std::string& data, Callable callable)
         }
     };
 
-    std::string_view spaces(" \n");
+    std::string_view spaces(" \n\r");
     auto readGccPath = [&](){
         size_t start = pos;
         size_t lastBreak = pos;
@@ -162,6 +162,12 @@ bool parseDependencyData(std::string& data, Callable callable)
         while(pos < data.size())
         {
             skipWhitespace();
+            
+            if(consume(']'))
+            {
+                break;
+            }
+
             if(!consume('"'))
             {
                 return true;

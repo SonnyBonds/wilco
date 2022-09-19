@@ -39,7 +39,7 @@ struct PendingCommand
 
 static std::string readFile(std::filesystem::path path)
 {
-    std::ifstream stream(path);
+    std::ifstream stream(path, std::ios::binary);
     if(!stream)
     {
         return {};
