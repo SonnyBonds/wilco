@@ -1,5 +1,6 @@
 #include "emitters/direct.h"
 #include "dependencyparser.h"
+#include <iostream>
 
 struct TimeCache
 {
@@ -27,7 +28,9 @@ struct PendingCommand
     std::vector<StringId> outputs;
     StringId depFile;
     std::string commandString;
-    std::string desciption;
+    std::string description;
+    std::string rspFile;
+    std::string rspContents;
     bool dirty = false;
     int depth = 0;
     std::vector<PendingCommand*> dependencies;
@@ -94,14 +97,17 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     auto cmdFilePath = root / (project.name + ".cmdlines");
     auto cmdData = readFile(cmdFilePath);
     std::unordered_map<StringId, std::string_view> cmdLines;
+    std::unordered_map<StringId, std::string_view> rspContents;
 
     auto cmdDataView = std::string_view(cmdData);
     while(!cmdDataView.empty())
     {
         std::string_view line;
         std::tie(line, cmdDataView) = str::split(cmdDataView, '\n');
-        auto [file, cmdLine] = str::split(line, 0);
+        auto [file, tmp] = str::split(line, 0);
+        auto [cmdLine, rspContent] = str::split(tmp, 0);
         cmdLines[file] = cmdLine;
+        rspContents[file] = rspContent;
     }
     std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
 
@@ -131,14 +137,15 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
             auto str = path.string();
             auto strId = StringId(str);
             outputStrs.push_back(strId);
-            if(cmdLines[strId] != command.command)
+            if(cmdLines[strId] != command.command || rspContents[strId] != command.rspContents)
             {
                 // LOG std::cout << "\"" << cmdLines[strId] << "\" vs \"" << command.command << "\"\n";
                 dirty = true;
             }
             
             cmdFile.write(str.c_str(), str.size()+1);
-            cmdFile.write(command.command.c_str(), command.command.size());
+            cmdFile.write(command.command.c_str(), command.command.size()+1);
+            cmdFile.write(command.rspContents.c_str(), command.rspContents.size());
             cmdFile.write("\n", 1);
         }
 
@@ -148,12 +155,20 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
             depfileStr = command.depFile.string();
         }
 
+        std::string rspfileStr;
+        if(!command.rspFile.empty())
+        {
+            rspfileStr = command.rspFile.string();
+        }
+
         pendingCommands.push_back({
             inputStrs,
             outputStrs,
             depfileStr,
             "cd \"" + cwdStr + "\" && " + command.command,
-            command.description,
+            command.description, // Safe to move?
+            rspfileStr,
+            command.rspContents, // Safe to move?
             dirty
         });
     }
@@ -241,7 +256,8 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                     continue;
                 }
 
-                std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->desciption << std::flush;
+                std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->description << std::flush;
+
                 command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
                     for(auto& output : command->outputs)
                     {
@@ -252,7 +268,21 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                         }
                     }
 
+                    std::ofstream stream;
+                    if(!command->rspFile.empty())
+                    {
+                        stream.open(command->rspFile, std::ios::trunc | std::ios::binary);
+                        stream.write(command->rspContents.data(), command->rspContents.size());
+                    }
+
                     auto result = process::run(command->commandString + " 2>&1");
+
+                    if(!command->rspFile.empty())
+                    {
+                        std::error_code ec;
+                        std::filesystem::remove(command->rspFile, ec);
+                    }
+                    
                     {
                         std::scoped_lock doneLock(doneMutex);
                         doneCommands.push_back(command);

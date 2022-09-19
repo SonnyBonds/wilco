@@ -174,16 +174,28 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
     auto dataDir = resolvedSettings.dataDir;
 
-    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerFlags;
-    auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
-        auto it = commonCompilerFlags.find(language);
-        if(it != commonCompilerFlags.end())
+
+    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerRsp;
+    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerCommand;
+    auto getCommonCompilerRsp = [&](Language language) -> const std::string& {
+        auto it = commonCompilerRsp.find(language);
+        if(it != commonCompilerRsp.end())
         {
             return it->second;
         }
 
-        return commonCompilerFlags[language] = str::quote(getCompiler(project, resolvedSettings, pathOffset, language)) +
-                                               getCommonCompilerFlags(project, resolvedSettings, pathOffset, language);
+        return commonCompilerRsp[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
+    };
+
+    auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
+        auto it = commonCompilerCommand.find(language);
+        if(it != commonCompilerCommand.end())
+        {
+            return it->second;
+        }
+
+
+        return commonCompilerCommand[language] = str::quote(getCompiler(project, resolvedSettings, pathOffset, language));
     };
 
     auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
@@ -205,12 +217,14 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = getCommonCompilerCommand(language) + 
-                          getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+        command.command = getCommonCompilerCommand(language);
+        command.rspContents = getCommonCompilerRsp(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
         command.inputs = { input.path };
         command.outputs = { output };
         command.workingDirectory = workingDir;
         command.depFile = output.string() + ".d";
+        command.rspFile = output.string() + ".rsp";
+        command.command += " @" + str::quote((pathOffset / command.rspFile).string());
         command.description = "Compiling " + project.name + ": " + input.path.string();
         resolvedSettings.commands += std::move(command);
 
@@ -245,10 +259,13 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = linkerCommand + getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
+        command.command = linkerCommand;
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;
+        command.rspFile = output.string() + ".rsp";
+        command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+        command.rspContents = getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
         command.description = "Linking " + project.name + ": " + output.string();
         resolvedSettings.commands += std::move(command);
 

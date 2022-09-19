@@ -14,6 +14,8 @@ struct CommandEntry
     std::filesystem::path workingDirectory;
     std::filesystem::path depFile;
     std::string description;
+    std::filesystem::path rspFile;
+    std::string rspContents;
 
     bool operator ==(const CommandEntry& other) const
     {
