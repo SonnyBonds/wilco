@@ -65,7 +65,9 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
 
 std::string ClToolchainProvider::getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
-    return " /sourceDependencies " + str::quote(output) + ".d /c /Fd:" + str::quote(output) + ".pdb /Fo:" + str::quote(output) + " " + str::quote(input);
+    // /Fd:" + str::quote(output) + ".pdb
+    auto langFlag = language == lang::C ? " /Tc" : " /Tp";
+    return " /sourceDependencies " + str::quote(output) + ".d /c /FS /Fo:" + str::quote(output) + langFlag + " " + str::quote(input);
 }
 
 std::string ClToolchainProvider::getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
@@ -93,15 +95,29 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
     case StaticLib:
         flags += "";
         break;
-    case Executable:
     case SharedLib:
+        flags += " /DLL";
+    case Executable:
         for(auto& path : sysLibPaths)
         {
             flags += " /LIBPATH:\"" + path.string() + "\"";
         }
-        for(auto& path : resolvedSettings.libs)
+        for(auto& lib : resolvedSettings.libs)
         {
-            flags += " " + (pathOffset / path).string();
+            std::string suffix;
+            flags += " ";
+            if (!lib.has_parent_path() && lib.is_relative())
+            {
+                flags += lib.string();
+            }
+            else
+            {
+                flags += (pathOffset / lib).string();
+            }
+            if (!lib.has_extension())
+            {
+                flags += ".lib";
+            }
         }
 
         std::map<Feature, std::string> featureMap = {
@@ -119,7 +135,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
         break;
     }
 
-    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().compilerFlags)
+    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().linkerFlags)
     {
         flags += " " + std::string(flag);
     }
@@ -150,11 +166,6 @@ std::string ClToolchainProvider::getLinkerFlags(Project& project, ProjectSetting
             flags += " \"" + input + "\"";
         }
         break;
-    }
-
-    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().compilerFlags)
-    {
-        flags += " " + std::string(flag);
     }
 
     return flags;
@@ -211,7 +222,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
     for(auto& input : resolvedSettings.files)
     {
         auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-        if(language == lang::None)
+        if(language != lang::C && language != lang::Cpp)
         {
             continue;
         }
@@ -239,9 +250,12 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
     if(!linker.empty())
     {
+        if(project.type != StaticLib)
+        {
         for(auto& output : resolvedSettings.ext<ClInternal>().linkedOutputs)
         {
             linkerInputs.push_back(output);
+            }
         }
 
         std::vector<std::string> linkerInputStrs;
