@@ -46,6 +46,10 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
         { feature::WarningsAsErrors, " /WX"},
         { feature::FastMath, " /fp:fast"},
         { feature::Exceptions, " /EHsc"},
+        { feature::msvc::StaticRuntime, " /MT"},
+        { feature::msvc::StaticDebugRuntime, " /MTd"},
+        { feature::msvc::SharedRuntime, " /MD"},
+        { feature::msvc::SharedDebugRuntime, " /MDd"},
     };
     for(auto& feature : resolvedSettings.features)
     {
