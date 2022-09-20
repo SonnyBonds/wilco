@@ -15,7 +15,7 @@ std::string ClToolchainProvider::getCompiler(Project& project, ProjectSettings& 
 {
     if(language == lang::Cpp || language == lang::C)
     {
-    return compiler;
+        return compiler;
     }
     else if (language == lang::Rc)
     {
@@ -48,29 +48,29 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
 
     if(language != lang::Rc)
     {
-    std::map<Feature, std::string> featureMap = {
-        { feature::Cpp11, " /std:c++11"},
-        { feature::Cpp14, " /std:c++14"},
-        { feature::Cpp17, " /std:c++17"},
-        { feature::Cpp20, " /std:c++20"},
-        { feature::Cpp23, " /std:c++23"},
-        { feature::Optimize, " /Ox"},
-        { feature::OptimizeSize, " /Os"},
-        { feature::DebugSymbols, " /Zi"},
-        { feature::WarningsAsErrors, " /WX"},
-        { feature::FastMath, " /fp:fast"},
-        { feature::Exceptions, " /EHsc"},
-        { feature::msvc::StaticRuntime, " /MT"},
-        { feature::msvc::StaticDebugRuntime, " /MTd"},
-        { feature::msvc::SharedRuntime, " /MD"},
-        { feature::msvc::SharedDebugRuntime, " /MDd"},
-    };
-    for(auto& feature : resolvedSettings.features)
-    {
-        auto it = featureMap.find(feature);
-        if(it != featureMap.end())
+        std::map<Feature, std::string> featureMap = {
+            { feature::Cpp11, " /std:c++11"},
+            { feature::Cpp14, " /std:c++14"},
+            { feature::Cpp17, " /std:c++17"},
+            { feature::Cpp20, " /std:c++20"},
+            { feature::Cpp23, " /std:c++23"},
+            { feature::Optimize, " /Ox"},
+            { feature::OptimizeSize, " /Os"},
+            { feature::DebugSymbols, " /Zi"},
+            { feature::WarningsAsErrors, " /WX"},
+            { feature::FastMath, " /fp:fast"},
+            { feature::Exceptions, " /EHsc"},
+            { feature::msvc::StaticRuntime, " /MT"},
+            { feature::msvc::StaticDebugRuntime, " /MTd"},
+            { feature::msvc::SharedRuntime, " /MD"},
+            { feature::msvc::SharedDebugRuntime, " /MDd"},
+        };
+        for(auto& feature : resolvedSettings.features)
         {
-            flags += it->second;
+            auto it = featureMap.find(feature);
+            if(it != featureMap.end())
+            {
+                flags += it->second;
             }
         }
 
@@ -80,6 +80,10 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
             flags += " " + std::string(flag);
         }
 
+        if(msvc.pch.header.isSet())
+        {
+            flags += " /Yu" + str::quote(msvc.pch.header.value().filename().string());
+        }
     }
 
     return flags;
@@ -93,9 +97,9 @@ std::string ClToolchainProvider::getCompilerFlags(Project& project, ProjectSetti
     }
     else
     {
-    auto langFlag = language == lang::C ? " /Tc" : " /Tp";
-    return " /sourceDependencies " + str::quote(output) + ".d /c /FS /Fo:" + str::quote(output) + langFlag + " " + str::quote(input);
-}
+        auto langFlag = language == lang::C ? " /Tc" : " /Tp";
+        return " /sourceDependencies " + str::quote(output) + ".d /c /FS /Fo:" + str::quote(output) + langFlag + " " + str::quote(input);
+    }
 }
 
 std::string ClToolchainProvider::getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
@@ -217,7 +221,15 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
     auto dataDir = resolvedSettings.dataDir;
 
+    const auto& msvcExt = resolvedSettings.ext<extensions::Msvc>();
 
+    std::filesystem::path pchOutput;
+    std::string pchOutputStr;
+    if(msvcExt.pch.source.isSet())
+    {
+        pchOutput = (dataDir / std::filesystem::path("obj") / project.name / msvcExt.pch.source.value().relative_path()).string() + ".pch";
+        pchOutputStr = str::quote(pchOutput.string());
+    }
 
     std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerArgs;
     std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerCommand;
@@ -228,7 +240,16 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             return it->second;
         }
 
-        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language)/* + pchFlag*/;
+        std::string pchFlag;
+        if(language != lang::Rc)
+        {
+            if(!pchOutputStr.empty())
+            {
+                pchFlag = " /Fp:" + pchOutputStr;
+            }
+        }
+
+        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
     };
 
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
@@ -242,10 +263,15 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         return commonCompilerCommand[language] = str::quote(getCompiler(project, resolvedSettings, pathOffset, language));
     };
 
+
     auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
 
-    const auto& msvcExt = resolvedSettings.ext<extensions::Msvc>();
-    // TODO: PCH
+    std::unordered_set<StringId> ignorePch;
+    ignorePch.reserve(msvcExt.pch.ignoredFiles.value().size());
+    for (auto& file : msvcExt.pch.ignoredFiles)
+    {
+        ignorePch.insert(StringId(file.lexically_normal().string()));
+    }
 
     std::vector<std::filesystem::path> linkerInputs;
     for(auto& input : resolvedSettings.files)
@@ -269,6 +295,20 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             command.command = getCommonCompilerCommand(language);
             command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
 
+            if(msvcExt.pch.header.isSet() && msvcExt.pch.source.value() == input.path)
+            {
+                command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.value().filename().string());
+                command.outputs = { pchOutput };
+            }
+            else if(ignorePch.find(StringId(input.path.lexically_normal().string())) != ignorePch.end())
+            {
+                command.rspContents += " /Y-";
+            }
+            else if(!pchOutput.empty())
+            {
+                command.inputs.push_back(pchOutput);
+            }
+
             command.depFile = output.string() + ".d";
         }
         else
@@ -279,8 +319,8 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.workingDirectory = workingDir;
         if(!command.rspContents.empty())
         {
-        command.rspFile = output.string() + ".rsp";
-        command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+            command.rspFile = output.string() + ".rsp";
+            command.command += " @" + str::quote((pathOffset / command.rspFile).string());
         }
         command.description = "Compiling " + project.name + ": " + input.path.string();
         resolvedSettings.commands += std::move(command);
@@ -294,9 +334,9 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
     {
         if(project.type != StaticLib)
         {
-        for(auto& output : resolvedSettings.ext<ClInternal>().linkedOutputs)
-        {
-            linkerInputs.push_back(output);
+            for(auto& output : resolvedSettings.ext<ClInternal>().linkedOutputs)
+            {
+                linkerInputs.push_back(output);
             }
         }
 
@@ -326,8 +366,8 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.rspContents = getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
         if(!command.rspContents.empty())
         {
-        command.rspFile = output.string() + ".rsp";
-        command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+            command.rspFile = output.string() + ".rsp";
+            command.command += " @" + str::quote((pathOffset / command.rspFile).string());
         }
         command.description = "Linking " + project.name + ": " + output.string();
         resolvedSettings.commands += std::move(command);
