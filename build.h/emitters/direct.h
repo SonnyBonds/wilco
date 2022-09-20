@@ -30,6 +30,7 @@ public:
     static DirectBuilder instance;
 
     cli::StringArgument selectedConfig{arguments, "config", "Specify a configuration to build."};
+    cli::BoolArgument verbose{arguments, "verbose", "Display full command line of commands as they are executed."};
 
     DirectBuilder();
 

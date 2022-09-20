@@ -174,7 +174,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     }
 }
 
-static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands)
+static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands, bool verbose)
 {
     size_t count = 0;
     size_t completed = 0;
@@ -257,6 +257,14 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                 }
 
                 std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->description << std::flush;
+                if(verbose)
+                {
+                    std::cout << "\n" << command->commandString << "\n";
+                    if(!command->rspFile.empty())
+                    {
+                        std::cout << "rsp:\n" << command->rspContents << "\n";
+                    }
+                }
 
                 command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
                     for(auto& output : command->outputs)
@@ -469,7 +477,7 @@ void DirectBuilder::emit(Environment& env)
         if(!commands.empty())
         {
             std::cout << "Generator has changed. Rebuilding...";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
+            size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
 
             int exitCode = 0;
             if(completedCommands == commands.size())
@@ -531,7 +539,7 @@ void DirectBuilder::emit(Environment& env)
         else
         {
             std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands);
+            size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
 
             std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
 
