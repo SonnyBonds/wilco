@@ -1,8 +1,9 @@
 #include "toolchains/cl.h"
 
-ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths)
+ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths)
     : ToolchainProvider(name)
     , compiler(std::move(compiler))
+    , resourceCompiler(std::move(resourceCompiler))
     , linker(std::move(linker))
     , archiver(std::move(archiver))
     , sysIncludePaths(std::move(sysIncludePaths))
@@ -12,7 +13,18 @@ ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler,
 
 std::string ClToolchainProvider::getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const 
 {
+    if(language == lang::Cpp || language == lang::C)
+    {
     return compiler;
+    }
+    else if (language == lang::Rc)
+    {
+        return resourceCompiler;
+    }
+    else
+    {
+        throw std::runtime_error("Toolchain does not support language '" + std::string(language) + "'.");
+    }
 }
 
 std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const
@@ -34,6 +46,8 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
         flags += " /I" + str::quote((pathOffset / path).string());
     }
 
+    if(language != lang::Rc)
+    {
     std::map<Feature, std::string> featureMap = {
         { feature::Cpp11, " /std:c++11"},
         { feature::Cpp14, " /std:c++14"},
@@ -57,7 +71,15 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
         if(it != featureMap.end())
         {
             flags += it->second;
+            }
         }
+
+        auto& msvc = resolvedSettings.ext<extensions::Msvc>();
+        for (auto& flag : msvc.compilerFlags)
+        {
+            flags += " " + std::string(flag);
+        }
+
     }
 
     return flags;
@@ -65,9 +87,15 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
 
 std::string ClToolchainProvider::getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
-    // /Fd:" + str::quote(output) + ".pdb
+    if(language == lang::Rc)
+    {
+        return " /fo" + str::quote(output) + " " + str::quote(input);
+    }
+    else
+    {
     auto langFlag = language == lang::C ? " /Tc" : " /Tp";
     return " /sourceDependencies " + str::quote(output) + ".d /c /FS /Fo:" + str::quote(output) + langFlag + " " + str::quote(input);
+}
 }
 
 std::string ClToolchainProvider::getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
@@ -190,16 +218,17 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
     auto dataDir = resolvedSettings.dataDir;
 
 
-    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerRsp;
+
+    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerArgs;
     std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerCommand;
-    auto getCommonCompilerRsp = [&](Language language) -> const std::string& {
-        auto it = commonCompilerRsp.find(language);
-        if(it != commonCompilerRsp.end())
+    auto getCommonCompilerArgs = [&](Language language) -> const std::string& {
+        auto it = commonCompilerArgs.find(language);
+        if(it != commonCompilerArgs.end())
         {
             return it->second;
         }
 
-        return commonCompilerRsp[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
+        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
     };
 
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
@@ -222,24 +251,37 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
     for(auto& input : resolvedSettings.files)
     {
         auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-        if(language != lang::C && language != lang::Cpp)
+        if(language == lang::None)
         {
             continue;
         }
 
         auto inputStr = (pathOffset / input.path).string();
-        auto output = dataDir / std::filesystem::path("obj") / project.name / (input.path.relative_path().string() + ".o");
+        auto output = dataDir / std::filesystem::path("obj") / project.name / (input.path.relative_path().string() + (language == lang::Rc ? ".res" : ".o"));
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = getCommonCompilerCommand(language);
-        command.rspContents = getCommonCompilerRsp(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+
         command.inputs = { input.path };
         command.outputs = { output };
+        if(language != lang::Rc)
+        {
+            command.command = getCommonCompilerCommand(language);
+            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+
+            command.depFile = output.string() + ".d";
+        }
+        else
+        {
+             // There is rsp support in RC, but it requires different escaping somehow so just ignore that for now
+            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+        }
         command.workingDirectory = workingDir;
-        command.depFile = output.string() + ".d";
+        if(!command.rspContents.empty())
+        {
         command.rspFile = output.string() + ".rsp";
         command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+        }
         command.description = "Compiling " + project.name + ": " + input.path.string();
         resolvedSettings.commands += std::move(command);
 
@@ -281,9 +323,12 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;
+        command.rspContents = getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
+        if(!command.rspContents.empty())
+        {
         command.rspFile = output.string() + ".rsp";
         command.command += " @" + str::quote((pathOffset / command.rspFile).string());
-        command.rspContents = getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
+        }
         command.description = "Linking " + project.name + ": " + output.string();
         resolvedSettings.commands += std::move(command);
 

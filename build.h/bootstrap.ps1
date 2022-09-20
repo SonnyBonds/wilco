@@ -102,12 +102,14 @@ function Find-Cl {
         $result["INCLUDE_PATHS"] = $Env:INCLUDE
         $result["LIB_PATHS"] = $Env:LIB
         $result["CL"] = (Get-Command "cl.exe").Source
+        $result["RC"] = (Get-Command "rc.exe").Source
         $result["LINK"] = (Get-Command "link.exe").Source
         $result["LIB"] = (Get-Command "lib.exe").Source
         Write-Output $result
     }
     
     $CL = [string]$result["CL"] -replace "\\", "/"
+    $RC = [string]$result["RC"] -replace "\\", "/"
     $LINK = [string]$result["LINK"] -replace "\\", "/";
     $LIB = [string]$result["LIB"] -replace "\\", "/";
     $SYS_INCLUDES = ($result["INCLUDE_PATHS"] -replace "\\", "/" -split ";" | ForEach-Object { '"' + $PSItem + '"' }) -join ", "
@@ -121,7 +123,7 @@ function Find-Cl {
         Description = $description
         Command = $CL
         Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi", "/MP") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
-        Declaration = "inline ClToolchainProvider ${Id}(`"$Id`", `"$CL`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
+        Declaration = "inline ClToolchainProvider ${Id}(`"$Id`", `"$CL`", `"$RC`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
     }
 
     if(-not $script:selected_toolchain)

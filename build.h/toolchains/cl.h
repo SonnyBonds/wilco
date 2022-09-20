@@ -41,10 +41,11 @@ struct ClToolchainProvider : public ToolchainProvider
     const std::string compiler;
     const std::string linker;
     const std::string archiver;
+    const std::string resourceCompiler;
     const std::vector<std::filesystem::path> sysIncludePaths;
     const std::vector<std::filesystem::path> sysLibPaths;
 
-    ClToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths);
+    ClToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths);
     virtual std::string getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
     virtual std::string getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
     virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
