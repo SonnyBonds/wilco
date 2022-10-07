@@ -133,8 +133,8 @@ fi
 
 set -e
 echo "Bootstrapping using $selected_toolchain_desc"...
-$compile_command
 #"$OUTPUT" "$@"
 echo "$toolchain_contents" > "$BUILD_H_DIR/toolchains/_detected_toolchains.h"
+$compile_command
 echo Done!
 echo Run \'"$OUTPUT"\' to build.
