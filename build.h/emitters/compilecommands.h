@@ -23,7 +23,7 @@
 class CompileCommands : public Emitter
 {
 public:
-    static CompileCommands instance;
+    static EmitterInstance<CompileCommands> instance;
 
     CompileCommands();
 

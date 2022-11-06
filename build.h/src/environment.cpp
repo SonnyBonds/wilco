@@ -89,6 +89,7 @@ std::string Environment::readFile(std::filesystem::path path)
 
 bool Environment::writeFile(std::filesystem::path path, const std::string& data)
 {
+    addConfigurationDependency(path);
     return ::writeFile(path, data);
 }
 

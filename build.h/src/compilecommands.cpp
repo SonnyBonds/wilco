@@ -1,4 +1,5 @@
 #include "emitters/compilecommands.h"
+
 CompileCommands::CompileCommands()
     : Emitter("compilecommands", "Generate a compilecommands.json file.")
 { }
@@ -9,11 +10,6 @@ void CompileCommands::emit(Environment& env)
     std::ofstream stream(*targetPath.value / "compile_commands.json");
     
     stream << "[\n";
-
-#if TODO
-    auto [generator, buildOutput] = createGeneratorProject(targetPath);
-    emitCommands(stream, targetPath, generator, "", true);
-#endif
 
     auto projects = env.collectProjects();
     auto configs = env.collectConfigs();
@@ -80,4 +76,4 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
     }
 }
 
-CompileCommands CompileCommands::instance;
+EmitterInstance<CompileCommands> CompileCommands::instance;

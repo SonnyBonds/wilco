@@ -14,7 +14,7 @@ void configure(Environment& env)
     
     Project& helloPrinter = env.createProject("HelloLibrary", StaticLib);
     helloPrinter.files += env.listFiles("hellolib");
-    helloPrinter.defines += "MESSAGE=" + str::quote(*printerMessage);
+    helloPrinter.defines += "MESSAGE=" + str::quote(std::string(*printerMessage));
     helloPrinter(Public).includePaths += "hellolib";
 
     Project& hello = env.createProject("Hello", Executable);

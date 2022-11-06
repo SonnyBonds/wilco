@@ -1,5 +1,7 @@
 #include "emitters/direct.h"
 #include "dependencyparser.h"
+#include "fileutil.h"
+#include "util/commands.h"
 #include <iostream>
 
 struct TimeCache
@@ -36,24 +38,6 @@ struct PendingCommand
     std::vector<PendingCommand*> dependencies;
     std::future<process::ProcessResult> result;
 };
-
-static std::string readFile(std::filesystem::path path)
-{
-    std::ifstream stream(path, std::ios::binary);
-    if(!stream)
-    {
-        return {};
-    }
-    
-    stream.seekg(0, std::ios_base::end);
-    size_t size = stream.tellg();
-    stream.seekg(0, std::ios_base::beg);
-
-    std::string buffer;
-    buffer.resize(size);
-    stream.read(buffer.data(), size);
-    return buffer;
-}
 
 static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
 {
@@ -467,36 +451,6 @@ void DirectBuilder::emit(Environment& env)
 {
     size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
 
-    {
-        auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
-
-        std::vector<PendingCommand> pendingCommands;
-        collectCommands(env, pendingCommands, *targetPath, *generator, "");
-        auto commands = processCommands(pendingCommands);
-
-        if(!commands.empty())
-        {
-            std::cout << "Generator has changed. Rebuilding...";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
-
-            int exitCode = 0;
-            if(completedCommands == commands.size())
-            {
-                std::cout << "Restarting build.\n\n" << std::flush;
-                std::string argumentString;
-                for(auto& arg : env.cliContext.allArguments)
-                {
-                    argumentString += " " + str::quote(arg);
-                }
-                process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
-                std::cout << "Build restart failed.\n" << std::flush;
-            }
-
-            // TODO: Exit more gracefully?
-            std::exit(EXIT_FAILURE);
-        }
-    }
-
     auto projects = env.collectProjects();
     auto configs = env.collectConfigs();
 
@@ -522,12 +476,6 @@ void DirectBuilder::emit(Environment& env)
 
         for(auto project : projects)
         {
-            // TODO: This has already been processed separately above, and should
-            // probably not even be part of the main list.
-            if(project->name == "_generator")
-            {
-                continue;
-            }
             collectCommands(env, pendingCommands, *targetPath / config.cstr(), *project, config);
         }
         auto commands = processCommands(pendingCommands);
@@ -548,4 +496,64 @@ void DirectBuilder::emit(Environment& env)
     }
 }
 
-DirectBuilder DirectBuilder::instance;
+void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
+{
+    Environment env(cliContext);
+
+    auto outputPath = *targetPath / ".generator";
+    std::string ext;
+    if(OperatingSystem::current() == Windows)
+    {
+        ext = ".exe";
+    }
+    auto tempOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext);
+    auto prevOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + ".prev");
+    auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
+    Project& project = env.createProject("Generator", Executable);
+    project.links = std::vector<Project*>(); 
+    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
+    project.includePaths += env.buildHDir;
+    project.output.path = tempOutput;
+    project.files += env.configurationFile;
+    project.files += env.listFiles(env.buildHDir / "src");
+    project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
+
+    for(auto& file : project.files.value())
+    {
+        outputEnv.addConfigurationDependency(file.path);
+    }
+    outputEnv.addConfigurationDependency(buildOutput);
+
+    std::vector<PendingCommand> pendingCommands;
+    collectCommands(env, pendingCommands, outputPath, project, {});
+
+    auto commands = processCommands(pendingCommands);
+
+    if(commands.empty())
+    {
+        return;
+    }
+
+    std::cout << "\nGenerator changed." << std::flush;
+    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+    size_t completedCommands = runCommands(commands, maxConcurrentCommands, false);
+    if(completedCommands < commands.size())
+    {
+        // TODO: Exit more gracefully?
+        std::exit(EXIT_FAILURE);
+    }
+
+    std::cout << "Restarting build.\n\n" << std::flush;
+    std::string argumentString;
+    for(auto& arg : cliContext.allArguments)
+    {
+        argumentString += " " + str::quote(arg);
+    }
+    process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
+    std::cout << "Build restart failed.\n" << std::flush;
+    // TODO: Exit more gracefully?
+    std::exit(EXIT_FAILURE);
+}
+
+
+EmitterInstance<DirectBuilder> DirectBuilder::instance;

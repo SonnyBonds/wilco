@@ -8,7 +8,7 @@
 class Query : public Emitter
 {
 public:
-    static Query instance;
+    static EmitterInstance<Query> instance;
 
     cli::BoolArgument listProjects{arguments, "projects", "List all defined projects."};
     cli::BoolArgument listConfigs{arguments, "configs", "List all defined configurations."};

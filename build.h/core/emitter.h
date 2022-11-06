@@ -8,12 +8,24 @@
 #include "core/stringid.h"
 #include "util/cli.h"
 
+extern cli::PathArgument targetPath;
+
 struct Emitter;
 
 struct Emitters
 {
     static void install(Emitter* emitter);
     static const std::vector<Emitter*>& list();
+};
+
+template<typename T>
+struct EmitterInstance
+{
+    EmitterInstance()
+    {
+        static T instance;
+        Emitters::install(&instance);
+    }
 };
 
 struct Emitter
@@ -23,8 +35,6 @@ struct Emitter
     std::vector<cli::Argument*> arguments;
     std::vector<std::string> generatorCliArguments;
 
-    cli::PathArgument targetPath{arguments, "output-path", "Target path for build files.", "buildfiles"};
-
     Emitter(StringId name, std::string description);
 
     Emitter(const Emitter& other) = delete;
@@ -33,6 +43,4 @@ struct Emitter
     virtual void emit(Environment& env) = 0;
 
 protected:
-
-    static std::pair<Project*, std::filesystem::path> createGeneratorProject(Environment& env, std::filesystem::path targetPath);
 };

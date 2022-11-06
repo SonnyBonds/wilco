@@ -19,31 +19,34 @@ inline std::string readFile(std::filesystem::path path)
     return buffer;
 }
 
-inline bool writeFile(std::filesystem::path path, const std::string& data)
+inline bool writeFile(std::filesystem::path path, const std::string& data, bool onlyWriteIfDifferent = true)
 {
-    std::error_code ec;
-    size_t fileSize = std::filesystem::file_size(path, ec);
-    if(!ec && fileSize == data.size())
+    if(onlyWriteIfDifferent)
     {
-        std::ifstream inputStream(path);
-        std::array<char, 2048> buffer;
-        size_t pos = 0;
-        while(inputStream.good())
+        std::error_code ec;
+        size_t fileSize = std::filesystem::file_size(path, ec);
+        if(!ec && fileSize == data.size())
         {
-            size_t chunk = std::min(buffer.size(), fileSize - pos);
-            inputStream.read(buffer.data(), chunk);
-            if(!inputStream)
+            std::ifstream inputStream(path);
+            std::array<char, 2048> buffer;
+            size_t pos = 0;
+            while(inputStream.good())
             {
-                break;
-            }
-            if(memcmp(data.data() + pos, buffer.data(), chunk) != 0)
-            {
-                break;
-            }
-            pos += chunk;
-            if(pos == fileSize)
-            {
-                return false;
+                size_t chunk = std::min(buffer.size(), fileSize - pos);
+                inputStream.read(buffer.data(), chunk);
+                if(!inputStream)
+                {
+                    break;
+                }
+                if(memcmp(data.data() + pos, buffer.data(), chunk) != 0)
+                {
+                    break;
+                }
+                pos += chunk;
+                if(pos == fileSize)
+                {
+                    return false;
+                }
             }
         }
     }

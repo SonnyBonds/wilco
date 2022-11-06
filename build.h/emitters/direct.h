@@ -27,12 +27,14 @@ struct PendingCommand;
 class DirectBuilder : public Emitter
 {
 public:
-    static DirectBuilder instance;
+    static EmitterInstance<DirectBuilder> instance;
 
     cli::StringArgument selectedConfig{arguments, "config", "Specify a configuration to build."};
     cli::BoolArgument verbose{arguments, "verbose", "Display full command line of commands as they are executed."};
 
     DirectBuilder();
+
+    static void buildSelf(cli::Context cliContext, Environment& outputEnv);
 
     virtual void emit(Environment& env) override;
 };

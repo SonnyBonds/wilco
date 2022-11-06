@@ -42,4 +42,4 @@ void Query::emitConfigs(Environment& env)
     }            
 }
 
-Query Query::instance;
+EmitterInstance<Query> Query::instance;

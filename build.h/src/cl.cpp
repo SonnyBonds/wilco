@@ -228,7 +228,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             return it->second;
         }
 
-        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
+        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language)/* + pchFlag*/;
     };
 
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {

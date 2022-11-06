@@ -117,7 +117,7 @@ struct SimpleXmlWriter
     }
 };
 
-MsvcEmitter MsvcEmitter::instance;
+EmitterInstance<MsvcEmitter> MsvcEmitter::instance;
 
 MsvcEmitter::MsvcEmitter()
     : Emitter("msvc", "Generate Msvc project files.")
@@ -648,32 +648,7 @@ void MsvcEmitter::emit(Environment& env)
 {
     std::filesystem::create_directories(*targetPath);
 
-    auto [generator, buildOutput] = createGeneratorProject(env, *targetPath);
-
-    {
-        std::string argumentString;
-        for(auto& arg : env.cliContext.allArguments)
-        {
-            argumentString += " " + str::quote(arg);    
-        }
-
-        auto buildPath = env.configurationFile.parent_path() / buildOutput;
-
-        CommandEntry runCommand;
-        runCommand.inputs = { buildPath };
-        runCommand.command = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote(buildPath.string()) + argumentString;
-        generator->commands += runCommand;
-    }
-
     auto projects = env.collectProjects();
-    for(auto& project : projects)
-    {
-        if(project != generator)
-        {
-            project->links += generator;
-        }
-    }
-
     auto configs = env.collectConfigs();
     // Order matters for output and StringId order is not totally deterministic
     std::sort(configs.begin(), configs.end(), [](StringId& a, StringId& b) {

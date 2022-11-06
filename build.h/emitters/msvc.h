@@ -18,7 +18,7 @@
 class MsvcEmitter : public Emitter
 {
 public:
-    static MsvcEmitter instance;
+    static EmitterInstance<MsvcEmitter> instance;
 
     MsvcEmitter();
 

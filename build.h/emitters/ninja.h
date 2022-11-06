@@ -17,7 +17,7 @@
 class NinjaEmitter : public Emitter
 {
 public:
-    static NinjaEmitter instance;
+    static EmitterInstance<NinjaEmitter> instance;
 
     NinjaEmitter();
 
