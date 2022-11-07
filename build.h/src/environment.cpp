@@ -97,10 +97,18 @@ std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem:
 {
     std::vector<std::filesystem::path> result;
 
-    addConfigurationDependency(path);
-
     if(!std::filesystem::exists(path))
     {
+        auto parentPath = path;
+        while (parentPath.has_parent_path() && parentPath.has_relative_path())
+        {
+            parentPath = parentPath.parent_path();
+            if(std::filesystem::exists(parentPath))
+            {
+                addConfigurationDependency(parentPath);
+                break;
+            }
+        }
         return result;
     }
 
