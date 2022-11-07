@@ -660,7 +660,7 @@ void MsvcEmitter::emit(Environment& env)
         // but it would get removed when doing a "clean" and I'm not sure that's a good idea.
         auto outputPath = *targetPath / ".generator/msvc.cmdline";
         
-        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { process::findCurrentModulePath() }, { outputPath }, env.startupDir, {}, "Check build config." };
+        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { env.configurationFile }, { outputPath }, env.startupDir, {}, "Check build config." };
     }
     
     auto projects = env.collectProjects();
