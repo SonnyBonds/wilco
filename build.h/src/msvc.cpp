@@ -1,6 +1,7 @@
 #include "emitters/msvc.h"
 #include "toolchains/cl.h"
 #include "util/commands.h"
+#include "util/process.h"
 #include "util/uuid.h"
 #include "fileutil.h"
 #include <sstream>
@@ -437,49 +438,6 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
                 }
             }
-        
-            if(!config.properties.commands.value().empty())
-            {
-                CommandEntry chained = commands::chain(config.properties.commands);
-                auto tag = xml.tag("CustomBuildStep");
-                xml.shortTag("Command", {}, "\"%comspec%\" /s /c " + chained.command);
-
-                std::set<std::filesystem::path> inputs;
-                std::set<std::filesystem::path> outputs;
-                for(auto& command : config.properties.commands)
-                {
-                    inputs.insert(command.inputs.begin(), command.inputs.end());
-                }
-
-                for(auto& command : config.properties.commands)
-                {
-                    for(auto& output : command.outputs)
-                    {
-                        auto inputIt = inputs.find(output);
-                        if(inputIt != inputs.end())
-                        {
-                            inputs.erase(inputIt);
-                        }
-                        else
-                        {
-                            outputs.insert(output);
-                        }
-                    }
-                }
-                std::string inputsStr;
-                std::string outputsStr;
-                for(auto& input : inputs)
-                {
-                    inputsStr += input.string() + ";";
-                }
-                xml.shortTag("Inputs", {}, inputsStr);
-
-                for(auto& output : outputs)
-                {
-                    outputsStr += output.string() + ";";
-                }
-                xml.shortTag("Outputs", {}, outputsStr);
-            }
         }
 
         {
@@ -521,6 +479,47 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
                     }
+                }
+            }
+
+            for (auto& config : resolvedConfigs)
+            {
+                int index = 0;
+                for(auto& command : config.properties.commands)
+                {
+                    if(command.inputs.empty())
+                    {
+                        throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + project.name + "' has no inputs.");
+                    }
+                    if(command.outputs.empty())
+                    {
+                        throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + project.name + "' has no outputs.");
+                    }
+                    std::string mainInput = (pathOffset / command.inputs.front()).string();
+                    auto tag = xml.tag("CustomBuild", { {"Include", mainInput}, {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} });
+
+                    xml.shortTag("Message", {}, command.description);
+                    xml.shortTag("Command", {}, "cd " + str::quote((pathOffset / command.workingDirectory).string()) + " && " + command.command);
+
+                    std::string inputsStr;
+                    std::string outputsStr;
+                    bool firstInput = true;
+                    for(auto& input : command.inputs)
+                    {
+                        if(firstInput)
+                        {
+                            firstInput = false;
+                            continue;
+                        }
+                        inputsStr += input.string() + ";";
+                    }
+                    xml.shortTag("AdditionalInputs", {}, inputsStr);
+
+                    for(auto& output : command.outputs)
+                    {
+                        outputsStr += output.string() + ";";
+                    }
+                    xml.shortTag("Outputs", {}, outputsStr);
                 }
             }
         }
@@ -648,6 +647,22 @@ void MsvcEmitter::emit(Environment& env)
 {
     std::filesystem::create_directories(*targetPath);
 
+    auto& generatorProject = env.createProject("_generator", Command);
+
+    {
+        std::string argumentString;
+        for(auto& arg : env.cliContext.allArguments)
+        {
+            argumentString += " " + str::quote(arg);
+        }
+
+        // TODO: Should probably have a different output here. Possibly the solution file, 
+        // but it would get removed when doing a "clean" and I'm not sure that's a good idea.
+        auto outputPath = *targetPath / ".generator/msvc.cmdline";
+        
+        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { process::findCurrentModulePath() }, { outputPath }, env.startupDir, {}, "Check build config." };
+    }
+    
     auto projects = env.collectProjects();
     auto configs = env.collectConfigs();
     // Order matters for output and StringId order is not totally deterministic
@@ -655,7 +670,6 @@ void MsvcEmitter::emit(Environment& env)
         return strcmp(a.cstr(), b.cstr()) == -1;
     });
 
-    
     std::string solutionName = "Solution"; // TODO: Solution name
     std::stringstream solutionStream;
     solutionStream << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
@@ -664,6 +678,11 @@ void MsvcEmitter::emit(Environment& env)
     std::set<std::string> folders;
     for(auto project : projects)
     {
+        if(project != &generatorProject && project != &env.defaults)
+        {
+            project->links += &generatorProject;
+        }
+
         auto& folder = project->ext<extensions::Msvc>().solutionFolder;
         if (!folder.value().empty())
         {
