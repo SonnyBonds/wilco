@@ -51,6 +51,7 @@ struct ProcessResult
 // TODO: Maybe a fully separate OpenProcess or ShellExecute implementation on Windows
 #include <process.h>
 #if _WIN32
+#include <process.h>
 #define popen _popen
 #define pclose _pclose
 #define read _read
