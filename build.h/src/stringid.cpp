@@ -1,5 +1,7 @@
 #include "core/stringid.h"
 
+const char* StringId::EMPTY = "";
+
 // Transparent lookup in unordered_set is a C++20 feature
 // so we'll have to make do with this... thing.
 struct StringStorage

@@ -7,7 +7,7 @@
 // Launders strings into directly comparable pointers
 struct StringId
 {
-    StringId() : _cstr("") {}
+    StringId() : _cstr(EMPTY) {}
     StringId(const StringId& id) = default;
     StringId(const char* id) : StringId(get(id)) {}
     StringId(const std::string& id) : StringId(get(id)) {}
@@ -21,6 +21,7 @@ struct StringId
     static size_t getStorageSize();
 
 private:
+    static const char* EMPTY;
     const char* _cstr;
 
     static StringId get(std::string_view str);
