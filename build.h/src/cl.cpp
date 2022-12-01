@@ -11,7 +11,7 @@ ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler,
 {
 }
 
-std::string ClToolchainProvider::getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const 
+std::string ClToolchainProvider::getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const 
 {
     if(language == lang::Cpp || language == lang::C)
     {
@@ -27,13 +27,13 @@ std::string ClToolchainProvider::getCompiler(Project& project, ProjectSettings& 
     }
 }
 
-std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const
+std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const
 {
     std::string flags;
 
     flags += " /nologo";
 
-    for(auto& define : resolvedSettings.defines)
+    for(auto& define : project.defines(config))
     {
         flags += " /D" + str::quote(define) + "";
     }
@@ -41,7 +41,7 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
     {
         flags += " /I" + str::quote(path.string()) + "";
     }
-    for(auto& path : resolvedSettings.includePaths)
+    for(auto& path : project.includePaths(config))
     {
         flags += " /I" + str::quote((pathOffset / path).string());
     }
@@ -65,7 +65,7 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
             { feature::msvc::SharedRuntime, " /MD"},
             { feature::msvc::SharedDebugRuntime, " /MDd"},
         };
-        for(auto& feature : resolvedSettings.features)
+        for(auto& feature : project.features(config))
         {
             auto it = featureMap.find(feature);
             if(it != featureMap.end())
@@ -74,22 +74,24 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, Projec
             }
         }
 
-        auto& msvc = resolvedSettings.ext<extensions::Msvc>();
-        for (auto& flag : msvc.compilerFlags)
+        auto& msvc = project.ext<extensions::Msvc>();
+        for (auto& flag : msvc.compilerFlags(config))
         {
             flags += " " + std::string(flag);
         }
 
+#if TODO
         if(msvc.pch.header.isSet())
         {
             flags += " /Yu" + str::quote(msvc.pch.header.value().filename().string());
         }
+#endif
     }
 
     return flags;
 }
 
-std::string ClToolchainProvider::getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
+std::string ClToolchainProvider::getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
     if(language == lang::Rc)
     {
@@ -102,7 +104,7 @@ std::string ClToolchainProvider::getCompilerFlags(Project& project, ProjectSetti
     }
 }
 
-std::string ClToolchainProvider::getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
+std::string ClToolchainProvider::getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const
 {
     if(project.type == StaticLib)
     {
@@ -114,7 +116,7 @@ std::string ClToolchainProvider::getLinker(Project& project, ProjectSettings& re
     }
 }
 
-std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
+std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const
 {
     std::string flags;
 
@@ -134,7 +136,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
         {
             flags += " /LIBPATH:\"" + path.string() + "\"";
         }
-        for(auto& lib : resolvedSettings.libs)
+        for(auto& lib : project.libs(config))
         {
             std::string suffix;
             flags += " ";
@@ -155,7 +157,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
         std::map<Feature, std::string> featureMap = {
             { feature::DebugSymbols, " /DEBUG"},
         };
-        for(auto& feature : resolvedSettings.features)
+        for(auto& feature : project.features(config))
         {
             auto it = featureMap.find(feature);
             if(it != featureMap.end())
@@ -167,7 +169,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
         break;
     }
 
-    for (auto& flag : resolvedSettings.ext<extensions::Msvc>().linkerFlags)
+    for (auto& flag : project.ext<extensions::Msvc>().linkerFlags(config))
     {
         flags += " " + std::string(flag);
     }
@@ -175,7 +177,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, ProjectS
     return flags;
 }
 
-std::string ClToolchainProvider::getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
+std::string ClToolchainProvider::getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
 {
     std::string flags;
 
@@ -203,7 +205,7 @@ std::string ClToolchainProvider::getLinkerFlags(Project& project, ProjectSetting
     return flags;
 }
 
-std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const
+std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir) const
 {
     struct ClInternal : public PropertyBag
     {
@@ -219,17 +221,19 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         return {};
     }
 
-    auto dataDir = resolvedSettings.dataDir;
+    auto dataDir = project.dataDir(config);
 
-    const auto& msvcExt = resolvedSettings.ext<extensions::Msvc>();
+    const auto& msvcExt = project.ext<extensions::Msvc>();
 
     std::filesystem::path pchOutput;
     std::string pchOutputStr;
+#if TODO
     if(msvcExt.pch.source.isSet())
     {
         pchOutput = (dataDir / std::filesystem::path("obj") / project.name / msvcExt.pch.source.value().relative_path()).string() + ".pch";
         pchOutputStr = str::quote(pchOutput.string());
     }
+#endif
 
     std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerArgs;
     std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerCommand;
@@ -249,7 +253,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             }
         }
 
-        return commonCompilerArgs[language] = getCommonCompilerFlags(project, resolvedSettings, pathOffset, language) + pchFlag;
+        return commonCompilerArgs[language] = getCommonCompilerFlags(project, config, pathOffset, language) + pchFlag;
     };
 
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
@@ -260,21 +264,21 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         }
 
 
-        return commonCompilerCommand[language] = str::quote(getCompiler(project, resolvedSettings, pathOffset, language));
+        return commonCompilerCommand[language] = str::quote(getCompiler(project, config, pathOffset, language));
     };
 
 
-    auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
+    auto linkerCommand = str::quote(getLinker(project, config, pathOffset)) + getCommonLinkerFlags(project, config, pathOffset);
 
     std::unordered_set<StringId> ignorePch;
-    ignorePch.reserve(msvcExt.pch.ignoredFiles.value().size());
-    for (auto& file : msvcExt.pch.ignoredFiles)
+    ignorePch.reserve(msvcExt.pch.ignoredFiles(config).size());
+    for (auto& file : msvcExt.pch.ignoredFiles(config))
     {
         ignorePch.insert(StringId(file.lexically_normal().string()));
     }
 
     std::vector<std::filesystem::path> linkerInputs;
-    for(auto& input : resolvedSettings.files)
+    for(auto& input : project.files(config))
     {
         auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
         if(language == lang::None)
@@ -293,8 +297,9 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         if(language != lang::Rc)
         {
             command.command = getCommonCompilerCommand(language);
-            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
 
+#if TODO
             if(msvcExt.pch.header.isSet() && msvcExt.pch.source.value() == input.path)
             {
                 command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.value().filename().string());
@@ -308,13 +313,13 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             {
                 command.inputs.push_back(pchOutput);
             }
-
+#endif
             command.depFile = output.string() + ".d";
         }
         else
         {
              // There is rsp support in RC, but it requires different escaping somehow so just ignore that for now
-            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
         }
         command.workingDirectory = workingDir;
         if(!command.rspContents.empty())
@@ -323,7 +328,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             command.command += " @" + str::quote((pathOffset / command.rspFile).string());
         }
         command.description = "Compiling " + project.name + ": " + input.path.string();
-        resolvedSettings.commands += std::move(command);
+        project.commands(config) += std::move(command);
 
         linkerInputs.push_back(output);
     }
@@ -334,7 +339,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
     {
         if(project.type != StaticLib)
         {
-            for(auto& output : resolvedSettings.ext<ClInternal>().linkedOutputs)
+            for(auto& output : project.ext<ClInternal>().linkedOutputs(config))
             {
                 linkerInputs.push_back(output);
             }
@@ -355,7 +360,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             }
         }
 
-        auto output = project.calcOutputPath(resolvedSettings);
+        auto output = project.output(config);
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
@@ -363,20 +368,22 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;
-        command.rspContents = getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
+        command.rspContents = getLinkerFlags(project, config, pathOffset, linkerInputStrs, outputStr);
         if(!command.rspContents.empty())
         {
             command.rspFile = output.string() + ".rsp";
             command.command += " @" + str::quote((pathOffset / command.rspFile).string());
         }
         command.description = "Linking " + project.name + ": " + output.string();
-        resolvedSettings.commands += std::move(command);
+        project.commands(config) += std::move(command);
 
         outputs.push_back(output);
 
         if(project.type == StaticLib)
         {
+#if TODO
             project(PublicOnly, config).ext<ClInternal>().linkedOutputs += output;
+#endif
         }
     }
 

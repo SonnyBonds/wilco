@@ -41,8 +41,11 @@ struct PendingCommand
 
 static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
 {
-    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
-    auto root = resolved.dataDir;
+    auto root = project.dataDir(config);
+    if(root.empty())
+    {
+        root = suggestedDataDir;
+    }
 
     if(!project.type.has_value())
     {
@@ -57,19 +60,19 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     std::filesystem::create_directories(root);
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
-    auto& commands = resolved.commands;
-    if(project.type == Command && commands.value().empty())
+    auto& commands = project.commands(config);
+    if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    const ToolchainProvider* toolchain = resolved.toolchain;
+    const ToolchainProvider* toolchain = project.toolchain(config);
     if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, resolved, config, {});
+    auto toolchainOutputs = toolchain->process(project, config, {});
 
     std::string prologue;
     if(OperatingSystem::current() == Windows)
@@ -95,7 +98,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     }
     std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
 
-    pendingCommands.reserve(pendingCommands.size() + commands.value().size());
+    pendingCommands.reserve(pendingCommands.size() + commands.size());
     for(auto& command : commands)
     {
         std::filesystem::path cwd = command.workingDirectory;
@@ -434,7 +437,7 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
                     // LOG std::cout << "dirty: Dependency file \"" << command->depFile << "\" returned true.\n";
                 }
                 command->dirty = dirty;
-            }            
+            }
         }
     }
 
@@ -512,13 +515,15 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     Project& project = env.createProject("Generator", Executable);
     project.links = std::vector<Project*>(); 
     project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
+    project.ext<extensions::Gcc>().compilerFlags += "-static";
+    project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += env.buildHDir;
-    project.output.path = tempOutput;
+    project.output = tempOutput;
     project.files += env.configurationFile;
     project.files += env.listFiles(env.buildHDir / "src");
     project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
-    for(auto& file : project.files.value())
+    for(auto& file : project.files(""))
     {
         outputEnv.addConfigurationDependency(file.path);
     }

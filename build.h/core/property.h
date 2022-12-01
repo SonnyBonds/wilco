@@ -12,111 +12,6 @@
 #include "core/os.h"
 #include "core/stringid.h"
 
-enum ProjectType
-{
-    Executable,
-    StaticLib,
-    SharedLib,
-    Command
-};
-
-enum Transitivity
-{
-    Local,
-    Public,
-    PublicOnly
-};
-
-struct ConfigSelector
-{
-    ConfigSelector() {}
-    ConfigSelector(StringId name)
-        : name(name)
-    {}
-
-    ConfigSelector(const char* name)
-        : name(name)
-    {}
-
-    ConfigSelector(std::string name)
-        : name(std::move(name))
-    {}
-
-    ConfigSelector(Transitivity transitivity)
-        : transitivity(transitivity)
-    {}
-
-    ConfigSelector(ProjectType projectType)
-        : projectType(projectType)
-    {}
-
-    ConfigSelector(OperatingSystem targetOS)
-        : targetOS(targetOS)
-    {}
-
-    ConfigSelector operator+(Transitivity b)
-    {
-        ConfigSelector a = *this;
-        if(a.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
-        a.transitivity = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(ProjectType b)
-    {
-        ConfigSelector a = *this;
-        if(a.projectType) throw std::invalid_argument("Project type was specified twice.");
-        a.projectType = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(StringId b)
-    {
-        ConfigSelector a = *this;
-        if(a.name) throw std::invalid_argument("Configuration name was specified twice.");
-        a.name = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(OperatingSystem b)
-    {
-        ConfigSelector a = *this;
-        if(a.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
-        a.targetOS = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(const ConfigSelector& b)
-    {
-        ConfigSelector a = *this;
-        if(b.name) a = a + *b.name;
-        if(b.transitivity) a = a + *b.transitivity;
-        if(b.projectType) a = a + *b.projectType;
-        if(b.targetOS) a = a + *b.targetOS;
-
-        return a;
-    }
-
-    std::optional<Transitivity> transitivity;
-    std::optional<StringId> name;
-    std::optional<ProjectType> projectType;
-    std::optional<OperatingSystem> targetOS;
-
-    bool operator <(const ConfigSelector& other) const
-    {
-        if(transitivity != other.transitivity) return transitivity < other.transitivity;
-        if(projectType != other.projectType) return projectType < other.projectType;
-        if(name != other.name) return name < other.name;
-        if(targetOS != other.targetOS) return targetOS < other.targetOS;
-
-        return false;
-    }
-};
-
 struct PropertyBase;
 struct PropertyBag;
 
@@ -155,8 +50,6 @@ struct PropertyBase
     {
         group->bag->properties.push_back(this);
     }
-
-    virtual void applyOverlay(const PropertyBase& other) = 0;
 };
 
 template<typename ValueType>
@@ -166,60 +59,77 @@ struct Property : public PropertyBase
         : PropertyBase(group)
     { }
 
-    template<typename U>
+    /*template<typename U>
     Property& operator =(U&& v)
     {
-        _value = std::forward<U>(v);
-        _set = true;
+        _value[""] = std::forward<U>(v);
+        return *this;
+    }
+
+    template<typename U>
+    Property& operator +=(U&& v)
+    {
+        _value[""] += std::forward<U>(v);
         return *this;
     }
 
     operator const ValueType&() const
     {
-        return _value;
+        return _value[""];
+    }*/
+
+    template<typename T>
+    ValueType& operator =(T&& value)
+    {
+        return (*this)("") = std::forward<T>(value);
     }
 
-    const ValueType& value() const
+    template<typename T>
+    ValueType& operator +=(T&& value)
     {
-        return _value;
+        return (*this)("") += std::forward<T>(value);
     }
 
-    bool isSet() const
+    ValueType& operator ()(StringId config) const
     {
-        return _set;
-    }
-  
-private:
-    void applyOverlay(const PropertyBase& other)
-    {
-        auto& otherProperty = static_cast<const Property&>(other);
-        if(otherProperty._set)
+        for(auto& value : _confValues)
         {
-            _value = otherProperty._value;
-            _set = true;
+            if(value.first == config)
+            {
+                return value.second;
+            }
         }
+        _confValues.push_back(std::make_pair(config, ValueType{}));
+        return _confValues.back().second;
     }
 
-    ValueType _value{};
-    bool _set = false;
+private:
+    mutable std::vector<std::pair<StringId, ValueType>> _confValues;
 };
 
-template<typename ValueType>
-struct ListProperty : public PropertyBase
+namespace detail
 {
-    ListProperty(PropertyGroup* group, bool allowDuplicates = false)
-        : PropertyBase(group)
-        , _allowDuplicates(allowDuplicates)
+
+template<typename ValueType>
+struct ListPropertyValue
+{
+    ListPropertyValue(bool allowDuplicates)
+        : _allowDuplicates(allowDuplicates)
         , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
     { }
 
-    ListProperty(const ListProperty& other) = delete;
-    ListProperty(ListProperty&& other) = delete;
-    ListProperty& operator=(const ListProperty& other) = delete;
-    ListProperty& operator=(ListProperty&& other) = delete;
+    ListPropertyValue(ListPropertyValue&& other)
+        : _allowDuplicates(other._allowDuplicates)
+        , _value(std::move(other._value))
+        , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
+    { }
+
+    ListPropertyValue(const ListPropertyValue& other) = delete;
+    ListPropertyValue& operator=(const ListPropertyValue& other) = delete;
+    ListPropertyValue& operator=(ListPropertyValue&& other) = delete;
 
     template<typename T>
-    ListProperty& operator =(T other)
+    ListPropertyValue& operator =(T other)
     {
         if(_allowDuplicates)
         {
@@ -238,7 +148,7 @@ struct ListProperty : public PropertyBase
     }
     
     template<typename T>
-    ListProperty& operator +=(T other) {
+    ListPropertyValue& operator +=(T other) {
         _value.push_back(std::move(other));
         if(!_allowDuplicates)
         {
@@ -254,7 +164,7 @@ struct ListProperty : public PropertyBase
     }
 
     template<typename T>
-    ListProperty& operator +=(std::initializer_list<T> other) {
+    ListPropertyValue& operator +=(std::initializer_list<T> other) {
         _value.reserve(_value.size() + other.size());
         for(auto& e : other)
         {
@@ -264,7 +174,7 @@ struct ListProperty : public PropertyBase
     }
 
     template<typename T>
-    ListProperty& operator +=(std::vector<T> other) {
+    ListPropertyValue& operator +=(std::vector<T> other) {
         _value.reserve(_value.size() + other.size());
         for(auto& e : other)
         {
@@ -283,16 +193,15 @@ struct ListProperty : public PropertyBase
         return _value.end();
     }
 
-    operator const std::vector<ValueType>&() const
+    size_t size() const
     {
-        return _value;
+        return _value.size();
     }
 
-    const std::vector<ValueType>& value() const
+    bool empty() const
     {
-        return _value;
+        return _value.empty();
     }
-
 private:
     struct IndexedValueEquals
     {
@@ -335,22 +244,138 @@ private:
         const std::vector<ValueType>& _values;
     };
 
-    void applyOverlay(const PropertyBase& other)
-    {
-        auto& otherListProperty = static_cast<const ListProperty&>(other);
-        _value.reserve(_value.size() + otherListProperty.value().size());
-        for(auto& e : otherListProperty)
-        {
-            *this += e;
-        }
-    }
-
     bool _allowDuplicates = false;
     std::vector<ValueType> _value{};
     std::unordered_set<int, IndexedValueHash, IndexedValueEquals> _duplicateTracker;
 };
 
+}
+
+#if 0
+template<typename ValueType>
+struct ListProperty : public PropertyBase
+{
+    ListProperty(PropertyGroup* group, bool allowDuplicates = false)
+        : PropertyBase(group)
+        , _allowDuplicates(allowDuplicates)
+    { }
+
+    template<typename U>
+    ListProperty& operator =(U&& v)
+    {
+        _value[""] = std::forward<U>(v);
+        return *this;
+    }
+
+    template<typename U>
+    ListProperty& operator +=(U&& v)
+    {
+        _value[""] += std::forward<U>(v);
+        return *this;
+    }
+
+    operator const ValueType&() const
+    {
+        return _value[""];
+    }
+
+    ValueType& operator ()(StringId config = {})
+    {
+        return _value[config];
+    }
+
+    auto begin() const
+    {
+        return _value.begin();
+    }
+
+    auto end() const
+    {
+        return _value.end();
+    }
+
+private:
+    detail::List<ValueType>& getOrCreate(StringId config)
+    {
+        auto it = _value.find(config);
+        if(it != _value.end())
+        {
+            return it->second;
+        }
+
+        auto newEntry = _value.insert(std::make_pair(config, detail::List<ValueType>(_allowDuplicates)));
+        return newEntry.first.second;
+    }
+
+    detail::List<ValueType>& getForWriting(StringId config)
+    {
+        return getOrCreate(config);
+    }
+
+    detail::List<ValueType>& getForReading(StringId config)
+    {
+        return getOrCreate(config);
+    }
+
+    mutable std::unordered_map<StringId, detail::List<ValueType>> _value;
+    bool _allowDuplicates;
+};
+#endif
+
+template<typename ValueType>
+struct ListProperty : public PropertyBase
+{
+    ListProperty(PropertyGroup* group, bool allowDuplicates = false)
+        : PropertyBase(group)
+        , _allowDuplicates(allowDuplicates)
+    { }
+
+    template<typename T>
+    detail::ListPropertyValue<ValueType>& operator =(T&& value)
+    {
+        return (*this)("") = std::forward<T>(value);
+    }
+
+    template<typename T>
+    detail::ListPropertyValue<ValueType>& operator =(std::initializer_list<T>&& value)
+    {
+        return (*this)("") = std::forward<std::initializer_list<T>>(value);
+    }
+
+    template<typename T>
+    detail::ListPropertyValue<ValueType>& operator +=(T&& value)
+    {
+        return (*this)("") += std::forward<T>(value);
+    }
+
+    template<typename T>
+    detail::ListPropertyValue<ValueType>& operator +=(std::initializer_list<T>&& value)
+    {
+        return (*this)("") += std::forward<std::initializer_list<T>>(value);
+    }
+
+    detail::ListPropertyValue<ValueType>& operator ()(StringId config) const
+    {
+        for(auto& value : _confValues)
+        {
+            if(value.first == config)
+            {
+                return value.second;
+            }
+        }
+        _confValues.emplace_back(config, detail::ListPropertyValue<ValueType>(_allowDuplicates));
+        return _confValues.back().second;
+    }
+
+private:
+    mutable std::vector<std::pair<StringId, detail::ListPropertyValue<ValueType>>> _confValues;
+    bool _allowDuplicates;
+};
+
 template<typename KeyType, typename ValueType>
+using MapProperty = Property<std::map<KeyType, ValueType>>;
+
+#if 0
 struct MapProperty : public PropertyBase
 {
     MapProperty(PropertyGroup* group)
@@ -432,3 +457,5 @@ private:
 
     std::unordered_map<KeyType, ValueType> _value{};
 };
+
+#endif

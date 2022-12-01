@@ -35,11 +35,11 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
     GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver);
 
-    virtual std::string getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
-    virtual std::string getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, bool pch) const;
-    virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
-    virtual std::string getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
-    std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override;
+    std::string getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const;
+    std::string getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, bool pch) const;
+    std::string getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
+    std::string getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
+    std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir) const override;
 };

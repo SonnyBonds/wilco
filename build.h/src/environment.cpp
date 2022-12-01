@@ -10,6 +10,7 @@ Environment::Environment(cli::Context& cliContext)
     , buildHDir(std::filesystem::absolute(__FILE__).parent_path().parent_path())
     , cliContext(cliContext)
 {
+#if TODO
     defaults(Public).output.dir = "bin";
     defaults(Public, Linux, Executable).output.extension = "";
     defaults(Public, Linux, StaticLib).output.extension = ".a";
@@ -20,6 +21,7 @@ Environment::Environment(cli::Context& cliContext)
     defaults(Public, Windows, Executable).output.extension = ".exe";
     defaults(Public, Windows, StaticLib).output.extension = ".lib";
     defaults(Public, Windows, SharedLib).output.extension = ".dll";
+#endif
 }
 
 Environment::~Environment()
@@ -29,10 +31,12 @@ Environment::~Environment()
 Project& Environment::createProject(std::string name, std::optional<ProjectType> type)
 {
     _projects.emplace_back(new Project(name, type));
+#if TODO
     if(_projects.size() > 1)
     {
         _projects.back()->links += &defaults;
     }
+#endif
     return *_projects.back();
 }
 
@@ -55,6 +59,7 @@ std::vector<StringId> Environment::collectConfigs()
 {
     std::set<StringId> configs;
 
+#if TODO
     for(auto& project : _projects)
     {
         for(auto& config : project->configs)
@@ -65,6 +70,7 @@ std::vector<StringId> Environment::collectConfigs()
             }
         }
     }
+#endif
 
     if(configs.empty())
     {
@@ -145,10 +151,12 @@ void Environment::addConfigurationDependency(std::filesystem::path path)
 
 void Environment::collectOrderedProjects(Project* project, std::set<Project*>& collectedProjects, std::vector<Project*>& orderedProjects)
 {
+#if TODO
     for(auto link : project->links)
     {
         collectOrderedProjects(link, collectedProjects, orderedProjects);
     }
+#endif
 
     if(collectedProjects.insert(project).second)
     {

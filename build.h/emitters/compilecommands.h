@@ -30,5 +30,5 @@ public:
     virtual void emit(Environment& env) override;
 
 private:
-    static void emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& root, Project& project, StringId config, bool first);
+    static void emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& root, Project& project, StringId config, bool& first);
 };

@@ -86,8 +86,7 @@ struct NinjaWriter
 
 static std::string emitProject(Environment& env, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
 {
-    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
-    auto root = resolved.dataDir;
+    auto root = project.dataDir(config);
 
     if(!project.type.has_value())
     {
@@ -111,21 +110,21 @@ static std::string emitProject(Environment& env, const std::filesystem::path& su
 
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
-    auto& commands = resolved.commands;
-    if(project.type == Command && commands.value().empty())
+    auto& commands = project.commands(config);
+    if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
     std::vector<std::string> projectOutputs;
 
-    const ToolchainProvider* toolchain = resolved.toolchain;
+    const ToolchainProvider* toolchain = project.toolchain(config);
     if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, resolved, config, root);
+    auto toolchainOutputs = toolchain->process(project, config, root);
     for(auto& output : toolchainOutputs)
     {
         projectOutputs.push_back((pathOffset / output).string());

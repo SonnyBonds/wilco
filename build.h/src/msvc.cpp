@@ -150,7 +150,7 @@ namespace
     };
 }
 
-static void collectDependencyReferences(const Project& project, std::vector<ProjectReference>& result)
+static void collectDependencyReferences(const Project& project, std::vector<ProjectReference>& result, StringId config)
 {
     auto existingProject = std::find_if(result.begin(), result.end(), [&project](const ProjectReference& ref) { return ref.project == &project; });
     if(existingProject != result.end())
@@ -163,20 +163,24 @@ static void collectDependencyReferences(const Project& project, std::vector<Proj
         result.push_back({&project, calcProjectUuid(project), calcProjectName(project)});
     }
     
-    for(auto& link : project.links)
+#if TODO
+    for(auto& link : project.links(config))
     {
-        collectDependencyReferences(*link, result);
+        collectDependencyReferences(*link, result, config);
     }
+#endif
 }
 
-static std::vector<ProjectReference> collectDependencyReferences(const Project& project)
+static std::vector<ProjectReference> collectDependencyReferences(const Project& project, StringId config)
 {
     std::vector<ProjectReference> result;
 
-    for(auto& link : project.links)
+#if TODO
+    for(auto& link : project.links(config))
     {
-        collectDependencyReferences(*link, result);
+        collectDependencyReferences(*link, result, config);
     }
+#endif
 
     return result;
 }
@@ -186,35 +190,34 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     struct ResolvedConfig
     {
         StringId name;
-        ProjectSettings properties;
         std::unordered_set<StringId> ignorePch;
     };
     
     std::vector<ResolvedConfig> resolvedConfigs;
     if(configs.empty())
     {
-        resolvedConfigs.push_back({"", project.resolve(env, suggestedDataDir, "", OperatingSystem::current())});
+        resolvedConfigs.push_back({""});
     }
     else
     {
         resolvedConfigs.reserve(configs.size());
         for(auto& config : configs)
         {
-            resolvedConfigs.push_back({config, project.resolve(env, suggestedDataDir, config, OperatingSystem::current())});
+            resolvedConfigs.push_back({config});
         }
     }
 
     for (auto& config : resolvedConfigs)
     {
-        const auto& msvcExt = config.properties.ext<extensions::Msvc>();
-        config.ignorePch.reserve(msvcExt.pch.ignoredFiles.value().size());
-        for (auto& file : msvcExt.pch.ignoredFiles)
+        const auto& msvcExt = project.ext<extensions::Msvc>();
+        config.ignorePch.reserve(msvcExt.pch.ignoredFiles(config.name).size());
+        for (auto& file : msvcExt.pch.ignoredFiles(config.name))
         {
             config.ignorePch.insert(StringId(file.lexically_normal().string()));
         }
     }
 
-    auto root = resolvedConfigs.front().properties.dataDir;
+    auto root = project.dataDir(resolvedConfigs.front().name);
 
     if(!project.type.has_value())
     {
@@ -234,7 +237,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
 
-    auto dependencies = collectDependencyReferences(project);
+    auto dependencies = collectDependencyReferences(project, resolvedConfigs.front().name);
 
     // This whole project output is a fair bit of cargo cult emulation
     // of reference project files. Some tags probably aren't even needed.
@@ -308,7 +311,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 {"Label", "PropertySheets"}
             });
 
-            auto outputPath = std::filesystem::absolute(project.calcOutputPath(config.properties));
+            auto outputPath = std::filesystem::absolute(project.output(project.name));
             xml.shortTag("OutDir", {}, outputPath.parent_path().string() + "\\");
             xml.shortTag("IntDir", {}, (root / std::filesystem::path("obj") / std::string(config.name.cstr()) / project.name).string() + "\\");
             xml.shortTag("TargetName", {}, outputPath.stem().string());
@@ -323,7 +326,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
             });
 
             std::string includePaths;
-            for (auto path : config.properties.includePaths)
+            for (auto path : project.includePaths(config.name))
             {
                 if (path.is_absolute())
                 {
@@ -336,7 +339,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
             }
 
             std::string defines;
-            for (auto define : config.properties.defines)
+            for (auto define : project.defines(config.name))
             {
                 defines += define + ";";
             }
@@ -348,12 +351,14 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 xml.shortTag("PreprocessorDefinitions", {}, defines + "%(PreprocessorDefinitions)");
                 xml.shortTag("MultiProcessorCompilation", {}, "true");
 
-                auto& pchHeader = config.properties.ext<extensions::Msvc>().pch.header;
+                auto& pchHeader = project.ext<extensions::Msvc>().pch.header;
+#if TODO
                 if (pchHeader.isSet())
                 {
                     xml.shortTag("PrecompiledHeader", {}, "Use");
                     xml.shortTag("PrecompiledHeaderFile", {}, pchHeader.value().filename().string());
                 }
+#endif
 
                 std::map<Feature, std::string> featureMap = {
                     { feature::Cpp11, "<LanguageStandard>stdcpp11</LanguageStandard>"},
@@ -367,7 +372,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     { feature::msvc::SharedDebugRuntime, "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>"},
                 };
 
-                for(auto& feature : config.properties.features)
+                for(auto& feature : project.features(config.name))
                 {
                     auto it = featureMap.find(feature);
                     if(it != featureMap.end())
@@ -377,7 +382,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 }
 
                 std::string extraFlags;
-                for (auto& flag : config.properties.ext<extensions::Msvc>().compilerFlags)
+                for (auto& flag : project.ext<extensions::Msvc>().compilerFlags(config.name))
                 {
                     extraFlags += std::string(flag) + " ";
                 }
@@ -399,7 +404,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                 auto tag = xml.tag("Lib");
 
                 std::string extraFlags;
-                for (auto& flag : config.properties.ext<extensions::Msvc>().archiverFlags)
+                for (auto& flag : project.ext<extensions::Msvc>().archiverFlags(config.name))
                 {
                     extraFlags += std::string(flag) + " ";
                 }
@@ -411,7 +416,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     auto tag = xml.tag("Link");
 
                     std::string additionalDependencies;
-                    for (auto& lib : config.properties.libs)
+                    for (auto& lib : project.libs(config.name))
                     {
                         std::string suffix;
                         if (!lib.has_parent_path() && lib.is_relative())
@@ -431,7 +436,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     xml.shortTag("AdditionalDependencies", {}, additionalDependencies + "%(AdditionalDependencies)");
 
                     std::string extraFlags;
-                    for (auto& flag : config.properties.ext<extensions::Msvc>().linkerFlags)
+                    for (auto& flag : project.ext<extensions::Msvc>().linkerFlags(config.name))
                     {
                         extraFlags += std::string(flag) + " ";
                     }
@@ -443,7 +448,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         {
             std::set<std::string> objFiles;
             auto tag = xml.tag("ItemGroup");
-            for(auto& input : resolvedConfigs.front().properties.files)
+            for(auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if(language != lang::C && language != lang::Cpp)
@@ -470,7 +475,8 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
                 for (auto& config : resolvedConfigs)
                 {
-                    const auto& msvcExt = config.properties.ext<extensions::Msvc>();
+                    const auto& msvcExt = project.ext<extensions::Msvc>();
+#if TODO
                     if (msvcExt.pch.source.isSet() && msvcExt.pch.source == input.path.string())
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
@@ -479,13 +485,14 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
                     }
+#endif
                 }
             }
 
             for (auto& config : resolvedConfigs)
             {
                 int index = 0;
-                for(auto& command : config.properties.commands)
+                for(auto& command : project.commands(config.name))
                 {
                     if(command.inputs.empty())
                     {
@@ -526,7 +533,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
         {
             auto tag = xml.tag("ItemGroup");
-            for (auto& input : resolvedConfigs.front().properties.files)
+            for (auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if (language != lang::Rc)
@@ -540,7 +547,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
         {
             auto tag = xml.tag("ItemGroup");
-            for(auto& input : resolvedConfigs.front().properties.files)
+            for(auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if(language == lang::C || language == lang::Cpp || language == lang::Rc)
@@ -580,7 +587,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         {
             auto tag = filtersXml.tag("ItemGroup");
 
-            for (auto& input : resolvedConfigs.front().properties.files)
+            for (auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto filterPath = input.path.lexically_normal();
                 while (filterPath.has_parent_path() && filterPath.has_relative_path())
@@ -599,7 +606,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
         {
             auto tag = filtersXml.tag("ItemGroup");
-            for (auto& input : resolvedConfigs.front().properties.files)
+            for (auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if (language != lang::C && language != lang::Cpp)
@@ -614,7 +621,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
         {
             auto tag = filtersXml.tag("ItemGroup");
-            for (auto& input : resolvedConfigs.front().properties.files)
+            for (auto& input : project.files(resolvedConfigs.front().name))
             {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if (language == lang::C || language == lang::Cpp)
@@ -660,7 +667,9 @@ void MsvcEmitter::emit(Environment& env)
         // but it would get removed when doing a "clean" and I'm not sure that's a good idea.
         auto outputPath = *targetPath / ".generator/msvc.cmdline";
         
+#if TODO
         generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { env.configurationFile }, { outputPath }, env.startupDir, {}, "Check build config." };
+#endif
     }
     
     auto projects = env.collectProjects();
@@ -678,6 +687,7 @@ void MsvcEmitter::emit(Environment& env)
     std::set<std::string> folders;
     for(auto project : projects)
     {
+#if TODO
         if(project != &generatorProject && project != &env.defaults)
         {
             project->links += &generatorProject;
@@ -688,6 +698,7 @@ void MsvcEmitter::emit(Environment& env)
         {
             folders.insert(folder);
         }
+#endif
         emitProject(env, solutionStream, *targetPath, *project, configs);
     }
 
@@ -724,6 +735,7 @@ void MsvcEmitter::emit(Environment& env)
     }
     solutionStream << "\tEndGlobalSection\n";
 
+#if TODO
     if (!folders.empty())
     {
         solutionStream << "\tGlobalSection(NestedProjects) = preSolution\n";
@@ -737,6 +749,7 @@ void MsvcEmitter::emit(Environment& env)
         }
         solutionStream << "\tEndGlobalSection\n";
     }
+#endif
 
     solutionStream << "\tGlobalSection(ExtensibilityGlobals) = postSolution\n";
     solutionStream << "\t\tSolutionGuid = " << uuidStr(uuid::generateV3(solutionNamespaceUuid, solutionName)) << "\n";

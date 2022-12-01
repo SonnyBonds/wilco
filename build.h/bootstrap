@@ -98,7 +98,7 @@ try_gcc()
     if [ -z "$4" ]; then return; fi
     if [ -z "$5" ]; then return; fi
     local selected=
-    local this_compile_command="$3"\ $6$7$8$9\ -std=c++17\ -I"$BUILD_H_DIR"\ -o\ "$OUTPUT"\ "$INPUT"\ "$BUILD_H_DIR"/src/*.cpp
+    local this_compile_command="$3"\ $6$7$8$9\ -g\ -std=c++17\ -I"$BUILD_H_DIR"\ -o\ "$OUTPUT"\ "$INPUT"\ "$BUILD_H_DIR"/src/*.cpp
     if [ -z "$selected_toolchain" ]; then
         local selected="(selected by default)"
         compile_command="$this_compile_command"

@@ -18,6 +18,14 @@
 struct Environment;
 struct Project;
 
+enum ProjectType
+{
+    Executable,
+    StaticLib,
+    SharedLib,
+    Command
+};
+
 struct ProjectSettings : public PropertyBag
 {
     ListProperty<Project*> links{this};
@@ -33,15 +41,7 @@ struct ProjectSettings : public PropertyBag
     Property<std::filesystem::path> dataDir{this};
     Property<const ToolchainProvider*> toolchain{this};
 
-    struct Output : public PropertyGroup
-    {
-        Property<std::filesystem::path> path{this};
-        Property<std::filesystem::path> dir{this};
-        Property<std::string> stem{this};
-        Property<std::string> extension{this};
-        Property<std::string> prefix{this};
-        Property<std::string> suffix{this};
-    } output{this};
+    Property<std::filesystem::path> output{this};
 
     template<typename ExtensionType>
     ExtensionType& ext()
@@ -107,7 +107,7 @@ private:
             auto newExtension = new ExtensionEntryImpl<ExtensionType>();
             for(size_t i=0; i<extension.properties.size(); ++i)
             {
-                newExtension->extension.properties[i]->applyOverlay(*extension.properties[i]);
+                // TODO newExtension->extension.properties[i]->applyOverlay(*extension.properties[i]);
             }
             return std::unique_ptr<ExtensionEntry>(newExtension);
         }
@@ -125,22 +125,7 @@ struct Project : public ProjectSettings
     const std::string name;
     const std::optional<ProjectType> type;
 
-    std::map<ConfigSelector, ProjectSettings> configs;
-
     Project(std::string name, std::optional<ProjectType> type);
     Project(const Project& other) = delete;
     ~Project();
-
-    ProjectSettings resolve(Environment& env, std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const;
-
-    template<typename... Selectors>
-    ProjectSettings& operator()(ConfigSelector selector, Selectors... selectors)
-    {
-        return configs[(selector + ... + ConfigSelector(selectors))];
-    }
-
-    std::filesystem::path calcOutputPath(ProjectSettings& resolvedSettings) const;
-
-private:
-    void internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local) const;
 };

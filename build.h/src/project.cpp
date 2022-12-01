@@ -11,65 +11,6 @@ Project::Project(std::string name, std::optional<ProjectType> type)
 Project::~Project()
 { }
 
-ProjectSettings Project::resolve(Environment& env, std::filesystem::path suggestedDataDir, StringId configName, OperatingSystem targetOS) const
-{
-    ProjectSettings result;
-    result.dataDir = suggestedDataDir;
-    internalResolve(result, type, configName, targetOS, true);
-
-    for(auto eventHandler : EventHandlers::list())
-    {
-        eventHandler->postResolve(env, *this, result, type, configName, targetOS);
-    }
-    return result;
-}
-
-std::filesystem::path Project::calcOutputPath(ProjectSettings& resolvedSettings) const
-{
-    if(!resolvedSettings.output.path.value().empty())
-    {
-        return resolvedSettings.output.path;
-    }
-
-    std::string stem = resolvedSettings.output.stem;
-    if(stem.empty())
-    {
-        stem = name;
-    }
-
-    return resolvedSettings.output.dir.value() / (resolvedSettings.output.prefix.value() + stem + resolvedSettings.output.suffix.value() + resolvedSettings.output.extension.value());
-}
-
-void Project::internalResolve(ProjectSettings& result, std::optional<ProjectType> projectType, StringId configName, OperatingSystem targetOS, bool local) const
-{
-    for(auto& link : links)
-    {
-        link->internalResolve(result, projectType, configName, targetOS, false);
-    }
-
-    if(local)
-    {
-        result += *this;
-    }
-
-    for(auto& entry : configs)
-    {
-        if(local)
-        {
-            if(entry.first.transitivity && entry.first.transitivity == PublicOnly) continue;
-        }
-        else
-        {
-            if(!entry.first.transitivity || entry.first.transitivity == Local) continue;
-        }
-        if(entry.first.projectType && entry.first.projectType != projectType) continue;
-        if(entry.first.name && entry.first.name != configName) continue;
-        if(entry.first.targetOS && entry.first.targetOS != targetOS) continue;
-
-        result += entry.second;
-    }
-}
-
 ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
 {
     auto apply = [](PropertyBag& base, const PropertyBag& overlay)
@@ -79,12 +20,15 @@ ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
         assert(base.properties.size() == overlay.properties.size());
         for(size_t i=0; i<base.properties.size(); ++i)
         {
+#if TODO
             base.properties[i]->applyOverlay(*overlay.properties[i]);
+#endif
         }
     };
 
     apply(*this, other);
 
+#if TODO
     for(auto& extension : other._extensions)
     {
         auto it = _extensions.find(extension.first);
@@ -97,6 +41,7 @@ ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
             _extensions.insert({extension.first, extension.second->clone()});
         }
     }
+#endif
 
     return *this;
 }
