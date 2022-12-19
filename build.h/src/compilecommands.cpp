@@ -12,7 +12,7 @@ void CompileCommands::emit(Environment& env)
     stream << "[\n";
 
     auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
+    auto configs = env.configurations;
     bool first = true;
     for(auto config : configs)
     {
@@ -25,16 +25,17 @@ void CompileCommands::emit(Environment& env)
     stream << "\n]\n";
 }
 
-void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool& first)
+void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& projectDir, Project& project, StringId config, bool& first)
 {
-    if(!project.type.has_value())
-    {
-        return;
-    }
-
     if(project.name.empty())
     {
         throw std::runtime_error("Trying to build project with no name.");
+    }
+
+    auto dataDir = project.dataDir(config).value();
+    if(dataDir.empty())
+    {
+        dataDir = projectDir;
     }
 
     auto& commands = project.commands(config);
@@ -49,7 +50,7 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, {});
+    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
 
     auto absCwd = std::filesystem::absolute(std::filesystem::current_path());
     for(auto& command : commands)

@@ -158,10 +158,7 @@ static void collectDependencyReferences(const Project& project, std::vector<Proj
         return;
     }
 
-    if(project.type.has_value())
-    {
-        result.push_back({&project, calcProjectUuid(project), calcProjectName(project)});
-    }
+    result.push_back({&project, calcProjectUuid(project), calcProjectName(project)});
     
 #if TODO
     for(auto& link : project.links(config))
@@ -185,7 +182,7 @@ static std::vector<ProjectReference> collectDependencyReferences(const Project& 
     return result;
 }
 
-static std::string emitProject(Environment& env, std::ostream& solutionStream, const std::filesystem::path& suggestedDataDir, Project& project, std::vector<StringId> configs)
+static std::string emitProject(Environment& env, std::ostream& solutionStream, const std::filesystem::path& projectDir, Project& project, std::vector<StringId> configs)
 {
     struct ResolvedConfig
     {
@@ -217,13 +214,6 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         }
     }
 
-    auto root = project.dataDir(resolvedConfigs.front().name);
-
-    if(!project.type.has_value())
-    {
-        return {};
-    }
-
     if(project.name.empty())
     {
         throw std::runtime_error("Trying to emit project with no name.");
@@ -235,13 +225,13 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
     auto projectUuid = calcProjectUuid(project);
 
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
+    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), projectDir);
 
     auto dependencies = collectDependencyReferences(project, resolvedConfigs.front().name);
 
     // This whole project output is a fair bit of cargo cult emulation
     // of reference project files. Some tags probably aren't even needed.
-    SimpleXmlWriter xml(root / vcprojName);
+    SimpleXmlWriter xml(projectDir / vcprojName);
     {
         auto tag = xml.tag("Project", {
             {"DefaultTargets", "Build"}, 
@@ -277,7 +267,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
             });
 
             xml.shortTag("VCProjectVersion", {}, "16.0");
-            xml.shortTag("ConfigurationType", {}, typeString(*project.type));
+            xml.shortTag("ConfigurationType", {}, typeString(project.type));
             xml.shortTag("PlatformToolset", {}, "v143"); // TODO: Configurable toolset
             xml.shortTag("PreferredToolArchitecture", {}, "x64"); // TODO: Configurable toolset
         }
@@ -313,7 +303,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
             auto outputPath = std::filesystem::absolute(project.output(project.name));
             xml.shortTag("OutDir", {}, outputPath.parent_path().string() + "\\");
-            xml.shortTag("IntDir", {}, (root / std::filesystem::path("obj") / std::string(config.name.cstr()) / project.name).string() + "\\");
+            xml.shortTag("IntDir", {}, (projectDir / std::filesystem::path("obj") / std::string(config.name.cstr()) / project.name).string() + "\\");
             xml.shortTag("TargetName", {}, outputPath.stem().string());
             xml.shortTag("TargetExt", {}, outputPath.extension().string());
         }
@@ -576,7 +566,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
         }
     }
 
-    SimpleXmlWriter filtersXml(root / (vcprojName + ".filters"));
+    SimpleXmlWriter filtersXml(projectDir / (vcprojName + ".filters"));
     {
         auto tag = filtersXml.tag("Project", {
             {"ToolsVersion", "16.0"},
@@ -673,7 +663,8 @@ void MsvcEmitter::emit(Environment& env)
     }
     
     auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
+    std::vector<StringId> configs;
+    configs.insert(configs.end(), env.configurations.begin(), env.configurations.end());
     // Order matters for output and StringId order is not totally deterministic
     std::sort(configs.begin(), configs.end(), [](StringId& a, StringId& b) {
         return strcmp(a.cstr(), b.cstr()) == -1;
@@ -687,18 +678,17 @@ void MsvcEmitter::emit(Environment& env)
     std::set<std::string> folders;
     for(auto project : projects)
     {
-#if TODO
         if(project != &generatorProject && project != &env.defaults)
         {
-            project->links += &generatorProject;
+            //project->links += &generatorProject;
         }
 
-        auto& folder = project->ext<extensions::Msvc>().solutionFolder;
+        auto& folder = project->ext<extensions::Msvc>().solutionFolder(configs.front());
         if (!folder.value().empty())
         {
             folders.insert(folder);
         }
-#endif
+
         emitProject(env, solutionStream, *targetPath, *project, configs);
     }
 
@@ -720,11 +710,6 @@ void MsvcEmitter::emit(Environment& env)
     solutionStream << "\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n";
     for(auto project : projects)
     {
-        if(!project->type.has_value())
-        {
-            continue;
-        }
-
         for(auto& config : configs)
         {
             auto cfgStr = std::string(config.cstr()) + "|" + platformStr;
@@ -735,13 +720,12 @@ void MsvcEmitter::emit(Environment& env)
     }
     solutionStream << "\tEndGlobalSection\n";
 
-#if TODO
     if (!folders.empty())
     {
         solutionStream << "\tGlobalSection(NestedProjects) = preSolution\n";
         for (auto& project : projects)
         {
-            auto& folder = project->ext<extensions::Msvc>().solutionFolder;
+            auto& folder = project->ext<extensions::Msvc>().solutionFolder(configs.front());
             if (!folder.value().empty())
             {
                 solutionStream << "\t\t" << calcProjectUuid(*project) + " = " + calcFolderUuid(folder) + "\n";
@@ -749,7 +733,6 @@ void MsvcEmitter::emit(Environment& env)
         }
         solutionStream << "\tEndGlobalSection\n";
     }
-#endif
 
     solutionStream << "\tGlobalSection(ExtensibilityGlobals) = postSolution\n";
     solutionStream << "\t\tSolutionGuid = " << uuidStr(uuid::generateV3(solutionNamespaceUuid, solutionName)) << "\n";

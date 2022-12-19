@@ -36,7 +36,7 @@ void Query::emitProjects(Environment& env)
 
 void Query::emitConfigs(Environment& env)
 {
-    for(auto& config : env.collectConfigs())
+    for(auto& config : env.configurations)
     {
         std::cout << std::string(config) << "\n";
     }            

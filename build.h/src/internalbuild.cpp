@@ -39,17 +39,12 @@ struct PendingCommand
     std::future<process::ProcessResult> result;
 };
 
-static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
+static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project, StringId config)
 {
-    auto root = project.dataDir(config);
-    if(root.empty())
+    std::filesystem::path dataDir = project.dataDir(config);
+    if(dataDir.empty())
     {
-        root = suggestedDataDir;
-    }
-
-    if(!project.type.has_value())
-    {
-        return;
+        dataDir = projectDir;
     }
 
     if(project.name.empty())
@@ -57,8 +52,8 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
         throw std::runtime_error("Trying to build project with no name.");
     }
 
-    std::filesystem::create_directories(root);
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
+    std::filesystem::create_directories(dataDir);
+    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), dataDir);
 
     auto& commands = project.commands(config);
     if(project.type == Command && commands.empty())
@@ -72,7 +67,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, {});
+    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
 
     std::string prologue;
     if(OperatingSystem::current() == Windows)
@@ -81,7 +76,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     }
     prologue += "cd \"$cwd\" && ";
 
-    auto cmdFilePath = root / (project.name + ".cmdlines");
+    auto cmdFilePath = dataDir / (project.name + ".cmdlines");
     auto cmdData = readFile(cmdFilePath);
     std::unordered_map<StringId, std::string_view> cmdLines;
     std::unordered_map<StringId, std::string_view> rspContents;
@@ -455,7 +450,7 @@ void DirectBuilder::emit(Environment& env)
     size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
 
     auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
+    auto configs = env.configurations;
 
     if(selectedConfig)
     {

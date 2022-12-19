@@ -41,5 +41,5 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     std::string getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const;
     std::string getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const;
     std::string getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
-    std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir) const override;
+    std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
 };

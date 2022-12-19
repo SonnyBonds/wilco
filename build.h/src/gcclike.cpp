@@ -109,7 +109,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Str
 {
     std::string flags;
 
-    switch(*project.type)
+    switch(project.type)
     {
     default:
         throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
@@ -128,19 +128,9 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Str
             flags += " -L\"" + (pathOffset / path).string() + "\"";
         }
 
-        for(auto& path : project.libs(config))
+        for(auto& path : project.systemLibs(config))
         {
-            // It's hard to know if the user wants "libfoo.a" when they say "foo" or not.
-            // Might need better heuristics, but assuming having a path specified
-            // implies a specific name
-            if(path.has_parent_path())
-            {
-                flags += " " + (pathOffset / path).string();
-            }
-            else
-            {
-                flags += " -l" + path.string();
-            }
+            flags += " -l" + path.string();
         }
 
         for(auto& framework : project.frameworks(config))
@@ -150,7 +140,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Str
 
         if(project.type == SharedLib)
         {
-            auto& features = project.features(config);
+            const auto& features = project.features(config);
             if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
             {
                 flags += " -bundle";
@@ -176,7 +166,7 @@ std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, StringId 
 {
     std::string flags;
 
-    switch(*project.type)
+    switch(project.type)
     {
     default:
         throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
@@ -200,13 +190,8 @@ std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, StringId 
     return flags;
 }
 
-std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir) const
+std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {
-    struct GccInternal : public PropertyBag
-    {
-        ListProperty<std::filesystem::path> linkedOutputs{this, true};
-    };
-
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
     if(project.type != Executable &&
@@ -216,16 +201,14 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         return {};
     }
 
-    auto dataDir = project.dataDir(config);
-
     const auto& gccExt = project.ext<extensions::Gcc>();
     const auto& buildPch = gccExt.pch.build(config);
     const auto& importPch = gccExt.pch.use(config);
 
     // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
-    if(!buildPch.empty())
+    if(!buildPch.value().empty())
     {
-        auto input = buildPch;
+        auto input = buildPch.value();
         auto inputStr = (pathOffset / input).string();
 
         auto output = dataDir / std::filesystem::path("pch") / (input.string() + ".pch");
@@ -264,14 +247,14 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
     std::string cppPchFlags;
     std::string objCppPchFlags;
     std::vector<std::filesystem::path> pchInputs;
-    if(!importPch.empty())
+    if(!importPch.value().empty())
     {
-        auto input = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pch");
+        auto input = dataDir / std::filesystem::path("pch") / (importPch.value().relative_path().string() + ".pch");
         auto inputStr = (pathOffset / input).string();
         cppPchFlags += " -Xclang -include-pch -Xclang " + inputStr;
         pchInputs.push_back(input);
 
-        auto inputObjCpp = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pchmm");
+        auto inputObjCpp = dataDir / std::filesystem::path("pch") / (importPch.value().relative_path().string() + ".pchmm");
         auto inputObjCppStr = (pathOffset / inputObjCpp).string();
         objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
         pchInputs.push_back(inputObjCpp);
@@ -313,7 +296,10 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         }
 
         auto inputStr = (pathOffset / input.path).string();
-        auto output = dataDir / std::filesystem::path("obj") / project.name / (input.path.relative_path().string() + ".o");
+        auto objPath = input.path.relative_path().string();
+        str::replaceAllInPlace(objPath, ":", "_");
+        str::replaceAllInPlace(objPath, "..", "__");
+        auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + ".o");
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
@@ -334,14 +320,14 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
     if(!linker.empty())
     {
-        if(project.type != StaticLib)
+        if(project.type == Executable || project.type == SharedLib)
         {
-            for(auto& output : project.ext<GccInternal>().linkedOutputs(config))
+            for(auto& path : project.libs(config))
             {
-                linkerInputs.push_back(output);
+                linkerInputs.push_back(path);
             }
         }
-
+        
         std::vector<std::string> linkerInputStrs;
         linkerInputStrs.reserve(linkerInputs.size());
         bool windows = OperatingSystem::current() == Windows;
@@ -357,7 +343,11 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             }
         }
 
-        auto output = project.output(config);
+        std::filesystem::path output = project.output(config);
+        if(output.empty())
+        {
+            throw std::runtime_error("Project '" + project.name + "' has no output set.");
+        }
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
@@ -369,13 +359,6 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         project.commands(config) += std::move(command);
 
         outputs.push_back(output);
-
-        if(project.type == StaticLib)
-        {
-#if TODO
-            project(PublicOnly, config).ext<GccInternal>().linkedOutputs += output;
-#endif
-        }
     }
 
     return outputs;

@@ -84,13 +84,12 @@ struct NinjaWriter
     }
 };
 
-static std::string emitProject(Environment& env, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId config, bool generator)
 {
-    auto root = project.dataDir(config);
-
-    if(!project.type.has_value())
+    std::filesystem::path dataDir = project.dataDir(config);
+    if(dataDir.empty())
     {
-        return {};
+        dataDir = projectDir;
     }
 
     if(project.name.empty())
@@ -106,9 +105,9 @@ static std::string emitProject(Environment& env, const std::filesystem::path& su
     std::cout << "\n";
 
     auto ninjaName = project.name + ".ninja";
-    NinjaWriter ninja(root / ninjaName);
+    NinjaWriter ninja(projectDir / ninjaName);
 
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
+    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), projectDir);
 
     auto& commands = project.commands(config);
     if(project.type == Command && commands.empty())
@@ -124,7 +123,7 @@ static std::string emitProject(Environment& env, const std::filesystem::path& su
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, root);
+    auto toolchainOutputs = toolchain->process(project, config, projectDir, dataDir);
     for(auto& output : toolchainOutputs)
     {
         projectOutputs.push_back((pathOffset / output).string());
@@ -220,7 +219,7 @@ void NinjaEmitter::emit(Environment& env)
     auto projects = env.collectProjects();
 
     std::vector<std::filesystem::path> outputs;
-    auto configs = env.collectConfigs();
+    auto configs = env.configurations;
     for(auto& config : configs)
     {
         std::filesystem::path configTargetPath = *targetPath;

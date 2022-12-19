@@ -3,7 +3,7 @@
 #include "core/project.h"
 #include "core/eventhandler.h"
 
-Project::Project(std::string name, std::optional<ProjectType> type)
+Project::Project(std::string name, ProjectType type)
     : name(std::move(name))
     , type(type)
 { }
@@ -11,7 +11,7 @@ Project::Project(std::string name, std::optional<ProjectType> type)
 Project::~Project()
 { }
 
-ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
+void ProjectSettings::import(const ProjectSettings& other)
 {
     auto apply = [](PropertyBag& base, const PropertyBag& overlay)
     {
@@ -20,15 +20,12 @@ ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
         assert(base.properties.size() == overlay.properties.size());
         for(size_t i=0; i<base.properties.size(); ++i)
         {
-#if TODO
-            base.properties[i]->applyOverlay(*overlay.properties[i]);
-#endif
+            base.properties[i]->import(*overlay.properties[i]);
         }
     };
 
     apply(*this, other);
 
-#if TODO
     for(auto& extension : other._extensions)
     {
         auto it = _extensions.find(extension.first);
@@ -41,15 +38,13 @@ ProjectSettings& ProjectSettings::operator +=(const ProjectSettings& other)
             _extensions.insert({extension.first, extension.second->clone()});
         }
     }
-#endif
-
-    return *this;
 }
 
-ProjectSettings ProjectSettings::operator+(const ProjectSettings& other) const
+void Project::import(const Project& other, bool reexport)
 {
-    ProjectSettings result;
-    result += *this;
-    result += other;
-    return result;
+    ProjectSettings::import(other.exports);
+    if(reexport)
+    {
+        exports.import(other.exports);
+    }
 }

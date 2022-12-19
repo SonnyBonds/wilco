@@ -38,3 +38,13 @@ struct std::hash<StringId>
         return std::hash<const void*>{}(id.cstr());
     }
 };
+
+inline bool operator ==(const StringId& a, const StringId& b)
+{
+    return a.cstr() == b.cstr();
+}
+
+inline bool operator !=(const StringId& a, const StringId& b)
+{
+    return a.cstr() != b.cstr();
+}

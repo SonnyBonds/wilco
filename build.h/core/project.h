@@ -35,6 +35,7 @@ struct ProjectSettings : public PropertyBag
     ListProperty<std::filesystem::path> libPaths{this};
     ListProperty<SourceFile> files{this};
     ListProperty<std::filesystem::path> libs{this};
+    ListProperty<std::filesystem::path> systemLibs{this};
     ListProperty<std::string> defines{this};
     ListProperty<Feature> features{this};
     ListProperty<std::string> frameworks{this};
@@ -68,17 +69,12 @@ struct ProjectSettings : public PropertyBag
         return _extensions.find(key) != _extensions.end();
     }
 
-    ProjectSettings& operator +=(const ProjectSettings& other);
-
-    ProjectSettings operator+(const ProjectSettings& other) const;
+    void import(const ProjectSettings& other);
 
     ProjectSettings()
     { }
 
-    ProjectSettings(const ProjectSettings& other)
-    {
-        *this += other;
-    }
+    ProjectSettings(const ProjectSettings& other) = delete;
     
 private:
     struct ExtensionEntry
@@ -123,9 +119,13 @@ private:
 struct Project : public ProjectSettings
 {
     const std::string name;
-    const std::optional<ProjectType> type;
+    const ProjectType type;
+    ProjectSettings exports;
 
-    Project(std::string name, std::optional<ProjectType> type);
+    Project(std::string name, ProjectType type);
     Project(const Project& other) = delete;
     ~Project();
+
+    using ProjectSettings::import;
+    void import(const Project& other, bool reexport = true);
 };
