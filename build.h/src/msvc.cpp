@@ -658,6 +658,11 @@ void MsvcEmitter::emit(Environment& env)
                 throw std::runtime_error("Trying to emit project with no name.");
             }
 
+            if(project.get() != &generatorProject)
+            {
+                project->dependencies += &generatorProject;
+            }
+
             projectNames.insert(project->name);
         }
 
