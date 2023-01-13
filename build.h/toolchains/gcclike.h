@@ -12,18 +12,29 @@
 
 namespace extensions
 {
-    struct Gcc : public PropertyBag
+    struct Gcc
     {
-        ListProperty<StringId> compilerFlags{this};
-        ListProperty<StringId> linkerFlags{this};
-        ListProperty<StringId> archiverFlags{this};
+        ListPropertyValue<StringId> compilerFlags;
+        ListPropertyValue<StringId> linkerFlags;
+        ListPropertyValue<StringId> archiverFlags;
     
-        struct Pch : public PropertyGroup
+        struct Pch
         {
-            Property<std::filesystem::path> build{ this };
-            Property<std::filesystem::path> use{ this };
-            ListProperty<std::filesystem::path> ignoredFiles{ this };
-        } pch{ this };
+            std::filesystem::path build;
+            std::filesystem::path use;
+            ListPropertyValue<std::filesystem::path> ignoredFiles;
+        } pch;
+
+        virtual void import(const Gcc& other)
+        {
+            compilerFlags += other.compilerFlags;
+            linkerFlags += other.linkerFlags;
+            archiverFlags += other.archiverFlags;
+
+            if(!pch.build.empty()) pch.build = other.pch.build;
+            if(!pch.use.empty()) pch.use = other.pch.use;
+            pch.ignoredFiles += other.pch.ignoredFiles;
+        }
     };
 }
 
@@ -35,11 +46,11 @@ struct GccLikeToolchainProvider : public ToolchainProvider
 
     GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver);
 
-    virtual std::string getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
-    virtual std::string getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, bool pch) const;
-    virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
-    virtual std::string getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
-    std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override;
+    std::string getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const;
+    std::string getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, bool pch) const;
+    std::string getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
+    std::string getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
+    std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
 };

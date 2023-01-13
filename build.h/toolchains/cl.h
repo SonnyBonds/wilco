@@ -20,19 +20,31 @@ namespace feature::msvc
 
 namespace extensions
 {
-    struct Msvc : public PropertyBag
+    struct Msvc
     {
-        ListProperty<StringId> compilerFlags{ this };
-        ListProperty<StringId> linkerFlags{ this };
-        ListProperty<StringId> archiverFlags{ this };
-        Property<std::string> solutionFolder{ this };
+        ListPropertyValue<StringId> compilerFlags;
+        ListPropertyValue<StringId> linkerFlags;
+        ListPropertyValue<StringId> archiverFlags;
+        std::string solutionFolder;
 
-        struct Pch : public PropertyGroup
+        struct Pch
         {
-            Property<std::filesystem::path> header{ this };
-            Property<std::filesystem::path> source{ this };
-            ListProperty<std::filesystem::path> ignoredFiles{ this };
-        } pch{ this };
+            std::filesystem::path header;
+            std::filesystem::path source;
+            ListPropertyValue<std::filesystem::path> ignoredFiles;
+        } pch;
+
+        virtual void import(const Msvc& other)
+        {
+            compilerFlags += other.compilerFlags;
+            linkerFlags += other.linkerFlags;
+            archiverFlags += other.archiverFlags;
+            if(!other.solutionFolder.empty()) solutionFolder = other.solutionFolder;
+
+            if(!pch.header.empty()) pch.header = other.pch.header;
+            if(!pch.source.empty()) pch.source = other.pch.source;
+            pch.ignoredFiles += other.pch.ignoredFiles;
+        }
     };
 }
 
@@ -46,11 +58,11 @@ struct ClToolchainProvider : public ToolchainProvider
     const std::vector<std::filesystem::path> sysLibPaths;
 
     ClToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths);
-    virtual std::string getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
-    virtual std::string getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const;
-    virtual std::string getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
-    virtual std::string getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const;
-    virtual std::string getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
-    std::vector<std::filesystem::path> process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const override;
+    std::string getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const;
+    std::string getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const;
+    std::string getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
+    std::string getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const;
+    std::string getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
+    std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
 };

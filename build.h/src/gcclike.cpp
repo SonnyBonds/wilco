@@ -8,12 +8,12 @@ GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string
 {
 }
 
-std::string GccLikeToolchainProvider::getCompiler(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language) const
+std::string GccLikeToolchainProvider::getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const
 {
     return compiler;
 }
 
-std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, bool pch) const
+std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, bool pch) const
 {
     std::string flags;
 
@@ -38,15 +38,15 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, P
         throw std::runtime_error("Toolchain does not support language '" + std::string(language) + "'.");
     }
 
-    for(auto& define : resolvedSettings.defines)
+    for(auto& define : project.defines)
     {
         flags += " -D" + str::quote(define);
     }
-    for(auto& path : resolvedSettings.includePaths)
+    for(auto& path : project.includePaths)
     {
         flags += " -I\"" + (pathOffset / path).string() + "\"";
     }
-    if(resolvedSettings.platform.value() == StringId("x64"))
+    if(project.platform == StringId("x64"))
     {
         flags += " -m64 -arch x86_64";
     }
@@ -71,7 +71,7 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, P
             });
     }
 
-    for(auto& feature : resolvedSettings.features)
+    for(auto& feature : project.features)
     {
         auto it = featureMap.find(feature);
         if(it != featureMap.end())
@@ -80,7 +80,7 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, P
         }
     }
 
-    for(auto& flag : resolvedSettings.ext<extensions::Gcc>().compilerFlags)
+    for(auto& flag : project.ext<extensions::Gcc>().compilerFlags)
     {
         flags += " " + std::string(flag);
     }
@@ -88,12 +88,12 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, P
     return flags;
 }
 
-std::string GccLikeToolchainProvider::getCompilerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
+std::string GccLikeToolchainProvider::getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
     return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
 }
 
-std::string GccLikeToolchainProvider::getLinker(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
+std::string GccLikeToolchainProvider::getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const
 {
     if(project.type == StaticLib)
     {
@@ -105,17 +105,17 @@ std::string GccLikeToolchainProvider::getLinker(Project& project, ProjectSetting
     }
 }
 
-std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset) const
+std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const
 {
     std::string flags;
 
-    switch(*project.type)
+    switch(project.type)
     {
     default:
         throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
     case StaticLib:
         flags += " -rcs";
-        for(auto& flag : resolvedSettings.ext<extensions::Gcc>().archiverFlags)
+        for(auto& flag : project.ext<extensions::Gcc>().archiverFlags)
         {
             flags += " " + std::string(flag);
         }
@@ -123,34 +123,24 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Pro
     case Executable:
     case SharedLib:
         flags += " -L\"" + pathOffset.string() + "\"";
-        for(auto& path : resolvedSettings.libPaths)
+        for(auto& path : project.libPaths)
         {
             flags += " -L\"" + (pathOffset / path).string() + "\"";
         }
 
-        for(auto& path : resolvedSettings.libs)
+        for(auto& path : project.systemLibs)
         {
-            // It's hard to know if the user wants "libfoo.a" when they say "foo" or not.
-            // Might need better heuristics, but assuming having a path specified
-            // implies a specific name
-            if(path.has_parent_path())
-            {
-                flags += " " + (pathOffset / path).string();
-            }
-            else
-            {
-                flags += " -l" + path.string();
-            }
+            flags += " -l" + path.string();
         }
 
-        for(auto& framework : resolvedSettings.frameworks)
+        for(auto& framework : project.frameworks)
         {
             flags += " -framework " + framework;
         }
 
         if(project.type == SharedLib)
         {
-            auto& features = resolvedSettings.features;
+            const auto& features = project.features;
             if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
             {
                 flags += " -bundle";
@@ -161,7 +151,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Pro
             }
         }
 
-        for(auto& flag : resolvedSettings.ext<extensions::Gcc>().linkerFlags)
+        for(auto& flag : project.ext<extensions::Gcc>().linkerFlags)
         {
             flags += " " + std::string(flag);
         }
@@ -172,11 +162,11 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Pro
     return flags;
 }
 
-std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, ProjectSettings& resolvedSettings, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
+std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
 {
     std::string flags;
 
-    switch(*project.type)
+    switch(project.type)
     {
     default:
         throw std::runtime_error("Project type in '" + project.name + "' not supported by toolchain.");
@@ -200,13 +190,8 @@ std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, ProjectSe
     return flags;
 }
 
-std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, ProjectSettings& resolvedSettings, StringId config, const std::filesystem::path& workingDir) const
+std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {
-    struct GccInternal : public PropertyBag
-    {
-        ListProperty<std::filesystem::path> linkedOutputs{this, true};
-    };
-
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
     if(project.type != Executable &&
@@ -216,62 +201,60 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         return {};
     }
 
-    auto dataDir = resolvedSettings.dataDir;
-
-    const auto& gccExt = resolvedSettings.ext<extensions::Gcc>();
+    const auto& gccExt = project.ext<extensions::Gcc>();
     const auto& buildPch = gccExt.pch.build;
     const auto& importPch = gccExt.pch.use;
 
     // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
-    if(!buildPch.value().empty())
+    if(!buildPch.empty())
     {
         auto input = buildPch;
         auto inputStr = (pathOffset / input).string();
 
-        auto output = dataDir / std::filesystem::path("pch") / (input.value().string() + ".pch");
+        auto output = dataDir / std::filesystem::path("pch") / (input.string() + ".pch");
         auto outputStr = (pathOffset / output).string();
 
-        auto outputObjC = dataDir / std::filesystem::path("pch") / (input.value().string() + ".pchmm");
+        auto outputObjC = dataDir / std::filesystem::path("pch") / (input.string() + ".pchmm");
         auto outputObjCStr = (pathOffset / outputObjC).string();
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, resolvedSettings, pathOffset, lang::Cpp) + 
-                                getCommonCompilerFlags(project, resolvedSettings, pathOffset, lang::Cpp, true) + 
-                                getCompilerFlags(project, resolvedSettings, pathOffset, lang::Cpp, inputStr, outputStr);
+            command.command = getCompiler(project, config, pathOffset, lang::Cpp) + 
+                                getCommonCompilerFlags(project, config, pathOffset, lang::Cpp, true) + 
+                                getCompilerFlags(project, config, pathOffset, lang::Cpp, inputStr, outputStr);
             command.inputs = { input };
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.depFile = output.string() + ".d";
-            command.description = "Compiling " + project.name + " PCH: " + input.value().string();
-            resolvedSettings.commands += std::move(command);
+            command.description = "Compiling " + project.name + " PCH: " + input.string();
+            project.commands += std::move(command);
         }
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, resolvedSettings, pathOffset, lang::ObjectiveCpp) + 
-                                getCommonCompilerFlags(project, resolvedSettings, pathOffset, lang::ObjectiveCpp, true) + 
-                                getCompilerFlags(project, resolvedSettings, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
+            command.command = getCompiler(project, config, pathOffset, lang::ObjectiveCpp) + 
+                                getCommonCompilerFlags(project, config, pathOffset, lang::ObjectiveCpp, true) + 
+                                getCompilerFlags(project, config, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
             command.inputs = { input };
             command.outputs = { outputObjC };
             command.workingDirectory = workingDir;
             command.depFile = outputObjC.string() + ".d";
-            command.description = "Compiling " + project.name + " PCH (Objective-C++): " + input.value().string();
-            resolvedSettings.commands += std::move(command);
+            command.description = "Compiling " + project.name + " PCH (Objective-C++): " + input.string();
+            project.commands += std::move(command);
         }
     }
 
     std::string cppPchFlags;
     std::string objCppPchFlags;
     std::vector<std::filesystem::path> pchInputs;
-    if(!importPch.value().empty())
+    if(!importPch.empty())
     {
-        auto input = dataDir / std::filesystem::path("pch") / (importPch.value().relative_path().string() + ".pch");
+        auto input = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pch");
         auto inputStr = (pathOffset / input).string();
         cppPchFlags += " -Xclang -include-pch -Xclang " + inputStr;
         pchInputs.push_back(input);
 
-        auto inputObjCpp = dataDir / std::filesystem::path("pch") / (importPch.value().relative_path().string() + ".pchmm");
+        auto inputObjCpp = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pchmm");
         auto inputObjCppStr = (pathOffset / inputObjCpp).string();
         objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
         pchInputs.push_back(inputObjCpp);
@@ -285,8 +268,8 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             return it->second;
         }
 
-        auto flags = str::quote(getCompiler(project, resolvedSettings, pathOffset, language)) +
-                        getCommonCompilerFlags(project, resolvedSettings, pathOffset, language, false);
+        auto flags = str::quote(getCompiler(project, config, pathOffset, language)) +
+                        getCommonCompilerFlags(project, config, pathOffset, language, false);
         
         // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
         if(language == lang::Cpp)
@@ -301,10 +284,10 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         return commonCompilerFlags[language] = flags;
     };
 
-    auto linkerCommand = str::quote(getLinker(project, resolvedSettings, pathOffset)) + getCommonLinkerFlags(project, resolvedSettings, pathOffset);
+    auto linkerCommand = str::quote(getLinker(project, config, pathOffset)) + getCommonLinkerFlags(project, config, pathOffset);
 
     std::vector<std::filesystem::path> linkerInputs;
-    for(auto& input : resolvedSettings.files)
+    for(auto& input : project.files)
     {
         auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
         if(language == lang::None)
@@ -313,19 +296,22 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         }
 
         auto inputStr = (pathOffset / input.path).string();
-        auto output = dataDir / std::filesystem::path("obj") / project.name / (input.path.relative_path().string() + ".o");
+        auto objPath = input.path.relative_path().string();
+        str::replaceAllInPlace(objPath, ":", "_");
+        str::replaceAllInPlace(objPath, "..", "__");
+        auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + ".o");
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
         command.command = getCommonCompilerCommand(language) + 
-                            getCompilerFlags(project, resolvedSettings, pathOffset, language, inputStr, outputStr);
+                            getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
         command.inputs = { input.path };
         command.inputs.insert(command.inputs.end(), pchInputs.begin(), pchInputs.end());
         command.outputs = { output };
         command.workingDirectory = workingDir;
         command.depFile = output.string() + ".d";
         command.description = "Compiling " + project.name + ": " + input.path.string();
-        resolvedSettings.commands += std::move(command);
+        project.commands += std::move(command);
 
         linkerInputs.push_back(output);
     }
@@ -334,14 +320,14 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
     if(!linker.empty())
     {
-        if(project.type != StaticLib)
+        if(project.type == Executable || project.type == SharedLib)
         {
-            for(auto& output : resolvedSettings.ext<GccInternal>().linkedOutputs)
+            for(auto& path : project.libs)
             {
-                linkerInputs.push_back(output);
+                linkerInputs.push_back(path);
             }
         }
-
+        
         std::vector<std::string> linkerInputStrs;
         linkerInputStrs.reserve(linkerInputs.size());
         bool windows = OperatingSystem::current() == Windows;
@@ -357,23 +343,22 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             }
         }
 
-        auto output = project.calcOutputPath(resolvedSettings);
+        std::filesystem::path output = project.output;
+        if(output.empty())
+        {
+            throw std::runtime_error("Project '" + project.name + "' has no output set.");
+        }
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = linkerCommand + getLinkerFlags(project, resolvedSettings, pathOffset, linkerInputStrs, outputStr);
+        command.command = linkerCommand + getLinkerFlags(project, config, pathOffset, linkerInputStrs, outputStr);
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;
         command.description = "Linking " + project.name + ": " + output.string();
-        resolvedSettings.commands += std::move(command);
+        project.commands += std::move(command);
 
         outputs.push_back(output);
-
-        if(project.type == StaticLib)
-        {
-            project(PublicOnly, config).ext<GccInternal>().linkedOutputs += output;
-        }
     }
 
     return outputs;

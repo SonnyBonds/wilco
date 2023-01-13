@@ -84,14 +84,12 @@ struct NinjaWriter
     }
 };
 
-static std::string emitProject(Environment& env, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId config, bool generator)
 {
-    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
-    auto root = resolved.dataDir;
-
-    if(!project.type.has_value())
+    std::filesystem::path dataDir = project.dataDir;
+    if(dataDir.empty())
     {
-        return {};
+        dataDir = projectDir;
     }
 
     if(project.name.empty())
@@ -107,25 +105,25 @@ static std::string emitProject(Environment& env, const std::filesystem::path& su
     std::cout << "\n";
 
     auto ninjaName = project.name + ".ninja";
-    NinjaWriter ninja(root / ninjaName);
+    NinjaWriter ninja(projectDir / ninjaName);
 
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
+    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), projectDir);
 
-    auto& commands = resolved.commands;
-    if(project.type == Command && commands.value().empty())
+    auto& commands = project.commands;
+    if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
     std::vector<std::string> projectOutputs;
 
-    const ToolchainProvider* toolchain = resolved.toolchain;
+    const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, resolved, config, root);
+    auto toolchainOutputs = toolchain->process(project, config, projectDir, dataDir);
     for(auto& output : toolchainOutputs)
     {
         projectOutputs.push_back((pathOffset / output).string());
@@ -218,25 +216,27 @@ NinjaEmitter::NinjaEmitter()
 
 void NinjaEmitter::emit(Environment& env)
 {
-    auto projects = env.collectProjects();
-
     std::vector<std::filesystem::path> outputs;
-    auto configs = env.collectConfigs();
-    for(auto& config : configs)
+    auto configs = env.configurations;
+
+    for(auto& configName : configs)
     {
+        Configuration config{configName};
+        configure(env, config);
+
         std::filesystem::path configTargetPath = *targetPath;
-        if(!config.empty())
+        if(!config.name.empty())
         {
-            configTargetPath = configTargetPath / config.cstr();
+            configTargetPath = configTargetPath / config.name.cstr();
         }
         std::filesystem::create_directories(configTargetPath);
 
         auto outputFile = configTargetPath / "build.ninja";
         NinjaWriter ninja(outputFile);
 
-        for(auto project : projects)
+        for(auto& project : config.getProjects())
         {
-            auto outputName = emitProject(env, configTargetPath, *project, config, false);
+            auto outputName = emitProject(env, configTargetPath, *project, config.name, false);
             if(!outputName.empty())
             {
                 ninja.subninja(outputName);
@@ -246,7 +246,7 @@ void NinjaEmitter::emit(Environment& env)
 
         outputs.push_back("build.ninja");
 
-        auto& generatorProject = env.createProject("_generator", Command);
+        auto& generatorProject = config.createProject("_generator", Command);
 
         std::string argumentString;
         for(auto& arg : env.cliContext.allArguments)

@@ -3,6 +3,8 @@
 #include "core/project.h"
 #include "modules/bundle.h"
 
+#if TODO
+
 static std::string generatePlist(const extensions::MacOSBundle& bundleSettings)
 {
     std::string result;
@@ -11,6 +13,7 @@ static std::string generatePlist(const extensions::MacOSBundle& bundleSettings)
     result += "<plist version=\"1.0\">\n";
     result += "<dict>\n";
 
+#if TODO
     for(auto& entry : bundleSettings.plistEntries)
     {
         result += "  <key>" + entry.first + "</key>\n";
@@ -31,6 +34,7 @@ static std::string generatePlist(const extensions::MacOSBundle& bundleSettings)
             result += value->valueString;
         }
     }
+#endif
 
     result += "</dict>\n";
     result += "</plist>\n";
@@ -53,6 +57,7 @@ struct BundleEventHandler : public EventHandler
         }
 
         std::string resolvedExtension;
+#if TODO
         if(bundleExt.extension.isSet())
         {
             resolvedExtension = bundleExt.extension.value();
@@ -90,5 +95,8 @@ struct BundleEventHandler : public EventHandler
         {
             resolvedSettings.commands += commands::copy(entry.source, bundleOutput / entry.target);
         }
+#endif
     }
 } instance;
+
+#endif

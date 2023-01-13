@@ -39,14 +39,12 @@ struct PendingCommand
     std::future<process::ProcessResult> result;
 };
 
-static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& suggestedDataDir, Project& project, StringId config)
+static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project, StringId config)
 {
-    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
-    auto root = resolved.dataDir;
-
-    if(!project.type.has_value())
+    std::filesystem::path dataDir = project.dataDir;
+    if(dataDir.empty())
     {
-        return;
+        dataDir = projectDir;
     }
 
     if(project.name.empty())
@@ -54,22 +52,22 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
         throw std::runtime_error("Trying to build project with no name.");
     }
 
-    std::filesystem::create_directories(root);
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), root);
+    std::filesystem::create_directories(dataDir);
+    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), dataDir);
 
-    auto& commands = resolved.commands;
-    if(project.type == Command && commands.value().empty())
+    auto& commands = project.commands;
+    if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    const ToolchainProvider* toolchain = resolved.toolchain;
+    const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, resolved, config, {});
+    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
 
     std::string prologue;
     if(OperatingSystem::current() == Windows)
@@ -78,7 +76,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     }
     prologue += "cd \"$cwd\" && ";
 
-    auto cmdFilePath = root / (project.name + ".cmdlines");
+    auto cmdFilePath = dataDir / (project.name + ".cmdlines");
     auto cmdData = readFile(cmdFilePath);
     std::unordered_map<StringId, std::string_view> cmdLines;
     std::unordered_map<StringId, std::string_view> rspContents;
@@ -95,7 +93,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     }
     std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
 
-    pendingCommands.reserve(pendingCommands.size() + commands.value().size());
+    pendingCommands.reserve(pendingCommands.size() + commands.size());
     for(auto& command : commands)
     {
         std::filesystem::path cwd = command.workingDirectory;
@@ -262,9 +260,14 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
 
                     if(!command->rspFile.empty())
                     {
-                        std::ofstream stream;
-                        stream.open(command->rspFile, std::ios::trunc | std::ios::binary);
-                        stream.write(command->rspContents.data(), command->rspContents.size());
+                        // TODO: Error handling
+#if _WIN32
+                        FILE* file = fopen(command->rspFile.c_str(), "wbN");
+#else
+                        FILE* file = fopen(command->rspFile.c_str(), "wbe");
+#endif
+                        fwrite(command->rspContents.data(), 1, command->rspContents.size(), file);
+                        fclose(file);
                     }
 
                     auto result = process::run(command->commandString + " 2>&1");
@@ -434,7 +437,7 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
                     // LOG std::cout << "dirty: Dependency file \"" << command->depFile << "\" returned true.\n";
                 }
                 command->dirty = dirty;
-            }            
+            }
         }
     }
 
@@ -451,8 +454,7 @@ void DirectBuilder::emit(Environment& env)
 {
     size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
 
-    auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
+    auto configs = env.configurations;
 
     if(selectedConfig)
     {
@@ -463,20 +465,23 @@ void DirectBuilder::emit(Environment& env)
     }
 
     std::vector<PendingCommand> pendingCommands;
-    for(auto config : configs)
+    for(auto& configName : configs)
     {
-        if(selectedConfig && config != *selectedConfig)
+        if(selectedConfig && configName != *selectedConfig)
         {
             continue;
         }
-        
-        std::string configPrefix = config.empty() ? "" : std::string(config) + ": ";
+
+        Configuration config{configName};
+        configure(env, config);
+
+        std::string configPrefix = config.name.empty() ? "" : std::string(config.name) + ": ";
 
         pendingCommands.clear();
 
-        for(auto project : projects)
+        for(auto& project : config.getProjects())
         {
-            collectCommands(env, pendingCommands, *targetPath / config.cstr(), *project, config);
+            collectCommands(env, pendingCommands, *targetPath / config.name.cstr(), *project, config.name);
         }
         auto commands = processCommands(pendingCommands);
 
@@ -509,16 +514,19 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     auto tempOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext);
     auto prevOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + ".prev");
     auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
-    Project& project = env.createProject("Generator", Executable);
-    project.links = std::vector<Project*>(); 
+
+    Configuration config{{}};
+    Project& project = config.createProject("Generator", Executable);
     project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
+    project.ext<extensions::Gcc>().compilerFlags += "-static";
+    project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += env.buildHDir;
-    project.output.path = tempOutput;
+    project.output = tempOutput;
     project.files += env.configurationFile;
     project.files += env.listFiles(env.buildHDir / "src");
     project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
-    for(auto& file : project.files.value())
+    for(auto& file : project.files)
     {
         outputEnv.addConfigurationDependency(file.path);
     }

@@ -11,46 +11,48 @@ void CompileCommands::emit(Environment& env)
     
     stream << "[\n";
 
-    auto projects = env.collectProjects();
-    auto configs = env.collectConfigs();
-    for(auto config : configs)
+    auto configs = env.configurations;
+    bool first = true;
+    for(auto& configName : configs)
     {
-        for(auto project : projects)
+        Configuration config{configName};
+        configure(env, config);
+
+        for(auto& project : config.getProjects())
         {
-            emitCommands(env, stream, *targetPath.value, *project, config, false);
+            emitCommands(env, stream, *targetPath.value, *project, config.name, first);
         }
     }
     
     stream << "\n]\n";
 }
 
-void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& suggestedDataDir, Project& project, StringId config, bool first)
+void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& projectDir, Project& project, StringId config, bool& first)
 {
-    auto resolved = project.resolve(env, suggestedDataDir, config, OperatingSystem::current());
-
-    if(!project.type.has_value())
-    {
-        return;
-    }
-
     if(project.name.empty())
     {
         throw std::runtime_error("Trying to build project with no name.");
     }
 
-    auto& commands = resolved.commands;
-    if(project.type == Command && commands.value().empty())
+    auto dataDir = project.dataDir;
+    if(dataDir.empty())
+    {
+        dataDir = projectDir;
+    }
+
+    auto& commands = project.commands;
+    if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    const ToolchainProvider* toolchain = resolved.toolchain;
+    const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, resolved, config, {});
+    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
 
     auto absCwd = std::filesystem::absolute(std::filesystem::current_path());
     for(auto& command : commands)
@@ -62,7 +64,6 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
 
         std::filesystem::path cwd = absCwd / command.workingDirectory;
 
-        // Assuming first input is the main input
         if(!first)
         {
             stream << ",\n";
@@ -70,6 +71,7 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
         first = false;
         stream << "  {\n";
         stream << "    \"directory\": " << cwd << ",\n";
+        // Assuming first input is the main input
         stream << "    \"file\": " << command.inputs.front() << ",\n";
         stream << "    \"command\": " << str::quote(command.command) << "\n";
         stream << "  }";

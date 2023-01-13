@@ -1,17 +1,16 @@
 #pragma once
 
-#include <unordered_map>
-
 #include "core/stringid.h"
 
-struct Language : public StringId {
-    static std::unordered_map<StringId, Language> extensionMap;
+#include <filesystem>
+#include <unordered_map>
 
+struct Language : public StringId {
     static Language getByExtension(StringId extension);
-    static Language getByPath(const std::filesystem::path& path)
-    {
-        return getByExtension(StringId(path.extension().string()));
-    }
+
+    static Language getByPath(const std::filesystem::path& path);
+
+    static std::unordered_map<StringId, Language>& getExtensionMap();
 };
 
 namespace lang
@@ -25,25 +24,4 @@ inline Language ObjectiveC{"Objective-C"};
 inline Language ObjectiveCpp{"Objective-C++"};
 inline Language None{"None"};
 
-}
-
-inline std::unordered_map<StringId, Language> Language::extensionMap = 
-{
-    { ".c", lang::C },
-    { ".cpp", lang::Cpp },
-    { ".cxx", lang::Cpp },
-    { ".m", lang::ObjectiveC },
-    { ".mm", lang::ObjectiveCpp },
-    { ".rc", lang::Rc},
-};
-
-inline Language Language::getByExtension(StringId extension)
-{
-    auto it = extensionMap.find(extension);
-    if(it != extensionMap.end())
-    {
-        return it->second;
-    }
-
-    return lang::None;
 }

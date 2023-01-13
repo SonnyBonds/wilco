@@ -9,8 +9,6 @@
 
 #include <sstream>
 
-void configure(Environment& env);
-
 void printUsage(cli::Context& cliContext)
 {
     std::cout << "Usage: " + cliContext.invocation + " [action] [options]\n\n";
@@ -144,14 +142,14 @@ int defaultMain(int argc, const char** argv) {
         }
 
         std::filesystem::current_path(env.configurationFile.parent_path());
-        configure(env);
+        setup(env);
+
+        chosenEmitter->emit(env);
 
         for(auto& argument : cliContext.unusedArguments)
         {
-            throw cli::argument_error("WARNING: Unknown argument \"" + argument + "\" was ignored.");
+            std::cout << "WARNING: Unknown argument \"" + argument + "\" was ignored.\n";
         }
-
-        chosenEmitter->emit(env);
 
         writeConfigDeps(env);
     }

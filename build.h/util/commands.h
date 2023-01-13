@@ -71,14 +71,16 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
     commandEntry.inputs = { from };
     commandEntry.outputs = { to };
 
-    auto fromStr = str::quote(from.make_preferred().string());
-    auto toStr = str::quote(to.make_preferred().string());
     if(OperatingSystem::current() == Windows)
     {
+        auto fromStr = str::quote(from.make_preferred().string(), '"', "\"");
+        auto toStr = str::quote(to.make_preferred().string(), '"', "\"");
         commandEntry.command = "copy " + fromStr + " " + toStr + "";
     }
     else
     {
+        auto fromStr = str::quote(from.make_preferred().string());
+        auto toStr = str::quote(to.make_preferred().string());
         commandEntry.command = "cp " + fromStr + " " + toStr + "";
     }
 
@@ -98,14 +100,16 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to)
     commandEntry.inputs = { from };
     commandEntry.outputs = { to };
 
-    auto fromStr = str::quote(from.make_preferred().string());
-    auto toStr = str::quote(to.make_preferred().string());
     if(OperatingSystem::current() == Windows)
     {
+        auto fromStr = str::quote(from.make_preferred().string(), '"', "\"");
+        auto toStr = str::quote(to.make_preferred().string(), '"', "\"");
         commandEntry.command = "move " + fromStr + " " + toStr + " && copy /b " + toStr + " +,,";
     }
     else
     {
+        auto fromStr = str::quote(from.make_preferred().string());
+        auto toStr = str::quote(to.make_preferred().string());
         commandEntry.command = "mv " + fromStr + " " + toStr + " && touch " + toStr;
     }
 

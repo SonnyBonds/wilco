@@ -12,233 +12,86 @@
 #include "core/os.h"
 #include "core/stringid.h"
 
-enum ProjectType
-{
-    Executable,
-    StaticLib,
-    SharedLib,
-    Command
-};
-
-enum Transitivity
-{
-    Local,
-    Public,
-    PublicOnly
-};
-
-struct ConfigSelector
-{
-    ConfigSelector() {}
-    ConfigSelector(StringId name)
-        : name(name)
-    {}
-
-    ConfigSelector(const char* name)
-        : name(name)
-    {}
-
-    ConfigSelector(std::string name)
-        : name(std::move(name))
-    {}
-
-    ConfigSelector(Transitivity transitivity)
-        : transitivity(transitivity)
-    {}
-
-    ConfigSelector(ProjectType projectType)
-        : projectType(projectType)
-    {}
-
-    ConfigSelector(OperatingSystem targetOS)
-        : targetOS(targetOS)
-    {}
-
-    ConfigSelector operator+(Transitivity b)
-    {
-        ConfigSelector a = *this;
-        if(a.transitivity) throw std::invalid_argument("Transitivity was specified twice.");
-        a.transitivity = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(ProjectType b)
-    {
-        ConfigSelector a = *this;
-        if(a.projectType) throw std::invalid_argument("Project type was specified twice.");
-        a.projectType = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(StringId b)
-    {
-        ConfigSelector a = *this;
-        if(a.name) throw std::invalid_argument("Configuration name was specified twice.");
-        a.name = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(OperatingSystem b)
-    {
-        ConfigSelector a = *this;
-        if(a.targetOS) throw std::invalid_argument("Configuration target operating system was specified twice.");
-        a.targetOS = b;
-
-        return a;
-    }
-
-    ConfigSelector operator+(const ConfigSelector& b)
-    {
-        ConfigSelector a = *this;
-        if(b.name) a = a + *b.name;
-        if(b.transitivity) a = a + *b.transitivity;
-        if(b.projectType) a = a + *b.projectType;
-        if(b.targetOS) a = a + *b.targetOS;
-
-        return a;
-    }
-
-    std::optional<Transitivity> transitivity;
-    std::optional<StringId> name;
-    std::optional<ProjectType> projectType;
-    std::optional<OperatingSystem> targetOS;
-
-    bool operator <(const ConfigSelector& other) const
-    {
-        if(transitivity != other.transitivity) return transitivity < other.transitivity;
-        if(projectType != other.projectType) return projectType < other.projectType;
-        if(name != other.name) return name < other.name;
-        if(targetOS != other.targetOS) return targetOS < other.targetOS;
-
-        return false;
-    }
-};
-
-struct PropertyBase;
-struct PropertyBag;
-
-struct PropertyGroup
-{
-    PropertyGroup(PropertyBag* parent = nullptr)
-        : bag(parent)
-    { }
-
-    PropertyGroup(PropertyGroup* group = nullptr)
-        : bag(group->bag)
-    { }
-
-protected:
-    PropertyBag* bag = nullptr;
-
-    friend struct PropertyBase;
-};
-
-struct PropertyBag : public PropertyGroup
-{
-    PropertyBag()
-        : PropertyGroup(this)
-    { }
-
-    std::vector<PropertyBase*> properties;
-protected:
-
-    friend struct Project;
-    friend struct PropertyBase;
-};
-
-struct PropertyBase
-{
-    PropertyBase(PropertyGroup* group)
-    {
-        group->bag->properties.push_back(this);
-    }
-
-    virtual void applyOverlay(const PropertyBase& other) = 0;
-};
 
 template<typename ValueType>
-struct Property : public PropertyBase
+struct ListPropertyValue
 {
-    Property(PropertyGroup* group)
-        : PropertyBase(group)
-    { }
-
-    template<typename U>
-    Property& operator =(U&& v)
-    {
-        _value = std::forward<U>(v);
-        _set = true;
-        return *this;
-    }
-
-    operator const ValueType&() const
-    {
-        return _value;
-    }
-
-    const ValueType& value() const
-    {
-        return _value;
-    }
-
-    bool isSet() const
-    {
-        return _set;
-    }
-  
-private:
-    void applyOverlay(const PropertyBase& other)
-    {
-        auto& otherProperty = static_cast<const Property&>(other);
-        if(otherProperty._set)
-        {
-            _value = otherProperty._value;
-            _set = true;
-        }
-    }
-
-    ValueType _value{};
-    bool _set = false;
-};
-
-template<typename ValueType>
-struct ListProperty : public PropertyBase
-{
-    ListProperty(PropertyGroup* group, bool allowDuplicates = false)
-        : PropertyBase(group)
-        , _allowDuplicates(allowDuplicates)
+    // Constructors
+    ListPropertyValue(bool allowDuplicates = false)
+        : _allowDuplicates(allowDuplicates)
         , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
     { }
 
-    ListProperty(const ListProperty& other) = delete;
-    ListProperty(ListProperty&& other) = delete;
-    ListProperty& operator=(const ListProperty& other) = delete;
-    ListProperty& operator=(ListProperty&& other) = delete;
+    ListPropertyValue(const ListPropertyValue& other)
+        : _allowDuplicates(other._allowDuplicates)
+        , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
+    {
+        *this += other;
+    }
+
+    ListPropertyValue(ListPropertyValue&& other)
+        : _allowDuplicates(other._allowDuplicates)
+        , _duplicateTracker(0, IndexedValueHash(_value), IndexedValueEquals(_value))
+    {
+        // This one could move the actual value container and tracker, but doing a simpler path right now
+        *this += std::move(other);
+    }
+
+    // ListPropertyValue
+    ListPropertyValue& operator=(const ListPropertyValue& other)
+    {
+        _value.clear();
+        _duplicateTracker.clear();
+        return *this += other._value;
+    }
+
+    ListPropertyValue& operator=(ListPropertyValue&& other)
+    {
+        _value.clear();
+        _duplicateTracker.clear();
+        return *this += std::move(other._value);
+    }
+
+    // ListPropertyValue<T>
+    template<typename T>
+    ListPropertyValue& operator=(const ListPropertyValue<T>& other)
+    {
+        _value.clear();
+        _duplicateTracker.clear();
+        return *this += other._value;
+    }
 
     template<typename T>
-    ListProperty& operator =(T other)
+    ListPropertyValue& operator=(ListPropertyValue<T>&& other)
     {
-        if(_allowDuplicates)
-        {
-            _value = std::move(other);
-        }
-        else
-        {
-            _value.clear();
-            _value.reserve(other.size());
-            for(auto& e : other)
-            {
-                *this += std::move(e);
-            }
-        }
+        _value.clear();
+        _duplicateTracker.clear();
+        return *this += std::move(other._value);
+    }
+
+    template<typename T>
+    ListPropertyValue& operator+=(const ListPropertyValue<T>& other)
+    {
+        return *this += other._value;
+    }
+
+    template<typename T>
+    ListPropertyValue& operator+=(ListPropertyValue<T>&& other)
+    {
+        return *this += std::move(other._value);
+    }
+
+    // generic element
+    template<typename T>
+    ListPropertyValue& operator =(T other)
+    {
+        _value.clear();
+        *this += std::move(other);
         return *this;
     }
     
     template<typename T>
-    ListProperty& operator +=(T other) {
+    ListPropertyValue& operator +=(T other) {
         _value.push_back(std::move(other));
         if(!_allowDuplicates)
         {
@@ -253,8 +106,16 @@ struct ListProperty : public PropertyBase
         return *this;
     }
 
+    // initializer list
     template<typename T>
-    ListProperty& operator +=(std::initializer_list<T> other) {
+    ListPropertyValue& operator =(std::initializer_list<T> other) {
+        _value.clear();
+        *this += std::move(other);
+        return *this;
+    }
+
+    template<typename T>
+    ListPropertyValue& operator +=(std::initializer_list<T> other) {
         _value.reserve(_value.size() + other.size());
         for(auto& e : other)
         {
@@ -263,8 +124,16 @@ struct ListProperty : public PropertyBase
         return *this;
     }
 
+    // vector
     template<typename T>
-    ListProperty& operator +=(std::vector<T> other) {
+    ListPropertyValue& operator =(std::vector<T> other) {
+        _value.clear();
+        *this += std::move(other);
+        return *this;
+    }
+
+    template<typename T>
+    ListPropertyValue& operator +=(std::vector<T> other) {
         _value.reserve(_value.size() + other.size());
         for(auto& e : other)
         {
@@ -283,16 +152,21 @@ struct ListProperty : public PropertyBase
         return _value.end();
     }
 
-    operator const std::vector<ValueType>&() const
+    size_t size() const
     {
-        return _value;
+        return _value.size();
     }
 
-    const std::vector<ValueType>& value() const
+    bool empty() const
     {
-        return _value;
+        return _value.empty();
     }
 
+    void clear()
+    {
+        _value.clear();
+    }
+    
 private:
     struct IndexedValueEquals
     {
@@ -335,100 +209,7 @@ private:
         const std::vector<ValueType>& _values;
     };
 
-    void applyOverlay(const PropertyBase& other)
-    {
-        auto& otherListProperty = static_cast<const ListProperty&>(other);
-        _value.reserve(_value.size() + otherListProperty.value().size());
-        for(auto& e : otherListProperty)
-        {
-            *this += e;
-        }
-    }
-
     bool _allowDuplicates = false;
-    std::vector<ValueType> _value{};
+    std::vector<ValueType> _value;
     std::unordered_set<int, IndexedValueHash, IndexedValueEquals> _duplicateTracker;
-};
-
-template<typename KeyType, typename ValueType>
-struct MapProperty : public PropertyBase
-{
-    MapProperty(PropertyGroup* group)
-        : PropertyBase(group)
-    { }
-
-    MapProperty(const MapProperty& other) = delete;
-    MapProperty(MapProperty&& other) = delete;
-    MapProperty& operator=(const MapProperty& other) = delete;
-    MapProperty& operator=(MapProperty&& other) = delete;
-
-    template<typename T>
-    MapProperty& operator =(T other)
-    {
-        _value.clear();
-        _value.reserve(other.size());
-        for(auto& e : other)
-        {
-            (*this)[e.first] += std::move(e.second);
-        }
-        return *this;
-    }
-
-    MapProperty& operator +=(std::pair<KeyType, ValueType> other) {
-        _value[std::move(other.first)] = std::move(other.second);
-        return *this;
-    }
-
-    MapProperty& operator +=(std::initializer_list<std::pair<KeyType, ValueType>> other) {
-        _value.reserve(_value.size() + other.size());
-        for(auto& e : other)
-        {
-            _value[std::move(e.first)] = std::move(e.second);
-        }
-        return *this;
-    }
-
-    auto begin() const
-    {
-        return _value.begin();
-    }
-
-    auto end() const
-    {
-        return _value.end();
-    }
-
-    ValueType& operator[](const KeyType& key)
-    {
-        return _value[key];
-    }
-
-    ValueType& operator[](KeyType&& key)
-    {
-        return _value[std::move(key)];
-    }
-
-    operator const std::unordered_map<KeyType, ValueType>&() const
-    {
-        return _value;
-    }
-
-    const std::unordered_map<KeyType, ValueType>& value() const
-    {
-        return _value;
-    }
-
-private:
-
-    void applyOverlay(const PropertyBase& other)
-    {
-        auto& otherMapProperty = static_cast<const MapProperty&>(other);
-        _value.reserve(_value.size() + otherMapProperty.value().size());
-        for(auto& e : otherMapProperty)
-        {
-            _value[e.first] = e.second;
-        }
-    }
-
-    std::unordered_map<KeyType, ValueType> _value{};
 };

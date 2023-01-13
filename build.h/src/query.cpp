@@ -25,21 +25,29 @@ void Query::emit(Environment& env)
 
 void Query::emitProjects(Environment& env)
 {
-    for(auto project : env.collectProjects())
+    std::set<StringId> projectNames;
+    for(auto& configName : env.configurations)
     {
-        if(project->type)
+        Configuration config{configName};
+        configure(env, config);
+        
+        for(auto& project : config.getProjects())
         {
-            std::cout << project->name << "\n";
+            projectNames.insert(project->name);
         }
+    }
+    for(auto& name : projectNames)
+    {
+        std::cout << name << "\n";
     }
 }
 
 void Query::emitConfigs(Environment& env)
 {
-    for(auto& config : env.collectConfigs())
+    for(auto& config : env.configurations)
     {
         std::cout << std::string(config) << "\n";
-    }            
+    }
 }
 
 EmitterInstance<Query> Query::instance;

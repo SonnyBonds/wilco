@@ -1,5 +1,7 @@
 #include "core/stringid.h"
 
+const char* StringId::EMPTY = "";
+
 // Transparent lookup in unordered_set is a C++20 feature
 // so we'll have to make do with this... thing.
 struct StringStorage
@@ -81,22 +83,27 @@ static std::unordered_set<StringStorage, StringStorageHash>& getStorage()
     static std::unordered_set<StringStorage, StringStorageHash> storage;
     return storage;
 }
+
 bool StringId::empty() const
 {
     return _cstr == nullptr || _cstr[0] == 0;
 }
+
 const char* StringId::cstr() const
 {
     return _cstr;
 }
+
 StringId::operator std::string_view() const
 {
     return _cstr;
 }
+
 StringId::operator const char*() const
 {
     return _cstr;
 }
+
 size_t StringId::getStorageSize()
 {
     return getStorage().size();

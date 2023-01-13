@@ -3,7 +3,7 @@
 
 inline std::string readFile(std::filesystem::path path)
 {
-    std::ifstream stream(path);
+    std::ifstream stream(path, std::ios::binary);
     if(!stream)
     {
         return {};
@@ -27,7 +27,7 @@ inline bool writeFile(std::filesystem::path path, const std::string& data, bool 
         size_t fileSize = std::filesystem::file_size(path, ec);
         if(!ec && fileSize == data.size())
         {
-            std::ifstream inputStream(path);
+            std::ifstream inputStream(path, std::ios::binary);
             std::array<char, 2048> buffer;
             size_t pos = 0;
             while(inputStream.good())

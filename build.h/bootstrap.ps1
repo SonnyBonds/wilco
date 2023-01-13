@@ -94,8 +94,8 @@ function Find-Cl {
     )
 
     $vswhere = "c:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-    try{ $vcvars = & $vswhere -latest -find **\vcvarsall.bat }
-    catch { exit -1 }
+    try { $vcvars = & $vswhere -latest -find **\vcvarsall.bat }
+    catch { return }
     
     $result = & "cmd.exe" /c $vcvars x64 ">nul" "2>nul" "&&" powershell -Command { 
         $result = @{}
@@ -107,13 +107,16 @@ function Find-Cl {
         $result["LIB"] = (Get-Command "lib.exe").Source
         Write-Output $result
     }
-    
-    $CL = [string]$result["CL"] -replace "\\", "/"
-    $RC = [string]$result["RC"] -replace "\\", "/"
-    $LINK = [string]$result["LINK"] -replace "\\", "/";
-    $LIB = [string]$result["LIB"] -replace "\\", "/";
-    $SYS_INCLUDES = ($result["INCLUDE_PATHS"] -replace "\\", "/" -split ";" | ForEach-Object { '"' + $PSItem + '"' }) -join ", "
-    $SYS_LIBS = ($result["LIB_PATHS"] -replace "\\", "/"  -split ";" | ForEach-Object { '"' + $PSItem + '"' }) -join ", "
+
+    try {
+        $CL = [string]$result["CL"] -replace "\\", "/"
+        $RC = [string]$result["RC"] -replace "\\", "/"
+        $LINK = [string]$result["LINK"] -replace "\\", "/";
+        $LIB = [string]$result["LIB"] -replace "\\", "/";
+        $SYS_INCLUDES = ($result["INCLUDE_PATHS"] -replace "\\", "/" -split ";" | ForEach-Object { '"' + $PSItem + '"' }) -join ", "
+        $SYS_LIBS = ($result["LIB_PATHS"] -replace "\\", "/"  -split ";" | ForEach-Object { '"' + $PSItem + '"' }) -join ", "
+    }
+    catch { return }
 
     $lib_flags = ($result["LIB_PATHS"] -split ";" | ForEach-Object { "/LIBPATH:" + $PSItem })
     $include_flags = (($result["INCLUDE_PATHS"] -split ";") + (, $params["BUILD_H_DIR"]) | ForEach-Object { "/I" + $PSItem })
@@ -139,9 +142,9 @@ function Find-Clang {
     )
 
     $where = "on path"
-    $COMPILER = Get-Command "clang++.exe" -ErrorAction silentlycontinue
+    $COMPILER = (Get-Command "clang++.exe" -ErrorAction silentlycontinue).Source
     $LINKER = $COMPILER
-    $ARCHIVER = Get-Command "llvm-ar.exe" -ErrorAction silentlycontinue
+    $ARCHIVER = (Get-Command "llvm-ar.exe" -ErrorAction silentlycontinue).Source
     if(!$COMPILER -or !$LINKER -or !$ARCHIVER)
     {
         $COMPILER = "$env:ProgramFiles/LLVM/bin/clang++.exe"
@@ -168,8 +171,13 @@ function Find-Clang {
         Description = $Description + $where
         
         Command = "$COMPILER"
-        Args = (,"-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
+        Args = (,"-g", "-static", "-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
         Declaration = "inline GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`",  `"$LINKER`",  `"$ARCHIVER`");`n"
+    }
+
+    if(-not $script:selected_toolchain)
+    {
+        $script:selected_toolchain = $Id
     }
 }
 
