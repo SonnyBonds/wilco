@@ -16,28 +16,6 @@ Environment::~Environment()
 {
 }
 
-Project& Environment::createProject(std::string name, ProjectType type)
-{
-    _projects.emplace_back(new Project(name, type));
-    _projects.back()->import(defaults);
-    return *_projects.back();
-}
-
-std::vector<Project*> Environment::collectProjects()
-{
-    // TODO: Probably possible to do this more efficiently
-
-    std::vector<Project*> orderedProjects;
-    std::set<Project*> collectedProjects;
-
-    for(auto& project : _projects)
-    {
-        collectOrderedProjects(project.get(), collectedProjects, orderedProjects);
-    }
-
-    return orderedProjects;
-}
-
 std::string Environment::readFile(std::filesystem::path path)
 {
     addConfigurationDependency(path);
@@ -100,17 +78,17 @@ void Environment::addConfigurationDependency(std::filesystem::path path)
     configurationDependencies.insert(path);    
 }
 
-void Environment::collectOrderedProjects(Project* project, std::set<Project*>& collectedProjects, std::vector<Project*>& orderedProjects)
-{
-#if TODO
-    for(auto link : project->links)
-    {
-        collectOrderedProjects(link, collectedProjects, orderedProjects);
-    }
-#endif
+Configuration::Configuration(StringId name)
+    : name(name)
+{ }
 
-    if(collectedProjects.insert(project).second)
-    {
-        orderedProjects.push_back(project);
-    }
+Project& Configuration::createProject(std::string name, ProjectType type)
+{
+    _projects.emplace_back(new Project(std::move(name), type));
+    return *_projects.back();
+}
+
+const std::vector<std::unique_ptr<Project>>& Configuration::getProjects() const
+{
+    return _projects;
 }

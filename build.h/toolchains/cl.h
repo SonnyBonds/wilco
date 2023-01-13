@@ -20,19 +20,31 @@ namespace feature::msvc
 
 namespace extensions
 {
-    struct Msvc : public PropertyBag
+    struct Msvc
     {
-        ListProperty<StringId> compilerFlags{ this };
-        ListProperty<StringId> linkerFlags{ this };
-        ListProperty<StringId> archiverFlags{ this };
-        Property<std::string> solutionFolder{ this };
+        ListPropertyValue<StringId> compilerFlags;
+        ListPropertyValue<StringId> linkerFlags;
+        ListPropertyValue<StringId> archiverFlags;
+        std::string solutionFolder;
 
-        struct Pch : public PropertyGroup
+        struct Pch
         {
-            Property<std::filesystem::path> header{ this };
-            Property<std::filesystem::path> source{ this };
-            ListProperty<std::filesystem::path> ignoredFiles{ this };
-        } pch{ this };
+            std::filesystem::path header;
+            std::filesystem::path source;
+            ListPropertyValue<std::filesystem::path> ignoredFiles;
+        } pch;
+
+        virtual void import(const Msvc& other)
+        {
+            compilerFlags += other.compilerFlags;
+            linkerFlags += other.linkerFlags;
+            archiverFlags += other.archiverFlags;
+            if(!other.solutionFolder.empty()) solutionFolder = other.solutionFolder;
+
+            if(!pch.header.empty()) pch.header = other.pch.header;
+            if(!pch.source.empty()) pch.source = other.pch.source;
+            pch.ignoredFiles += other.pch.ignoredFiles;
+        }
     };
 }
 

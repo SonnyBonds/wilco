@@ -41,7 +41,7 @@ struct PendingCommand
 
 static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project, StringId config)
 {
-    std::filesystem::path dataDir = project.dataDir(config);
+    std::filesystem::path dataDir = project.dataDir;
     if(dataDir.empty())
     {
         dataDir = projectDir;
@@ -55,13 +55,13 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
     std::filesystem::create_directories(dataDir);
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), dataDir);
 
-    auto& commands = project.commands(config);
+    auto& commands = project.commands;
     if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    const ToolchainProvider* toolchain = project.toolchain(config);
+    const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
         toolchain = defaultToolchain;
@@ -260,9 +260,14 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
 
                     if(!command->rspFile.empty())
                     {
-                        std::ofstream stream;
-                        stream.open(command->rspFile, std::ios::trunc | std::ios::binary);
-                        stream.write(command->rspContents.data(), command->rspContents.size());
+                        // TODO: Error handling
+#if _WIN32
+                        FILE* file = fopen(command->rspFile.c_str(), "wbN");
+#else
+                        FILE* file = fopen(command->rspFile.c_str(), "wbe");
+#endif
+                        fwrite(command->rspContents.data(), 1, command->rspContents.size(), file);
+                        fclose(file);
                     }
 
                     auto result = process::run(command->commandString + " 2>&1");
@@ -449,7 +454,6 @@ void DirectBuilder::emit(Environment& env)
 {
     size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
 
-    auto projects = env.collectProjects();
     auto configs = env.configurations;
 
     if(selectedConfig)
@@ -461,20 +465,23 @@ void DirectBuilder::emit(Environment& env)
     }
 
     std::vector<PendingCommand> pendingCommands;
-    for(auto config : configs)
+    for(auto& configName : configs)
     {
-        if(selectedConfig && config != *selectedConfig)
+        if(selectedConfig && configName != *selectedConfig)
         {
             continue;
         }
-        
-        std::string configPrefix = config.empty() ? "" : std::string(config) + ": ";
+
+        Configuration config{configName};
+        configure(env, config);
+
+        std::string configPrefix = config.name.empty() ? "" : std::string(config.name) + ": ";
 
         pendingCommands.clear();
 
-        for(auto project : projects)
+        for(auto& project : config.getProjects())
         {
-            collectCommands(env, pendingCommands, *targetPath / config.cstr(), *project, config);
+            collectCommands(env, pendingCommands, *targetPath / config.name.cstr(), *project, config.name);
         }
         auto commands = processCommands(pendingCommands);
 
@@ -507,8 +514,9 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     auto tempOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext);
     auto prevOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + ".prev");
     auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
-    Project& project = env.createProject("Generator", Executable);
-    project.links = std::vector<Project*>(); 
+
+    Configuration config{{}};
+    Project& project = config.createProject("Generator", Executable);
     project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
@@ -518,7 +526,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     project.files += env.listFiles(env.buildHDir / "src");
     project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
-    for(auto& file : project.files(""))
+    for(auto& file : project.files)
     {
         outputEnv.addConfigurationDependency(file.path);
     }

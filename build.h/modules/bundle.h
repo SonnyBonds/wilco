@@ -51,12 +51,23 @@ struct std::hash<BundleEntry>
 
 namespace extensions
 {
-    struct MacOSBundle : public PropertyBag
+    struct MacOSBundle
     {
-        Property<bool> create{this};
-        Property<std::string> extension{this};
-        MapProperty<std::string, PlistValue> plistEntries{this};
-        ListProperty<BundleEntry> contents{this};
+        bool create = false;
+        std::string extension;
+        std::map<std::string, PlistValue> plistEntries;
+        ListPropertyValue<BundleEntry> contents;
+
+        void import(const MacOSBundle& other)
+        {
+            create = other.create;
+            extension = other.extension;
+            for(auto& entry : other.plistEntries)
+            {
+                plistEntries.insert(entry);
+            }
+            contents += other.contents;
+        }
     };
 }
 

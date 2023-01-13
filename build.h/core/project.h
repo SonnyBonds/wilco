@@ -26,24 +26,96 @@ enum ProjectType
     Command
 };
 
-struct ProjectSettings : public PropertyBag
+inline std::string outputExtension(ProjectType type, OperatingSystem os = OperatingSystem::current())
 {
-    ListProperty<Project*> links{this};
-    ListProperty<CommandEntry> commands{this};
-    Property<StringId> platform{this};
-    ListProperty<std::filesystem::path> includePaths{this};
-    ListProperty<std::filesystem::path> libPaths{this};
-    ListProperty<SourceFile> files{this};
-    ListProperty<std::filesystem::path> libs{this};
-    ListProperty<std::filesystem::path> systemLibs{this};
-    ListProperty<std::string> defines{this};
-    ListProperty<Feature> features{this};
-    ListProperty<std::string> frameworks{this};
-    Property<std::filesystem::path> dataDir{this};
-    Property<const ToolchainProvider*> toolchain{this};
+    if(os == Windows)
+    {
+        if(type == Executable) return ".exe";
+        else if(type == StaticLib) return ".lib";
+        else if(type == SharedLib) return ".dll";
+        else return {};
+    }
+    else
+    {
+        if(type == Executable) return {};
+        else if(type == StaticLib) return ".a";
+        else if(type == SharedLib) return ".so";
+        else return {};
+    }
 
-    Property<std::filesystem::path> output{this};
+    return {};
+}
 
+struct ProjectSettings
+{
+    ListPropertyValue<CommandEntry> commands;
+    StringId platform;
+    ListPropertyValue<std::filesystem::path> includePaths;
+    ListPropertyValue<std::filesystem::path> libPaths;
+    ListPropertyValue<SourceFile> files;
+    ListPropertyValue<std::filesystem::path> libs;
+    ListPropertyValue<std::filesystem::path> systemLibs;
+    ListPropertyValue<std::string> defines;
+    ListPropertyValue<Feature> features;
+    ListPropertyValue<std::string> frameworks;
+    std::filesystem::path dataDir;
+    ListPropertyValue<const Project*> dependencies;
+    const ToolchainProvider* toolchain = nullptr;
+
+    struct Output
+    {
+        std::filesystem::path dir;
+        std::string prefix;
+        std::string name;
+        std::string suffix;
+        std::string extension;
+
+        std::filesystem::path fullPath() const
+        {
+            return dir / (prefix + name + suffix + extension);
+        }
+
+        operator std::filesystem::path() const
+        {
+            return fullPath();
+        }
+
+        Output& operator =(std::filesystem::path path)
+        {
+            dir = path.parent_path();
+            prefix = "";
+            name = path.stem().string();
+            suffix = "";
+            extension = path.extension().string();
+            return *this;
+        }
+    } output;
+
+    void import(const ProjectSettings& other)
+    {
+        commands += other.commands;
+        if(!other.platform.empty()) platform = other.platform;
+        includePaths += other.includePaths;
+        libPaths += other.libPaths;
+        files += other.files;
+        libs += other.libs;
+        systemLibs += other.systemLibs;
+        defines += other.defines;
+        features += other.features;
+        frameworks += other.frameworks;
+        if(!other.dataDir.empty()) dataDir = other.dataDir;
+        if(other.toolchain) toolchain = other.toolchain;
+        dependencies += other.dependencies;
+
+        if(!other.output.dir.empty()) output.dir = other.output.dir;
+        if(!other.output.prefix.empty()) output.prefix = other.output.prefix;
+        if(!other.output.name.empty()) output.name = other.output.name;
+        if(!other.output.suffix.empty()) output.suffix = other.output.suffix;
+        if(!other.output.extension.empty()) output.extension = other.output.extension;
+        
+        importExtensions(other);
+    }
+    
     template<typename ExtensionType>
     ExtensionType& ext()
     {
@@ -53,11 +125,11 @@ struct ProjectSettings : public PropertyBag
         auto it = _extensions.find(key);
         if(it != _extensions.end())
         {
-            return static_cast<ExtensionType&>(it->second->get());
+            return static_cast<ExtensionEntryImpl<ExtensionType>*>(it->second.get())->extensionData;
         }
-        ExtensionEntry* extensionEntry = new ExtensionEntryImpl<ExtensionType>();
+        auto extensionEntry = new ExtensionEntryImpl<ExtensionType>();
         _extensions.insert({key, std::unique_ptr<ExtensionEntry>(extensionEntry)});
-        return static_cast<ExtensionType&>(extensionEntry->get());
+        return extensionEntry->extensionData;
     }
 
     template<typename ExtensionType>
@@ -69,51 +141,43 @@ struct ProjectSettings : public PropertyBag
         return _extensions.find(key) != _extensions.end();
     }
 
-    void import(const ProjectSettings& other);
-
     ProjectSettings()
     { }
 
-    ProjectSettings(const ProjectSettings& other) = delete;
+    ProjectSettings(const ProjectSettings& other)
+    {
+        import(other);
+    }
     
 private:
+    void importExtensions(const ProjectSettings& other);
+
     struct ExtensionEntry
     {
         virtual ~ExtensionEntry() = default;
-        virtual PropertyBag& get() = 0;
-        virtual const PropertyBag& get() const = 0;
+        virtual void import(const ExtensionEntry& other) = 0;
         virtual std::unique_ptr<ExtensionEntry> clone() const = 0;
     };
 
     template<typename ExtensionType>
     struct ExtensionEntryImpl : public ExtensionEntry
     {
-        virtual PropertyBag& get() override
+        void import(const ExtensionEntry& other) override
         {
-            return extension;
-        }
-
-        virtual const PropertyBag& get() const override
-        {
-            return extension;
+            extensionData.import(static_cast<const ExtensionEntryImpl&>(other).extensionData);
         }
 
         virtual std::unique_ptr<ExtensionEntry> clone() const override
         {
             auto newExtension = new ExtensionEntryImpl<ExtensionType>();
-            for(size_t i=0; i<extension.properties.size(); ++i)
-            {
-                // TODO newExtension->extension.properties[i]->applyOverlay(*extension.properties[i]);
-            }
+            newExtension->extensionData.import(extensionData);
             return std::unique_ptr<ExtensionEntry>(newExtension);
         }
 
-        ExtensionType extension;
+        ExtensionType extensionData;
     };
     
     std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
-
-    friend class Project;
 };
 
 struct Project : public ProjectSettings

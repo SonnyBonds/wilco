@@ -11,14 +11,16 @@ void CompileCommands::emit(Environment& env)
     
     stream << "[\n";
 
-    auto projects = env.collectProjects();
     auto configs = env.configurations;
     bool first = true;
-    for(auto config : configs)
+    for(auto& configName : configs)
     {
-        for(auto project : projects)
+        Configuration config{configName};
+        configure(env, config);
+
+        for(auto& project : config.getProjects())
         {
-            emitCommands(env, stream, *targetPath.value, *project, config, first);
+            emitCommands(env, stream, *targetPath.value, *project, config.name, first);
         }
     }
     
@@ -32,19 +34,19 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
         throw std::runtime_error("Trying to build project with no name.");
     }
 
-    auto dataDir = project.dataDir(config).value();
+    auto dataDir = project.dataDir;
     if(dataDir.empty())
     {
         dataDir = projectDir;
     }
 
-    auto& commands = project.commands(config);
+    auto& commands = project.commands;
     if(project.type == Command && commands.empty())
     {
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    const ToolchainProvider* toolchain = project.toolchain(config);
+    const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
         toolchain = defaultToolchain;

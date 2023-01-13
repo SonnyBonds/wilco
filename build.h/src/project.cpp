@@ -4,34 +4,24 @@
 #include "core/eventhandler.h"
 
 Project::Project(std::string name, ProjectType type)
-    : name(std::move(name))
+    : name(name)
     , type(type)
-{ }
+{
+    output.name = std::move(name);
+    output.extension = outputExtension(type);
+}
 
 Project::~Project()
 { }
 
-void ProjectSettings::import(const ProjectSettings& other)
+void ProjectSettings::importExtensions(const ProjectSettings& other)
 {
-    auto apply = [](PropertyBag& base, const PropertyBag& overlay)
-    {
-        // This whole thing doesn't have enforced safety,
-        // it just assumes caller knows what it's doing
-        assert(base.properties.size() == overlay.properties.size());
-        for(size_t i=0; i<base.properties.size(); ++i)
-        {
-            base.properties[i]->import(*overlay.properties[i]);
-        }
-    };
-
-    apply(*this, other);
-
     for(auto& extension : other._extensions)
     {
         auto it = _extensions.find(extension.first);
         if(it != _extensions.end())
         {
-            apply(it->second->get(), extension.second->get());
+            it->second->import(*extension.second);
         }
         else
         {
@@ -42,6 +32,7 @@ void ProjectSettings::import(const ProjectSettings& other)
 
 void Project::import(const Project& other, bool reexport)
 {
+    dependencies += &other;
     ProjectSettings::import(other.exports);
     if(reexport)
     {
