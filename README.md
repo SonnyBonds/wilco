@@ -13,7 +13,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 # Philosophy
 
-With build.h the C++ build environment itself is the only requirement for build configuration. build.h can either perform a build itself or generate build files for a build system like Ninja (or, in the future, GNU make, Visual Studio etc). 
+With build.h the C++ build environment itself is the only requirement for build configuration. build.h can either perform a build itself or generate build files for a build system like Ninja or Visual Studio.
 
 Build configuration is created by code rather than declarative data. Build.h acts more as a framework for easily generating project dependency graphs and emitting them to an actual builder. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
 
@@ -29,13 +29,7 @@ A *Project* is the main entity of a build configuration. It consists of a name, 
 * *output.dir* - The target directory to output binaries to.
 * ...etc
 
-Properties considered for a project when emitting are determined by their _Selector_, a group of criteria used to filter properties. These are currently:
-* *Transitivity* - A property can be declared to be applied only for the project itself, or _transitively to dependent projects_. This makes it easy to make sure a project linking to a library automatically gets the correct include path and defines for the library, or to set up common configuration flags, etc. 
-* *Project type* - The type of the project, e.g. executable or static library.
-* *Operating System* - The target operating system of the build.
-* *Configuration* - A named configuration, e.g. "debug" or "release".
-
-It is possible to add custom properies to projects, but they have very little inherent meaning apart from letting an *Emitter* do something useful with them. It can however sometimes be useful as metadata resolved by the selector system for custom processing in the project generation itself, or possibly by custom emitters.
+It is possible to add custom properies to projects, but they have very little inherent meaning apart from letting an *Emitter* do something useful with them. It can however sometimes be useful as metadata in the project generation itself, or possibly by custom emitters.
 
 ## Emitters
 An *Emitter* takes the project structure constructed by the generator and emits the build files needed to actually build the projects. Examples of existing emitters are:
@@ -50,72 +44,85 @@ A very simple generator file could look something like this:
 
 #include "build.h"
 
-void configure(Environment& env)
+void setup(Environment& env)
 {
-    Project& hello = env.createProject("Hello", Executable);
+    env.configurations = { "debug", "release" };
+}
+
+void configure(Environment& env, Configuration& config)
+{
+    Project& hello = config.createProject("Hello", Executable);
     hello.files += "hello.cpp";
+    if(config.name == "release")
+    {
+        hello.features += feature::Optimize;
+    }
 }
 ```
 
-This declares one project, called "Hello", with a single file; "hello.cpp" and no extra configuration.
+This specifies that we have a "debug" and a "release" configuration, declares one project called "Hello", with a single file; "hello.cpp", and enables optimization when in release.
 
 To actually run this build, the script needs to be compiled. Since compiling C++ is part of the problem we want to solve here, we've got a chicken-and-egg scenario and need to bootstrap the build. To get started, assuming build.h is located in a directory called 'build.h', we run:
 ```
 build.h/bootstrap build.cpp
 ```
-This will figure out the build environment, and build the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.* To run the build, just run `./build`.
+This will figure out the build environment, and build the generator. *The generated build files include an implicit project that rebuilds the generator itself if needed, so past this point updating the build files becomes a part of the build itself.* To run the build, just run `./build build`.
 
 # Examples
 The "example" directory contains a very simple example setting up a Hello executable, linking to a HelloPrinter library that prints "Hello World!".
 
 Some more examples of what project configuration may look like:
 ```c++
-// A project that doesn't generate an output and is just used as configuration doesn't need a name or type 
-Project& config = env.createProject();
+// Projects are created in a configuration
+Project& lib = config.createProject("SomeLibrary", StaticLib);
 
-// The syntax for setting a property is:
-config(Selector).property = ...;
+// Properties are just normal members in the project:
+lib.property = ...;
 
 // Many properties are lists, and appending makes most sense.
 // += is overloaded to append individual items or {lists, of, items} to list properties
-config(Selector).property += ...;
-
-// Selectors can be combined, e.g.
-config(StaticLib, "debug").property = ...;
-
-// Some more "real world"-ish examples
-
-// Always link with some default lib
-config(Public).libs += "libsomething.a";
-
-// Define some things in the "debug" config
-config(Public, "debug").defines += { 
-    "DEBUG", 
-    "DEBUG_TESTS=1",
-}; 
+lib.includePaths += "include";
+lib.includePaths += { "other_path", "third_path" };
 
 // "Features" are basically tags that are turned into appropriate compiler flags when compiling
-config(Public, "debug").features += feature::DebugSymbols;
+lib.features += feature::DebugSymbols;
 
-// Set an output prefix for library outputs
-config(Public, StaticLib).output.prefix = "lib";
+// But custom flags can also be specified with compiler specific extensions
+lib.ext<extensions::Gcc>().compilerFlags += "-Wno-everything";
 
-// Declare another project with an actual output
-Project& app = env.createProject("App", Executable);
+// Projects have a set of exported properties that can be used by "consumers" of the project
+// For example, we want dependents to link with our static library output:
+lib.exports.libs += lib.output;
 
-// "Link" it to the configuration, to get all public options (and link to outputs if any) from it
-app.links += &config;
+// A project that wants to use the library imports it. This applies all the
+// properties in its exports section.
+application.import(lib);
 
-// Add a source file. Note how no specifying a selector adds it for all configurations, local to the project (no transitivity).
-app.files += "test.cpp";
+// Bundles of project properties not attached to a project can also be created,
+// for example to define a set of defaults
+ProjectSettings defaults;
+defaults.output.dir = "bin";
+if(config.name == "debug")
+{
+    defaults.output.suffix = "Debug";
+}
+
+// ProjectSettings are applied to a project with import as well:
+application.import(defaults);
+
+// Source files can be added directly:
+application.files += "test.cpp";
+
+// It is also possible to add all files in a directory as source files.
+// This will also make sure the configuration is re-run if any files are added or removed
+application.files += env.listFiles("src");
 ```
 
 # Future
 
 This is so far mostly a proof of concept and many real life requirements for it to be properly useful are still missing. Some have been mentioned before, but a non-exhaustive list of things to work on is:
-* More well tested Windows support.
 * The internal builder is a decent build runner, but still some missing features and edge cases that probably need addressing at some point.
 * Build environment discovery done by the bootstrapper works for simple environments, but can probably fairly easily be extended to be much more versatile.
-* More emitters, specifically Visual Studio projects.
-* Possibly more selector criteria.
-* Cross compiling has been in mind when designing the system, but needs features to actually be doable. Especially if full host/build/target separation is to be done.
+* Names of different concepts are a bit all over the place and may need some renaming.
+* More emitters.
+* More common utilities.
