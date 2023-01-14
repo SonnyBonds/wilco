@@ -47,6 +47,8 @@ std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem:
         return result;
     }
 
+    addConfigurationDependency(path);
+
     auto scan = [&](auto&& iterator)
     {
         for(auto entry : iterator)
