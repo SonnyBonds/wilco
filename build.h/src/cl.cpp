@@ -122,7 +122,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, StringId
 {
     std::string flags;
 
-    flags += " /nologo";
+    flags += " /nologo /MACHINE:X64";
 
     switch(project.type)
     {
