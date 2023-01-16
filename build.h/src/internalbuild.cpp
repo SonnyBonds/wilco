@@ -61,6 +61,14 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
+    {
+        std::filesystem::path output = project.output;
+        if(output.has_parent_path())
+        {
+            std::filesystem::create_directories(output.parent_path());
+        }
+    }
+
     const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
