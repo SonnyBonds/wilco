@@ -220,4 +220,6 @@ $toolchain_contents += "`n}`n`ninline ToolchainProvider* defaultToolchain = &det
 Set-Content -Path ($params["BUILD_H_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
 
 $toolchain = $toolchains[$selected_toolchain]
+$description = $toolchain["Description"]
+Write-Host "Bootstrapping using $description $selected_toolchain_desc"...
 & $toolchain["Command"] $toolchain["Args"]
