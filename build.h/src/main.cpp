@@ -79,7 +79,7 @@ void writeConfigDeps(Environment& env) {
     depData << ":\n";
     for(auto& dep : env.configurationDependencies)
     {
-        depData << "  " << dep.string() << " \\\n";
+        depData << "  " << str::replaceAll(dep.string(), " ", "\\ ") << " \\\n";
     }
 
     auto depFilePath{*targetPath / ".generator" / (std::string(env.cliContext.action) + ".confdeps")};
@@ -106,6 +106,7 @@ int defaultMain(int argc, const char** argv) {
 
         if(cliContext.action != StringId("build") && !configIsDirty(env))
         {
+            std::cout << "Up to date." << std::endl;
             return 0;
         }
 
