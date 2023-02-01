@@ -11,7 +11,7 @@ ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler,
 {
 }
 
-std::string ClToolchainProvider::getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const 
+std::string ClToolchainProvider::getCompiler(Project& project, std::filesystem::path pathOffset, Language language) const 
 {
     if(language == lang::Cpp || language == lang::C)
     {
@@ -27,7 +27,7 @@ std::string ClToolchainProvider::getCompiler(Project& project, StringId config, 
     }
 }
 
-std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const
+std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language) const
 {
     std::string flags;
 
@@ -93,7 +93,7 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, String
     return flags;
 }
 
-std::string ClToolchainProvider::getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
+std::string ClToolchainProvider::getCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
     if(language == lang::Rc)
     {
@@ -106,7 +106,7 @@ std::string ClToolchainProvider::getCompilerFlags(Project& project, StringId con
     }
 }
 
-std::string ClToolchainProvider::getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const
+std::string ClToolchainProvider::getLinker(Project& project, std::filesystem::path pathOffset) const
 {
     if(project.type == StaticLib)
     {
@@ -118,7 +118,7 @@ std::string ClToolchainProvider::getLinker(Project& project, StringId config, st
     }
 }
 
-std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const
+std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, std::filesystem::path pathOffset) const
 {
     std::string flags;
 
@@ -174,7 +174,7 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, StringId
     return flags;
 }
 
-std::string ClToolchainProvider::getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
+std::string ClToolchainProvider::getLinkerFlags(Project& project, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
 {
     std::string flags;
 
@@ -202,7 +202,7 @@ std::string ClToolchainProvider::getLinkerFlags(Project& project, StringId confi
     return flags;
 }
 
-std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
+std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
@@ -245,7 +245,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             }
         }
 
-        return commonCompilerArgs[language] = getCommonCompilerFlags(project, config, pathOffset, language) + pchFlag;
+        return commonCompilerArgs[language] = getCommonCompilerFlags(project, pathOffset, language) + pchFlag;
     };
 
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
@@ -256,11 +256,11 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         }
 
 
-        return commonCompilerCommand[language] = str::quote(getCompiler(project, config, pathOffset, language));
+        return commonCompilerCommand[language] = str::quote(getCompiler(project, pathOffset, language));
     };
 
 
-    auto linkerCommand = str::quote(getLinker(project, config, pathOffset)) + getCommonLinkerFlags(project, config, pathOffset);
+    auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, pathOffset);
 
     std::unordered_set<StringId> ignorePch;
     ignorePch.reserve(msvcExt.pch.ignoredFiles.size());
@@ -292,7 +292,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         if(language != lang::Rc)
         {
             command.command = getCommonCompilerCommand(language);
-            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
+            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
 
             if(!msvcExt.pch.header.empty() && msvcExt.pch.source == input.path)
             {
@@ -312,7 +312,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         else
         {
             // There is rsp support in RC, but it requires different escaping somehow so just ignore that for now
-            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
+            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
         }
         command.workingDirectory = workingDir;
         if(!command.rspContents.empty())
@@ -365,7 +365,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;
-        command.rspContents = getLinkerFlags(project, config, pathOffset, linkerInputStrs, outputStr);
+        command.rspContents = getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
         if(!command.rspContents.empty())
         {
             command.rspFile = output.string() + ".rsp";

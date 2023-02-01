@@ -8,12 +8,12 @@ GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string
 {
 }
 
-std::string GccLikeToolchainProvider::getCompiler(Project& project, StringId config, std::filesystem::path pathOffset, Language language) const
+std::string GccLikeToolchainProvider::getCompiler(Project& project, std::filesystem::path pathOffset, Language language) const
 {
     return compiler;
 }
 
-std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, bool pch) const
+std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, bool pch) const
 {
     std::string flags;
 
@@ -88,12 +88,12 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, S
     return flags;
 }
 
-std::string GccLikeToolchainProvider::getCompilerFlags(Project& project, StringId config, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
+std::string GccLikeToolchainProvider::getCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
     return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
 }
 
-std::string GccLikeToolchainProvider::getLinker(Project& project, StringId config, std::filesystem::path pathOffset) const
+std::string GccLikeToolchainProvider::getLinker(Project& project, std::filesystem::path pathOffset) const
 {
     if(project.type == StaticLib)
     {
@@ -105,7 +105,7 @@ std::string GccLikeToolchainProvider::getLinker(Project& project, StringId confi
     }
 }
 
-std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset) const
+std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, std::filesystem::path pathOffset) const
 {
     std::string flags;
 
@@ -162,7 +162,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Str
     return flags;
 }
 
-std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, StringId config, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
+std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const
 {
     std::string flags;
 
@@ -190,7 +190,7 @@ std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, StringId 
     return flags;
 }
 
-std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
+std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
@@ -219,9 +219,9 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, config, pathOffset, lang::Cpp) + 
-                                getCommonCompilerFlags(project, config, pathOffset, lang::Cpp, true) + 
-                                getCompilerFlags(project, config, pathOffset, lang::Cpp, inputStr, outputStr);
+            command.command = getCompiler(project, pathOffset, lang::Cpp) + 
+                                getCommonCompilerFlags(project, pathOffset, lang::Cpp, true) + 
+                                getCompilerFlags(project, pathOffset, lang::Cpp, inputStr, outputStr);
             command.inputs = { input };
             command.outputs = { output };
             command.workingDirectory = workingDir;
@@ -232,9 +232,9 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, config, pathOffset, lang::ObjectiveCpp) + 
-                                getCommonCompilerFlags(project, config, pathOffset, lang::ObjectiveCpp, true) + 
-                                getCompilerFlags(project, config, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
+            command.command = getCompiler(project, pathOffset, lang::ObjectiveCpp) + 
+                                getCommonCompilerFlags(project, pathOffset, lang::ObjectiveCpp, true) + 
+                                getCompilerFlags(project, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
             command.inputs = { input };
             command.outputs = { outputObjC };
             command.workingDirectory = workingDir;
@@ -268,8 +268,8 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             return it->second;
         }
 
-        auto flags = str::quote(getCompiler(project, config, pathOffset, language)) +
-                        getCommonCompilerFlags(project, config, pathOffset, language, false);
+        auto flags = str::quote(getCompiler(project, pathOffset, language)) +
+                        getCommonCompilerFlags(project, pathOffset, language, false);
         
         // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
         if(language == lang::Cpp)
@@ -284,7 +284,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         return commonCompilerFlags[language] = flags;
     };
 
-    auto linkerCommand = str::quote(getLinker(project, config, pathOffset)) + getCommonLinkerFlags(project, config, pathOffset);
+    auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, pathOffset);
 
     std::vector<std::filesystem::path> linkerInputs;
     for(auto& input : project.files)
@@ -304,7 +304,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
         CommandEntry command;
         command.command = getCommonCompilerCommand(language) + 
-                            getCompilerFlags(project, config, pathOffset, language, inputStr, outputStr);
+                            getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
         command.inputs = { input.path };
         command.inputs.insert(command.inputs.end(), pchInputs.begin(), pchInputs.end());
         command.outputs = { output };
@@ -351,7 +351,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = linkerCommand + getLinkerFlags(project, config, pathOffset, linkerInputStrs, outputStr);
+        command.command = linkerCommand + getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;

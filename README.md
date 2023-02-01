@@ -1,7 +1,7 @@
 # build.h
 build.h is a generator framework for writing build files for C++ in C++.
 
-It is currently work in process and in a state of flux both in terms of interface and features. Currently mostly developed on Mac, but Windows & Linux support exists with less testing done.
+It is currently work in process and in a state of flux both in terms of interface and features. Currently mostly developed on Windows, but Mac & Linux support exists with less testing done.
 
 # TL;DR - Let's run the example
 
@@ -36,6 +36,9 @@ An *Emitter* takes the project structure constructed by the generator and emits 
 * *Build* builder, which builds the project without further ado.
 * *Ninja* emitter, which emits Ninja files to use for building.
 * *CompileCommands* emitter, which emits a compile_commands.json file that can be used as metadata by applications like VS Code.
+
+## Profiles
+A profile is a set of configuration arguments, defining common combinations of options.
 # Getting started
 
 A very simple generator file could look something like this:
@@ -44,23 +47,23 @@ A very simple generator file could look something like this:
 
 #include "build.h"
 
-void setup(Environment& env)
-{
-    env.configurations = { "debug", "release" };
-}
+cli::BoolArgument optimize{"optimize", "Enable optimizations."};
 
-void configure(Environment& env, Configuration& config)
+cli::Profile release("release", { "--optimize" });
+cli::Profile debug("debug", { });
+
+void configure(Environment& env)
 {
-    Project& hello = config.createProject("Hello", Executable);
+    Project& hello = env.createProject("Hello", Executable);
     hello.files += "hello.cpp";
-    if(config.name == "release")
+    if(optimize)
     {
         hello.features += feature::Optimize;
     }
 }
 ```
 
-This specifies that we have a "debug" and a "release" configuration, declares one project called "Hello", with a single file; "hello.cpp", and enables optimization when in release.
+This specifies that we have a "debug" and a "release" profile, declares one project called "Hello", with a single file; "hello.cpp", and enables optimization when using the "release" profile.
 
 To actually run this build, the script needs to be compiled. Since compiling C++ is part of the problem we want to solve here, we've got a chicken-and-egg scenario and need to bootstrap the build. To get started, assuming build.h is located in a directory called 'build.h', we run:
 ```
@@ -124,5 +127,6 @@ This is so far mostly a proof of concept and many real life requirements for it 
 * The internal builder is a decent build runner, but still some missing features and edge cases that probably need addressing at some point.
 * Build environment discovery done by the bootstrapper works for simple environments, but can probably fairly easily be extended to be much more versatile.
 * Names of different concepts are a bit all over the place and may need some renaming.
+* Calling the configuration source/executable "build" yields a bit confusing command lines.
 * More emitters.
 * More common utilities.

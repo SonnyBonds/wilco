@@ -36,10 +36,17 @@ private:
         std::vector<StringId> values;
     };
 
+    struct ProfileArgument : public cli::Argument
+    {
+        ProfileArgument(std::vector<cli::Argument*>& argumentList);
+
+        virtual void extract(std::vector<std::string>& values) override;
+    };
+
 public:
     static EmitterInstance<DirectBuilder> instance;
 
-    cli::StringArgument selectedConfig{arguments, "config", "Specify a configuration to build."};
+    ProfileArgument profile{arguments};
     cli::BoolArgument verbose{arguments, "verbose", "Display full command line of commands as they are executed."};
     TargetArgument targets{arguments};
 

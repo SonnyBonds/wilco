@@ -8,7 +8,7 @@ Query::Query()
 
 void Query::emit(Environment& env)
 {
-    if(!listProjects && !listConfigs)
+    if(!listProjects && !listProfiles)
     {
         throw cli::argument_error("No query type specified.");  
     }
@@ -17,36 +17,27 @@ void Query::emit(Environment& env)
     {
         emitProjects(env);
     }
-    if(listConfigs)
+    if(listProfiles)
     {
-        emitConfigs(env);
+        emitProfiles(env);
     };
 }
 
 void Query::emitProjects(Environment& env)
 {
-    std::set<StringId> projectNames;
-    for(auto& configName : env.configurations)
+    configure(env);
+    
+    for(auto& project : env.projects)
     {
-        Configuration config{configName};
-        configure(env, config);
-        
-        for(auto& project : config.getProjects())
-        {
-            projectNames.insert(project->name);
-        }
-    }
-    for(auto& name : projectNames)
-    {
-        std::cout << name << "\n";
+        std::cout << project->name << "\n";
     }
 }
 
-void Query::emitConfigs(Environment& env)
+void Query::emitProfiles(Environment& env)
 {
-    for(auto& config : env.configurations)
+    for(auto& profile : cli::Profile::list())
     {
-        std::cout << std::string(config) << "\n";
+        std::cout << std::string(profile.name) << "\n";
     }
 }
 

@@ -11,23 +11,18 @@ void CompileCommands::emit(Environment& env)
     
     stream << "[\n";
 
-    auto configs = env.configurations;
     bool first = true;
-    for(auto& configName : configs)
-    {
-        Configuration config{configName};
-        configure(env, config);
+    configure(env);
 
-        for(auto& project : config.getProjects())
-        {
-            emitCommands(env, stream, *targetPath.value, *project, config.name, first);
-        }
+    for(auto& project : env.projects)
+    {
+        emitCommands(env, stream, *targetPath.value, *project, first);
     }
     
     stream << "\n]\n";
 }
 
-void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& projectDir, Project& project, StringId config, bool& first)
+void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& projectDir, Project& project, bool& first)
 {
     if(project.name.empty())
     {
@@ -52,7 +47,7 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
+    auto toolchainOutputs = toolchain->process(project, {}, dataDir);
 
     auto absCwd = std::filesystem::absolute(std::filesystem::current_path());
     for(auto& command : commands)

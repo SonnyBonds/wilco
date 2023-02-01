@@ -21,6 +21,24 @@ struct argument_error : public std::runtime_error
     {}
 };
 
+struct Profile
+{
+    Profile(StringId name, std::vector<std::string> arguments)
+        : name(name), arguments(arguments)
+    {
+        list().push_back(*this);
+    }
+
+    static std::vector<Profile>& list()
+    {
+        static std::vector<Profile> profiles;
+        return profiles;
+    }
+
+    StringId name;
+    std::vector<std::string> arguments;  
+};
+
 struct Argument
 {
     virtual void extract(std::vector<std::string>& values)

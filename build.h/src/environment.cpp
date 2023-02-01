@@ -9,7 +9,6 @@ Environment::Environment(cli::Context& cliContext)
     , buildHDir(std::filesystem::absolute(__FILE__).parent_path().parent_path())
     , cliContext(cliContext)
 {
-    configurations.insert({});
 }
 
 Environment::~Environment()
@@ -80,17 +79,8 @@ void Environment::addConfigurationDependency(std::filesystem::path path)
     configurationDependencies.insert(path);    
 }
 
-Configuration::Configuration(StringId name)
-    : name(name)
-{ }
-
-Project& Configuration::createProject(std::string name, ProjectType type)
+Project& Environment::createProject(std::string name, ProjectType type)
 {
-    _projects.emplace_back(new Project(std::move(name), type));
-    return *_projects.back();
-}
-
-const std::vector<std::unique_ptr<Project>>& Configuration::getProjects() const
-{
-    return _projects;
+    projects.emplace_back(new Project(std::move(name), type));
+    return *projects.back();
 }

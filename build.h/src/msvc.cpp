@@ -621,23 +621,22 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
 void MsvcEmitter::emit(Environment& env)
 {
+    struct ProfileEntry
+    {
+        StringId name;
+        std::vector<std::unique_ptr<Project>> projects;
+    };
+
     std::filesystem::create_directories(*targetPath);
 
-    // Order matters for output and StringId order is not totally deterministic
-    std::vector<StringId> sortedConfigNames;
-    sortedConfigNames.insert(sortedConfigNames.end(), env.configurations.begin(), env.configurations.end());
-    std::sort(sortedConfigNames.begin(), sortedConfigNames.end(), [](StringId a, StringId b) {
-        return strcmp(a.cstr(), b.cstr()) < 0;
-    });
-
+    std::vector<StringId> profileNames;
     std::set<std::string> projectNames;
-    std::vector<Configuration> configs;
-    for(auto& configName : sortedConfigNames)
+    std::vector<ProfileEntry> profiles;
+    for(auto& profile : cli::Profile::list())
     {
-        Configuration config(configName);
-        configure(env, config);
+        configure(env);
 
-        auto& generatorProject = config.createProject("_generator", Command);
+        auto& generatorProject = env.createProject("_generator", Command);
         {
             std::string argumentString;
             for(auto& arg : env.cliContext.allArguments)
@@ -651,7 +650,7 @@ void MsvcEmitter::emit(Environment& env)
             generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { env.configurationFile }, { outputPath }, env.startupDir, {}, "Check build config." };
         }
 
-        for(auto& project : config.getProjects())
+        for(auto& project : env.projects)
         {
             if(project->name.empty())
             {
@@ -666,7 +665,10 @@ void MsvcEmitter::emit(Environment& env)
             projectNames.insert(project->name);
         }
 
-        configs.push_back(std::move(config));
+        profiles.push_back({profile.name, std::move(env.projects)});
+
+        // Construct a new one since we've moved the old away
+        env.projects = std::vector<std::unique_ptr<Project>>();
     }
     
     std::vector<ProjectMatrixEntry> projectMatrix;
@@ -674,12 +676,12 @@ void MsvcEmitter::emit(Environment& env)
     {
         ProjectMatrixEntry projectEntry;
         projectEntry.name = projectName;
-        projectEntry.configs.reserve(configs.size());
+        projectEntry.configs.reserve(profiles.size());
 
-        for(auto& config : configs)
+        for(auto& profile : profiles)
         {
-            ProjectConfig configEntry = { config.name };
-            for(auto& project : config.getProjects())
+            ProjectConfig configEntry = { profile.name };
+            for(auto& project : profile.projects)
             {
                 if(project->name == projectName)
                 {
@@ -689,7 +691,7 @@ void MsvcEmitter::emit(Environment& env)
             }
             if(configEntry.project == nullptr)
             {
-                configEntry.project = &config.createProject(projectName, Command);
+                throw std::runtime_error(std::string("MSVC generator currently requires defining all projects in all profiles, and '") + projectName + "' was mising from the '" + std::string(profile.name) + "' profile.");
             }
 
             const auto& msvcExt = configEntry.project->ext<extensions::Msvc>();
@@ -730,19 +732,19 @@ void MsvcEmitter::emit(Environment& env)
 
     solutionStream << "Global\n";
     solutionStream << "\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n";
-    for(auto& config : configs)
+    for(auto& profile : profiles)
     {
-        auto cfgStr = std::string(config.name.cstr()) + "|" + platformStr;
+        auto cfgStr = std::string(profile.name.cstr()) + "|" + platformStr;
         solutionStream << "\t\t" << cfgStr << " = " << cfgStr << "\n";
     }
     solutionStream << "\tEndGlobalSection\n";
 
     solutionStream << "\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n";
-    for(auto& config : configs)
+    for(auto& profile : profiles)
     {
-        for(auto& project : config.getProjects())
+        for(auto& project : profile.projects)
         {
-            auto cfgStr = std::string(config.name.cstr()) + "|" + platformStr;
+            auto cfgStr = std::string(profile.name.cstr()) + "|" + platformStr;
             auto uuidStr = calcProjectUuid(project->name);
             solutionStream << "\t\t" << uuidStr << "." << cfgStr << ".ActiveCfg = " << cfgStr << "\n";
             solutionStream << "\t\t" << uuidStr << "." << cfgStr << ".Build.0 = " << cfgStr << "\n";

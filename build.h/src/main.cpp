@@ -132,18 +132,17 @@ int defaultMain(int argc, const char** argv) {
         // relevant paths should probably be made available so things can use
         // them explicitly
         std::filesystem::current_path(cliContext.startPath);
-        cliContext.extractArguments(cli::Argument::globalList());
         cliContext.extractArguments(chosenEmitter->arguments);
-
-        std::filesystem::current_path(env.configurationFile.parent_path());
-        setup(env);
-
-        chosenEmitter->emit(env);
+        cliContext.extractArguments(cli::Argument::globalList());
 
         for(auto& argument : cliContext.unusedArguments)
         {
-            std::cout << "WARNING: Unknown argument \"" + argument + "\" was ignored.\n";
+            throw cli::argument_error("Argument \"" + argument + "\" was not recognized.");
         }
+
+        std::filesystem::current_path(env.configurationFile.parent_path());
+
+        chosenEmitter->emit(env);
 
         writeConfigDeps(env);
     }

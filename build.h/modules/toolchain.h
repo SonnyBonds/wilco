@@ -42,5 +42,5 @@ struct ToolchainProvider
         Toolchains::install(this);
     }
 
-    virtual std::vector<std::filesystem::path> process(Project& project, StringId config, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const = 0;
+    virtual std::vector<std::filesystem::path> process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const = 0;
 };

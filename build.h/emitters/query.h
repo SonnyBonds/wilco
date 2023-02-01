@@ -11,11 +11,11 @@ public:
     static EmitterInstance<Query> instance;
 
     cli::BoolArgument listProjects{arguments, "projects", "List all defined projects."};
-    cli::BoolArgument listConfigs{arguments, "configs", "List all defined configurations."};
+    cli::BoolArgument listProfiles{arguments, "profiles", "List all defined profiles."};
 
     Query();
 
     virtual void emit(Environment& env) override;
     void emitProjects(Environment& env);
-    void emitConfigs(Environment& env);
+    void emitProfiles(Environment& env);
 };

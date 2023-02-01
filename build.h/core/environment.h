@@ -18,26 +18,15 @@ struct Environment
     std::vector<std::filesystem::path> listFiles(const std::filesystem::path& path, bool recurse = true);
 
     void addConfigurationDependency(std::filesystem::path path);
-public:
+
+    Project& createProject(std::string name, ProjectType type);
+
     const std::filesystem::path configurationFile;
     const std::filesystem::path startupDir;
     const std::filesystem::path buildHDir;
     cli::Context& cliContext;
     std::set<std::filesystem::path> configurationDependencies;
-    std::set<StringId> configurations;
+    std::vector<std::unique_ptr<Project>> projects;
 };
 
-struct Configuration
-{
-    Configuration(StringId name);
-    
-    const StringId name;
-    Project& createProject(std::string name, ProjectType type);
-    const std::vector<std::unique_ptr<Project>>& getProjects() const;
-
-private:
-    std::vector<std::unique_ptr<Project>> _projects;
-};
-
-void setup(Environment& env);
-void configure(Environment& env, Configuration& config);
+void configure(Environment& env);

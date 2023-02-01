@@ -1,38 +1,41 @@
 #include "build.h"
 
-cli::StringArgument printerMessage{"printer-message", "Specify the message to print.", "Hello World!"};
-
-static StringId debug = "debug";
-static StringId release = "release";
-
-void setup(Environment& env)
+namespace arguments
 {
-    env.configurations = { debug, release };
+    cli::StringArgument printerMessage{"printer-message", "Specify the message to print.", "Hello World!"};
+    cli::BoolArgument optimize{"optimize", "Enable optimizations."};
+    cli::BoolArgument debug{"debug", "Build with debug flags enabled."};
 }
 
-void configure(Environment& env, Configuration& config)
+namespace profiles
+{
+    cli::Profile release("release", { "--optimize" });
+    cli::Profile debug("debug", { "--debug" });
+}
+
+void configure(Environment& env)
 {
     ProjectSettings defaults;
     defaults.features += { feature::Exceptions, feature::DebugSymbols };
     defaults.output.dir = "bin";
-    if(config.name == release)
+    if(arguments::optimize)
     {
         defaults.features += feature::Optimize;
     }
 
-    if(config.name == debug)
+    if(arguments::debug)
     {
         defaults.output.suffix = "_d";
     }
 
-    Project& helloPrinter = config.createProject("HelloPrinter", StaticLib);
+    Project& helloPrinter = env.createProject("HelloPrinter", StaticLib);
     helloPrinter.import(defaults);
     helloPrinter.files += env.listFiles("hellolib");
-    helloPrinter.defines += "MESSAGE=" + str::quote(std::string(*printerMessage));
+    helloPrinter.defines += "MESSAGE=" + str::quote(std::string(*arguments::printerMessage));
     helloPrinter.exports.includePaths = "hellolib";
     helloPrinter.exports.libs += helloPrinter.output;
 
-    Project& hello = config.createProject("Hello", Executable);
+    Project& hello = env.createProject("Hello", Executable);
     hello.import(defaults);
     hello.import(helloPrinter); // Import adds all properties in the "exports" section of the imported project
     hello.files += env.listFiles("helloapp");

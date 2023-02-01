@@ -84,7 +84,7 @@ struct NinjaWriter
     }
 };
 
-static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId config, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId profileName, bool generator)
 {
     std::filesystem::path dataDir = project.dataDir;
     if(dataDir.empty())
@@ -98,9 +98,9 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
     }
 
     std::cout << "Emitting '" << project.name << "'";
-    if(!config.empty())
+    if(!profileName.empty())
     {
-        std::cout << " (" << config << ")";
+        std::cout << " (" << profileName << ")";
     }
     std::cout << "\n";
 
@@ -123,7 +123,7 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, projectDir, dataDir);
+    auto toolchainOutputs = toolchain->process(project, projectDir, dataDir);
     for(auto& output : toolchainOutputs)
     {
         projectOutputs.push_back((pathOffset / output).string());
@@ -217,26 +217,30 @@ NinjaEmitter::NinjaEmitter()
 void NinjaEmitter::emit(Environment& env)
 {
     std::vector<std::filesystem::path> outputs;
-    auto configs = env.configurations;
+    auto profiles = cli::Profile::list();
 
-    for(auto& configName : configs)
+    if(profiles.empty())
     {
-        Configuration config{configName};
-        configure(env, config);
+        profiles.push_back(cli::Profile{ "", {} });
+    }
 
-        std::filesystem::path configTargetPath = *targetPath;
-        if(!config.name.empty())
+    for(auto& profile : profiles)
+    {
+        configure(env);
+
+        std::filesystem::path profileTargetPath = *targetPath;
+        if(!profile.name.empty())
         {
-            configTargetPath = configTargetPath / config.name.cstr();
+            profileTargetPath = profileTargetPath / profile.name.cstr();
         }
-        std::filesystem::create_directories(configTargetPath);
+        std::filesystem::create_directories(profileTargetPath);
 
-        auto outputFile = configTargetPath / "build.ninja";
+        auto outputFile = profileTargetPath / "build.ninja";
         NinjaWriter ninja(outputFile);
 
-        for(auto& project : config.getProjects())
+        for(auto& project : env.projects)
         {
-            auto outputName = emitProject(env, configTargetPath, *project, config.name, false);
+            auto outputName = emitProject(env, profileTargetPath, *project, profile.name, false);
             if(!outputName.empty())
             {
                 ninja.subninja(outputName);
@@ -246,7 +250,7 @@ void NinjaEmitter::emit(Environment& env)
 
         outputs.push_back("build.ninja");
 
-        auto& generatorProject = config.createProject("_generator", Command);
+        auto& generatorProject = env.createProject("_generator", Command);
 
         std::string argumentString;
         for(auto& arg : env.cliContext.allArguments)
@@ -255,8 +259,10 @@ void NinjaEmitter::emit(Environment& env)
         }
         
         generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, env.startupDir, {}, "Check build config." };
-        auto outputName = emitProject(env, configTargetPath, generatorProject, "", true);
+        auto outputName = emitProject(env, profileTargetPath, generatorProject, "", true);
         ninja.subninja(outputName);
+
+        env.projects.clear();
     }
 }
 

@@ -50,6 +50,62 @@ void DirectBuilder::TargetArgument::extract(std::vector<std::string>& inputValue
     }
 }
 
+DirectBuilder::ProfileArgument::ProfileArgument(std::vector<cli::Argument*>& argumentList)
+{
+    example = "--profile=[profile]";
+    description = "Apply a predefined set of configuration arguments. Available profiles are ";
+
+    auto& list = cli::Profile::list();
+    for(size_t i = 0; i < list.size(); ++i)
+    {
+        if(i > 0)
+        {
+            description += ", ";
+        }
+        if(i > 0 && i+1 == list.size())
+        {
+            description += "and ";
+        }
+        description += "\"" + std::string(list[i].name) + "\"";
+    }
+
+    argumentList.push_back(this);
+}
+
+void DirectBuilder::ProfileArgument::extract(std::vector<std::string>& inputValues)
+{
+    static const size_t len = strlen("--profile=");
+    
+    auto it = inputValues.begin();
+    while(it != inputValues.end())
+    {
+        if(!str::startsWith(*it, "--profile="))
+        {
+            ++it;
+            continue;
+        }
+
+        if(*it == "--profile" || *it == "--profile=")
+        {
+            throw cli::argument_error("Expected value for option 'profile'.");
+        }
+
+        std::string profileName = it->substr(len);
+        inputValues.erase(it);
+
+        for(auto& profile : cli::Profile::list())
+        {
+            if(profile.name == profileName)
+            {
+                inputValues.insert(inputValues.end(), profile.arguments.begin(), profile.arguments.end());
+                return;
+            }
+        }
+
+        throw cli::argument_error("Profile '" + profileName + "' not found.");
+    }
+}
+
 struct PendingCommand
 {
     std::vector<StringId> inputs;
@@ -66,7 +122,7 @@ struct PendingCommand
     std::future<process::ProcessResult> result;
 };
 
-static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project, StringId config)
+static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project)
 {
     std::filesystem::path dataDir = project.dataDir;
     if(dataDir.empty())
@@ -102,7 +158,7 @@ static void collectCommands(Environment& env, std::vector<PendingCommand>& pendi
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, config, {}, dataDir);
+    auto toolchainOutputs = toolchain->process(project, {}, dataDir);
 
     std::string prologue;
     if(OperatingSystem::current() == Windows)
@@ -334,7 +390,7 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
     return completed;
 }
 
-static std::vector<PendingCommand*> processCommands(Environment& env, const Configuration& config, std::vector<PendingCommand>& pendingCommands, std::vector<StringId> targets)
+static std::vector<PendingCommand*> processCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, std::vector<StringId> targets)
 {
     std::unordered_map<StringId, PendingCommand*> commandMap;
     for(auto& command : pendingCommands)
@@ -377,7 +433,7 @@ static std::vector<PendingCommand*> processCommands(Environment& env, const Conf
     for(auto& target : targets)
     {
         bool done = false;
-        for(auto& project : config.getProjects())
+        for(auto& project : env.projects)
         {
             if(project->name == target)
             {
@@ -566,50 +622,29 @@ void DirectBuilder::emit(Environment& env)
 {
     size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
 
-    auto configs = env.configurations;
-
-    if(selectedConfig)
-    {
-        if(std::find(configs.begin(), configs.end(), *selectedConfig) == configs.end())
-        {
-            throw std::runtime_error("Selected config '" + std::string(*selectedConfig) + "' has not been used in build configuration.");
-        }
-    }
-
     std::vector<PendingCommand> pendingCommands;
-    for(auto& configName : configs)
+    configure(env);
+
+    pendingCommands.clear();
+
+    for(auto& project : env.projects)
     {
-        if(selectedConfig && configName != *selectedConfig)
-        {
-            continue;
-        }
+        collectCommands(env, pendingCommands, *targetPath, *project);
+    }
+    auto commands = processCommands(env, pendingCommands, targets.values);
 
-        Configuration config{configName};
-        configure(env, config);
+    if(commands.empty())
+    {
+        std::cout << "Nothing to do. (Everything up to date.)\n" << std::flush;
+    }
+    else
+    {
+        std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
+        size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
 
-        std::string configPrefix = config.name.empty() ? "" : std::string(config.name) + ": ";
+        std::cout << "\n" << std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
 
-        pendingCommands.clear();
-
-        for(auto& project : config.getProjects())
-        {
-            collectCommands(env, pendingCommands, *targetPath / config.name.cstr(), *project, config.name);
-        }
-        auto commands = processCommands(env, config, pendingCommands, targets.values);
-
-        if(commands.empty())
-        {
-            std::cout << configPrefix + "Nothing to do. (Everything up to date.)\n" << std::flush;
-        }
-        else
-        {
-            std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-            size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
-
-            std::cout << "\n" << configPrefix + std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
-
-            // TODO: Error exit code on failure
-        }
+        // TODO: Error exit code on failure
     }
 }
 
@@ -638,8 +673,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     auto tempPath = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
     auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
 
-    Configuration config{{}};
-    Project& project = config.createProject("Generator", Executable);
+    Project& project = env.createProject("Generator", Executable);
     project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions/*, feature::Optimize*/ };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
@@ -655,9 +689,9 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     outputEnv.addConfigurationDependency(buildOutput);
 
     std::vector<PendingCommand> pendingCommands;
-    collectCommands(env, pendingCommands, outputPath, project, {});
+    collectCommands(env, pendingCommands, outputPath, project);
 
-    auto commands = processCommands(env, config, pendingCommands, {});
+    auto commands = processCommands(env, pendingCommands, {});
 
     // If nothing is to be done...
     if(commands.empty())
