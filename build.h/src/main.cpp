@@ -132,15 +132,8 @@ int defaultMain(int argc, const char** argv) {
         // relevant paths should probably be made available so things can use
         // them explicitly
         std::filesystem::current_path(cliContext.startPath);
-        for(auto argument : cli::Argument::globalList())
-        {
-            cliContext.extractArgument(argument);
-        }
-
-        for(auto argument : chosenEmitter->arguments)
-        {
-            cliContext.extractArgument(argument);
-        }
+        cliContext.extractArguments(cli::Argument::globalList());
+        cliContext.extractArguments(chosenEmitter->arguments);
 
         std::filesystem::current_path(env.configurationFile.parent_path());
         setup(env);

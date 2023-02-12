@@ -24,6 +24,30 @@ private:
     std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
 };
 
+DirectBuilder::TargetArgument::TargetArgument(std::vector<cli::Argument*>& argumentList)
+{
+    this->example = "[targets]";
+    this->description = "Build specific targets. [default:all]";
+
+    argumentList.push_back(this);
+}
+
+void DirectBuilder::TargetArgument::extract(std::vector<std::string>& inputValues)
+{
+    auto it = inputValues.begin();
+    while(it != inputValues.end())
+    {
+        if(it->size() > 2 &&
+           it->substr(0, 2) == "--")
+        {
+            ++it;
+            continue;            
+        }
+        values.push_back(std::move(*it));
+        inputValues.erase(it);
+    }
+}
+
 struct PendingCommand
 {
     std::vector<StringId> inputs;
@@ -34,6 +58,7 @@ struct PendingCommand
     std::string rspFile;
     std::string rspContents;
     bool dirty = false;
+    bool included = false;
     int depth = 0;
     std::vector<PendingCommand*> dependencies;
     std::future<process::ProcessResult> result;
@@ -307,14 +332,20 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
     return completed;
 }
 
-static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>& pendingCommands)
+static std::vector<PendingCommand*> processCommands(Environment& env, const Configuration& config, std::vector<PendingCommand>& pendingCommands, std::vector<StringId> targets)
 {
     std::unordered_map<StringId, PendingCommand*> commandMap;
     for(auto& command : pendingCommands)
     {
         for(auto& output : command.outputs)
         {
+            output = std::filesystem::absolute(output.cstr()).lexically_normal().string();
             commandMap[output] = &command;
+        }
+
+        for(auto& input : command.inputs)
+        {
+            input = std::filesystem::absolute(input.cstr()).lexically_normal().string();
         }
     }
 
@@ -331,9 +362,45 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
         }
     }
 
+    struct ExpandedTarget
+    {
+        StringId target;
+        StringId expanded;
+    };
+
+    std::filesystem::path invocationPath = env.startupDir;
+
+    std::vector<ExpandedTarget> expandedTargets;
+    expandedTargets.reserve(targets.size());
+    for(auto& target : targets)
+    {
+        bool done = false;
+        for(auto& project : config.getProjects())
+        {
+            if(project->name == target)
+            {
+                // TODO: There could be more outputs from other commands in the project.
+                expandedTargets.push_back({project->output.fullPath().string(), std::filesystem::absolute(project->output).lexically_normal().string()});
+                done = true;
+                break;
+            }
+        }
+        if(!done)
+        {
+            expandedTargets.push_back({target, (invocationPath / target.cstr()).lexically_normal().string()});
+        }
+    }
+
+    bool includeAll = expandedTargets.empty();
     using It = decltype(pendingCommands.begin());
     It next = pendingCommands.begin();
-    std::vector<std::pair<PendingCommand*, int>> stack;
+    struct StackEntry
+    {
+        PendingCommand* command;
+        int depth;
+        bool included;
+    };
+    std::vector<StackEntry> stack;
     stack.reserve(pendingCommands.size());
     std::vector<PendingCommand*> outputCommands;
     outputCommands.reserve(pendingCommands.size());
@@ -341,29 +408,62 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
     {
         PendingCommand* command;
         int depth = 0;
+        bool included = includeAll;
         if(stack.empty())
         {
             command = &*next;
             depth = command->depth;
+            included = includeAll || command->included;
             ++next;
             outputCommands.push_back(command);
         }
         else
         {
-            command = stack.back().first;
-            depth = stack.back().second;
+            command = stack.back().command;
+            depth = stack.back().depth;
+            included = command->included || stack.back().included;
             stack.pop_back();
         }
 
+        for(auto targetIt = expandedTargets.begin(); targetIt != expandedTargets.end(); ++targetIt)
+        {
+            bool done = false;
+            for(auto& output : command->outputs)
+            {
+                if(targetIt->expanded == output)
+                {
+                    expandedTargets.erase(targetIt);
+                    included = true;
+                    done = true;
+                }
+            }
+            if(done)
+            {
+                break;
+            }
+        }
+
+        command->included = included;
         command->depth = depth;
 
         for(auto& dependency : command->dependencies)
         {
             if(dependency->depth < depth+1)
             {
-                stack.push_back({dependency, depth+1});
+                stack.push_back({dependency, depth+1, included});
             }
         }
+    }
+
+    if(!expandedTargets.empty())
+    {
+        std::vector<std::string> targetStrings;
+        targetStrings.reserve(targets.size());
+        for(auto& expandedTarget : expandedTargets)
+        {
+            targetStrings.push_back(std::string(expandedTarget.target) + " (" + expandedTarget.expanded.cstr() + ")");
+        }
+        throw std::runtime_error("The specified targets were not found:\n  " + str::join(targetStrings, "\n  "));
     }
 
     std::sort(outputCommands.begin(), outputCommands.end(), [](auto a, auto b) { return a->depth > b->depth; });
@@ -449,7 +549,9 @@ static std::vector<PendingCommand*> processCommands(std::vector<PendingCommand>&
         }
     }
 
-    outputCommands.erase(std::remove_if(outputCommands.begin(), outputCommands.end(), [](auto command) { return !command->dirty; }), outputCommands.end());
+    outputCommands.erase(std::remove_if(outputCommands.begin(), outputCommands.end(), [](auto command) { 
+            return !command->dirty || !command->included; 
+        }), outputCommands.end());
 
     return outputCommands;
 }
@@ -491,7 +593,7 @@ void DirectBuilder::emit(Environment& env)
         {
             collectCommands(env, pendingCommands, *targetPath / config.name.cstr(), *project, config.name);
         }
-        auto commands = processCommands(pendingCommands);
+        auto commands = processCommands(env, config, pendingCommands, targets.values);
 
         if(commands.empty())
         {
@@ -525,7 +627,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
 
     Configuration config{{}};
     Project& project = config.createProject("Generator", Executable);
-    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
+    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions/*, feature::Optimize*/ };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += env.buildHDir;
@@ -543,7 +645,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     std::vector<PendingCommand> pendingCommands;
     collectCommands(env, pendingCommands, outputPath, project, {});
 
-    auto commands = processCommands(pendingCommands);
+    auto commands = processCommands(env, config, pendingCommands, {});
 
     if(commands.empty())
     {

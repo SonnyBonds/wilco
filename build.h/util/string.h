@@ -267,4 +267,39 @@ inline std::string replaceAll(std::string input, std::string_view searchString, 
     return input;
 }
 
+inline std::string join(const std::vector<std::string>& strings, const std::string_view separator)
+{
+    if(strings.empty())
+    {
+        return {};
+    }
+    
+    if(strings.size() == 1)
+    {
+        return strings[0];
+    }
+
+    std::string result;
+    size_t size = 0;
+    for(auto& str : strings)
+    {
+        size += str.size();
+    }
+    size += separator.size() * (strings.size()-1);
+    result.reserve(size);
+
+    bool first = true;
+    for(auto& str : strings)
+    {
+        if(!first)
+        {
+            result += separator;
+        }
+        first = false;
+        result += str;
+    }
+
+    return result;
+}
+
 }

@@ -23,7 +23,25 @@ struct argument_error : public std::runtime_error
 
 struct Argument
 {
-    virtual bool tryExtractArgument(std::string_view argStr) = 0;
+    virtual void extract(std::vector<std::string>& values)
+    {
+        auto it = values.begin();
+        while(it != values.end())
+        {
+            auto& argStr = *it;
+            if(tryExtractArgument(argStr))
+            {
+                values.erase(it);
+                return;
+            }
+            ++it;
+        }
+    }
+
+    virtual bool tryExtractArgument(std::string_view argStr)
+    {
+        return false;
+    }
 
     std::string example;
     std::string description;
@@ -204,29 +222,10 @@ struct Context
     {
         for(auto argument : arguments)
         {
-            extractArgument(argument);
+            argument->extract(unusedArguments);
         }
     }
     
-    bool extractArgument(Argument* argument)
-    {
-        auto it = unusedArguments.begin();
-        while(it != unusedArguments.end())
-        {
-            auto& argStr = *it;
-            bool found = false;
-            if(argument->tryExtractArgument(argStr))
-            {
-                found = true;
-                unusedArguments.erase(it);
-                return true;
-            }
-            ++it;
-        }
-
-        return false;
-    }
-
     const std::filesystem::path startPath;
     const std::string invocation;
     const std::vector<std::string> allArguments;
