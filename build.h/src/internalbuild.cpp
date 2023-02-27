@@ -4,6 +4,8 @@
 #include "util/commands.h"
 #include <iostream>
 
+static const int EXIT_RESTART = 10;
+
 struct TimeCache
 {
 public:
@@ -615,14 +617,25 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
 {
     Environment env(cliContext);
 
+    auto isSubProcess = false;
+    {
+        auto rebuildIt = std::find(cliContext.unusedArguments.begin(), cliContext.unusedArguments.end(), "--internal-restart");
+        if(rebuildIt != cliContext.unusedArguments.end())
+        {
+            isSubProcess = true;
+            cliContext.unusedArguments.erase(rebuildIt);
+        }
+    }
+
+
     auto outputPath = *targetPath / ".generator";
     std::string ext;
     if(OperatingSystem::current() == Windows)
     {
         ext = ".exe";
     }
-    auto tempOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext);
-    auto prevOutput = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + ".prev");
+
+    auto tempPath = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
     auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
 
     Configuration config{{}};
@@ -631,10 +644,9 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += env.buildHDir;
-    project.output = tempOutput;
+    project.output = buildOutput;
     project.files += env.configurationFile;
     project.files += env.listFiles(env.buildHDir / "src");
-    project.commands += commands::chain({commands::move(buildOutput, prevOutput), commands::copy(tempOutput, buildOutput)}, "Replacing '" + buildOutput.filename().string() + "'.");
 
     for(auto& file : project.files)
     {
@@ -647,30 +659,87 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
 
     auto commands = processCommands(env, config, pendingCommands, {});
 
+    // If nothing is to be done...
     if(commands.empty())
     {
+        // Exit with OK if we're in a subprocess
+        if(isSubProcess)
+        {
+            std::exit(0);
+        }
+        // ...and just continue otherwise.
         return;
     }
 
-    std::cout << "\nGenerator changed." << std::flush;
-    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
-    size_t completedCommands = runCommands(commands, maxConcurrentCommands, false);
-    if(completedCommands < commands.size())
+    // Something has changed, so we rebuild
+    std::cout << "\nRebuilding generator." << std::flush;
+
+    // ...but first we need to move ourselves out of the way.
+    std::filesystem::rename(buildOutput, tempPath);
+
+    try
     {
-        // TODO: Exit more gracefully?
-        std::exit(EXIT_FAILURE);
+        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+        size_t completedCommands = runCommands(commands, maxConcurrentCommands, false);
+
+        // Exit with failure if it fails.
+        if(completedCommands < commands.size())
+        {
+            // (and return the running binary since we didn't get a working new one)
+            std::filesystem::rename(tempPath, buildOutput);
+            std::exit(EXIT_FAILURE);
+        }
+    } catch(...)
+    {
+        // In case of emergency, return the running binary with exception-less error handling
+        std::error_code ec;
+        std::filesystem::rename(tempPath, buildOutput, ec);
+        throw;
     }
 
-    std::cout << "Restarting build.\n\n" << std::flush;
+    // If it didn't fail, but we're in a subprocess, we exit with a code signalling
+    // that we're good, but want to go again.
+    if(isSubProcess)
+    {
+        std::exit(EXIT_RESTART);
+    }
+
+    // If we've gotten this far, we've rebuilt and aren't in a subprocess already.
+    // Run the built result until it says there are no changes.
     std::string argumentString;
     for(auto& arg : cliContext.allArguments)
     {
         argumentString += " " + str::quote(arg);
     }
-    process::runAndExit("cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string()) + argumentString);
-    std::cout << "Build restart failed.\n" << std::flush;
-    // TODO: Exit more gracefully?
-    std::exit(EXIT_FAILURE);
+
+    std::string restartCommandLine = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string());
+    restartCommandLine += argumentString;
+    restartCommandLine += " --internal-restart";
+
+    int iterations = 0;
+    while(true)
+    {
+        if(iterations >= 10)
+        {
+            throw std::runtime_error("Stuck rebuilding the build configuration more than 10 times, which seems wrong.");
+        }
+        auto result = process::run(restartCommandLine, true);
+        if(result.exitCode == 0)
+        {
+            break;
+        }
+        else if(result.exitCode != EXIT_RESTART)
+        {
+            std::exit(result.exitCode);
+        }
+        iterations++;
+    }
+
+    std::string buildCommandLine = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string());
+    buildCommandLine += argumentString;
+
+    auto result = process::run(buildCommandLine, true);
+    std::exit(result.exitCode);
 }
 
 

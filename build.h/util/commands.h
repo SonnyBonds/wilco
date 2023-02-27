@@ -94,7 +94,7 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
     return commandEntry;
 }
 
-inline CommandEntry move(std::filesystem::path from, std::filesystem::path to)
+inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, bool touchTarget = false)
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -104,13 +104,21 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to)
     {
         auto fromStr = str::quote(from.make_preferred().string(), '"', "\"");
         auto toStr = str::quote(to.make_preferred().string(), '"', "\"");
-        commandEntry.command = "move " + fromStr + " " + toStr + " && copy /b " + toStr + " +,,";
+        commandEntry.command = "move " + fromStr + " " + toStr;
+        if(touchTarget)
+        {
+            commandEntry.command += " && copy /b " + toStr + " +,,";
+        }
     }
     else
     {
         auto fromStr = str::quote(from.make_preferred().string());
         auto toStr = str::quote(to.make_preferred().string());
-        commandEntry.command = "mv " + fromStr + " " + toStr + " && touch " + toStr;
+        commandEntry.command = "mv " + fromStr + " " + toStr;
+        if(touchTarget)
+        {
+            commandEntry.command += " && touch " + toStr;
+        }
     }
 
     auto toParent = to.parent_path();
