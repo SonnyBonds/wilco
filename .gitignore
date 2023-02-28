@@ -1,7 +1,13 @@
 .ninja*
+.vscode
 .DS_Store
+*.obj
+*.pdb
+*.ilk
+*.prev
 bin
 build
+build.exe
 !build/
 buildfiles
 _detected_toolchains.h
