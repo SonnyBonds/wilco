@@ -621,6 +621,12 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
 
 void MsvcEmitter::emit(Environment& env)
 {
+    ConfigDependencyChecker configChecker(env, *targetPath / ".generator/msvc");
+    if(!configChecker.isDirty())
+    {
+        return;
+    }
+
     struct ProfileEntry
     {
         StringId name;

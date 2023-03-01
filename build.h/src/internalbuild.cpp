@@ -2,9 +2,14 @@
 #include "dependencyparser.h"
 #include "fileutil.h"
 #include "util/commands.h"
+#include "database.h"
+#include "buildconfigurator.h"
 #include <iostream>
+#include <chrono>
 
 static const int EXIT_RESTART = 10;
+
+#define LOG_DIRTY_REASON 0
 
 struct TimeCache
 {
@@ -108,147 +113,27 @@ void DirectBuilder::ProfileArgument::extract(std::vector<std::string>& inputValu
 
 struct PendingCommand
 {
-    std::vector<StringId> inputs;
-    std::vector<StringId> outputs;
-    StringId depFile;
-    std::string commandString;
-    std::string description;
-    std::string rspFile;
-    std::string rspContents;
+    uint32_t command;
     bool dirty = false;
     bool included = false;
-    int depth = 0;
-    std::vector<PendingCommand*> dependencies;
     std::future<process::ProcessResult> result;
 };
 
-static void collectCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, const std::filesystem::path& projectDir, Project& project)
+static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& database, size_t maxConcurrentCommands, bool verbose)
 {
-    std::filesystem::path dataDir = project.dataDir;
-    if(dataDir.empty())
+    const auto& commandDefinitions = database.getCommands();
+    const auto& dependencies = database.getDependencies();
+
+    // Not loving this, but since the dependency map are indices
+    // in the unfiltered commands we need the full list
+    // TODO: Test if a mapping table is faster or not
+    std::vector<bool> commandCompleted;
+    commandCompleted.resize(database.getCommands().size(), true);
+    for(auto& filteredCommands : filteredCommands)
     {
-        dataDir = projectDir;
+        commandCompleted[filteredCommands.command] = false;
     }
 
-    if(project.name.empty())
-    {
-        throw std::runtime_error("Trying to build project with no name.");
-    }
-
-    std::filesystem::create_directories(dataDir);
-    std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), dataDir);
-
-    auto& commands = project.commands;
-    if(project.type == Command && commands.empty())
-    {
-        throw std::runtime_error("Command project '" + project.name + "' has no commands.");
-    }
-
-    {
-        std::filesystem::path output = project.output;
-        if(output.has_parent_path())
-        {
-            std::filesystem::create_directories(output.parent_path());
-        }
-    }
-
-    const ToolchainProvider* toolchain = project.toolchain;
-    if(!toolchain)
-    {
-        toolchain = defaultToolchain;
-    }
-
-    auto toolchainOutputs = toolchain->process(project, {}, dataDir);
-
-    std::string prologue;
-    if(OperatingSystem::current() == Windows)
-    {
-        prologue += "cmd /c ";
-    }
-    prologue += "cd \"$cwd\" && ";
-
-    auto cmdFilePath = dataDir / (project.name + ".cmdlines");
-    auto cmdData = readFile(cmdFilePath);
-    std::unordered_map<StringId, std::string_view> cmdLines;
-    std::unordered_map<StringId, std::string_view> rspContents;
-
-    auto cmdDataView = std::string_view(cmdData);
-    while(!cmdDataView.empty())
-    {
-        std::string_view line;
-        std::tie(line, cmdDataView) = str::split(cmdDataView, '\n');
-        auto [file, tmp] = str::split(line, 0);
-        auto [cmdLine, rspContent] = str::split(tmp, 0);
-        cmdLines[file] = cmdLine;
-        rspContents[file] = rspContent;
-    }
-    std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
-
-    pendingCommands.reserve(pendingCommands.size() + commands.size());
-    for(auto& command : commands)
-    {
-        std::filesystem::path cwd = command.workingDirectory;
-        if(cwd.empty())
-        {
-            cwd = ".";
-        }
-        std::string cwdStr = cwd.string();
-
-        std::vector<StringId> inputStrs;
-        inputStrs.reserve(command.inputs.size());
-        for(auto& path : command.inputs)
-        {
-            inputStrs.push_back(path.string());
-        }
-
-        bool dirty = false;
-
-        std::vector<StringId> outputStrs;
-        outputStrs.reserve(command.outputs.size());
-        for(auto& path : command.outputs)
-        {
-            auto str = path.string();
-            auto strId = StringId(str);
-            outputStrs.push_back(strId);
-            if(cmdLines[strId] != command.command || rspContents[strId] != command.rspContents)
-            {
-                // LOG std::cout << "\"" << cmdLines[strId] << "\" vs \"" << command.command << "\"\n";
-                dirty = true;
-            }
-            
-            cmdFile.write(str.c_str(), str.size()+1);
-            cmdFile.write(command.command.c_str(), command.command.size()+1);
-            cmdFile.write(command.rspContents.c_str(), command.rspContents.size());
-            cmdFile.write("\n", 1);
-        }
-
-        std::string depfileStr;
-        if(!command.depFile.empty())
-        {
-            depfileStr = command.depFile.string();
-        }
-
-        std::string rspfileStr;
-        if(!command.rspFile.empty())
-        {
-            rspfileStr = command.rspFile.string();
-        }
-
-        pendingCommands.push_back({
-            inputStrs,
-            outputStrs,
-            depfileStr,
-            "cd \"" + cwdStr + "\" && " + command.command,
-            command.description, // Safe to move?
-            rspfileStr,
-            command.rspContents, // Safe to move?
-            dirty
-        });
-    }
-}
-
-static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t maxConcurrentCommands, bool verbose)
-{
     size_t count = 0;
     size_t completed = 0;
     size_t firstPending = 0;
@@ -256,7 +141,7 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
     bool halt = false;
     std::mutex doneMutex;
     std::vector<PendingCommand*> doneCommands;
-    while((!halt && firstPending < commands.size()) || !runningCommands.empty())
+    while((!halt && firstPending < filteredCommands.size()) || !runningCommands.empty())
     {
         // TODO: Semaphore of some kind instead of semi-spin lock
         using namespace std::chrono_literals;
@@ -267,7 +152,7 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
             for(auto it = doneCommands.begin(); it != doneCommands.end(); )
             {
                 auto command = *it;
-                command->dirty = false;
+                commandCompleted[command->command] = true;
 
                 auto result = command->result.get();
                 auto output = str::trim(std::string_view(result.output));
@@ -292,6 +177,10 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                 {
                     runningCommands.erase(runIt);
                 }
+                else
+                {
+                    throw std::runtime_error("Internal error. (Completed command not found in running list.)");
+                }
 
                 std::cout << std::flush;
             }
@@ -303,20 +192,20 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
         }
 
         bool skipped = false;
-        for(size_t i = firstPending; i < commands.size(); ++i)
+        for(size_t i = firstPending; i < filteredCommands.size(); ++i)
         {
             if(runningCommands.size() >= maxConcurrentCommands)
             {
                 break;
             }
 
-            auto command = commands[i];
-            if(command->dirty && !command->result.valid())
+            auto& command = filteredCommands[i];
+            if(!commandCompleted[command.command] && !command.result.valid())
             {
                 bool ready = true;
-                for(auto dependency : command->dependencies)
+                for(auto dependency : dependencies[command.command])
                 {
-                    if(dependency->dirty)
+                    if(!commandCompleted[dependency])
                     {
                         ready = false;
                         break;
@@ -329,56 +218,57 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
                     continue;
                 }
 
-                std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << commands.size() << "] " << command->description << std::flush;
+                auto& commandDefinition = commandDefinitions[command.command];
+                std::cout << "\n["/*"\33[2K\r["*/ << (++count) << "/" << filteredCommands.size() << "] " << commandDefinition.description << std::flush;
                 if(verbose)
                 {
-                    std::cout << "\n" << command->commandString << "\n";
-                    if(!command->rspFile.empty())
+                    std::cout << "\n" << commandDefinition.command << "\n";
+                    if(!commandDefinition.rspFile.empty())
                     {
-                        std::cout << "rsp:\n" << command->rspContents << "\n";
+                        std::cout << "rsp:\n" << commandDefinition.rspContents << "\n";
                     }
                 }
 
-                command->result = std::async(std::launch::async, [command, &doneMutex, &doneCommands](){
-                    for(auto& output : command->outputs)
+                command.result = std::async(std::launch::async, [&command, &commandDefinition, &doneMutex, &doneCommands](){
+                    for(auto& output : commandDefinition.outputs)
                     {
-                        std::filesystem::path path(output.cstr());
+                        std::filesystem::path path(output);
                         if(path.has_parent_path())
                         {
                             std::filesystem::create_directories(path.parent_path());
                         }
                     }
 
-                    if(!command->rspFile.empty())
+                    if(!commandDefinition.rspFile.empty())
                     {
                         // TODO: Error handling
 #if _WIN32
-                        FILE* file = fopen(command->rspFile.c_str(), "wbN");
+                        FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbN");
 #else
-                        FILE* file = fopen(command->rspFile.c_str(), "wbe");
+                        FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbe");
 #endif
-                        fwrite(command->rspContents.data(), 1, command->rspContents.size(), file);
+                        fwrite(commandDefinition.rspContents.data(), 1, commandDefinition.rspContents.size(), file);
                         fclose(file);
                     }
 
-                    auto result = process::run(command->commandString + " 2>&1");
+                    auto result = process::run(commandDefinition.command + " 2>&1");
 
-                    if(!command->rspFile.empty())
+                    if(!commandDefinition.rspFile.empty())
                     {
                         std::error_code ec;
-                        std::filesystem::remove(command->rspFile, ec);
+                        std::filesystem::remove(commandDefinition.rspFile, ec);
                     }
                     
                     {
                         std::scoped_lock doneLock(doneMutex);
-                        doneCommands.push_back(command);
+                        doneCommands.push_back(&command);
                     }
                     return result;
                 });
-                runningCommands.push_back(command);
+                runningCommands.push_back(&command);
             }
 
-            if((!command->dirty || command->result.valid()) && !skipped)
+            if((commandCompleted[command.command] || command.result.valid()) && !skipped)
             {
                 firstPending = i+1;
             }
@@ -390,34 +280,19 @@ static size_t runCommands(const std::vector<PendingCommand*>& commands, size_t m
     return completed;
 }
 
-static std::vector<PendingCommand*> processCommands(Environment& env, std::vector<PendingCommand>& pendingCommands, std::vector<StringId> targets)
+static std::vector<PendingCommand> filterCommands(Environment& env, Database& database, const std::filesystem::path& dataDir, std::vector<StringId> targets)
 {
-    std::unordered_map<StringId, PendingCommand*> commandMap;
-    for(auto& command : pendingCommands)
-    {
-        for(auto& output : command.outputs)
-        {
-            output = std::filesystem::absolute(output.cstr()).lexically_normal().string();
-            commandMap[output] = &command;
-        }
+    bool allIncluded = targets.empty();
 
-        for(auto& input : command.inputs)
-        {
-            input = std::filesystem::absolute(input.cstr()).lexically_normal().string();
-        }
-    }
+    auto& commands = database.getCommands();
+    auto& dependencies = database.getDependencies();
 
-    for(auto& command : pendingCommands)
+    std::vector<PendingCommand> filteredCommands;
+    filteredCommands.reserve(commands.size());
+    for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
     {
-        command.dependencies.reserve(command.inputs.size());
-        for(auto& input : command.inputs)
-        {
-            auto it = commandMap.find(input);
-            if(it != commandMap.end())
-            {
-                command.dependencies.push_back(it->second);
-            }
-        }
+        filteredCommands.push_back({commandIndex});
+        filteredCommands.back().included = allIncluded;
     }
 
     struct ExpandedTarget
@@ -433,6 +308,7 @@ static std::vector<PendingCommand*> processCommands(Environment& env, std::vecto
     for(auto& target : targets)
     {
         bool done = false;
+#if TODO
         for(auto& project : env.projects)
         {
             if(project->name == target)
@@ -443,144 +319,154 @@ static std::vector<PendingCommand*> processCommands(Environment& env, std::vecto
                 break;
             }
         }
+#endif
         if(!done)
         {
             expandedTargets.push_back({target, (invocationPath / target.cstr()).lexically_normal().string()});
         }
     }
 
-    bool includeAll = expandedTargets.empty();
-    using It = decltype(pendingCommands.begin());
-    It next = pendingCommands.begin();
-    struct StackEntry
-    {
-        PendingCommand* command;
-        int depth;
-        bool included;
-    };
-    std::vector<StackEntry> stack;
-    stack.reserve(pendingCommands.size());
-    std::vector<PendingCommand*> outputCommands;
-    outputCommands.reserve(pendingCommands.size());
-    while(next != pendingCommands.end() || !stack.empty())
-    {
-        PendingCommand* command;
-        int depth = 0;
-        bool included = includeAll;
-        if(stack.empty())
+    std::vector<size_t> stack;
+    stack.reserve(commands.size());
+    auto markIncluded = [&filteredCommands, &stack, &dependencies](size_t includeIndex){
+        stack.push_back(includeIndex);
+        while(!stack.empty())
         {
-            command = &*next;
-            depth = command->depth;
-            included = includeAll || command->included;
-            ++next;
-            outputCommands.push_back(command);
-        }
-        else
-        {
-            command = stack.back().command;
-            depth = stack.back().depth;
-            included = command->included || stack.back().included;
+            auto commandIndex = stack.back();
             stack.pop_back();
+            
+            filteredCommands[commandIndex].included = true;
+            stack.insert(stack.end(), dependencies[commandIndex].begin(), dependencies[commandIndex].end());
         }
+    };
 
-        for(auto targetIt = expandedTargets.begin(); targetIt != expandedTargets.end(); ++targetIt)
+    for(auto target : expandedTargets)
+    {
+        bool found = false;
+        for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
         {
-            bool done = false;
-            for(auto& output : command->outputs)
+            for(auto& output : commands[commandIndex].outputs)
             {
-                if(targetIt->expanded == output)
+                if(target.expanded == StringId(output.string()))
                 {
-                    expandedTargets.erase(targetIt);
-                    included = true;
-                    done = true;
+                    markIncluded(commandIndex);
+                    found = true;
+                    break;
                 }
             }
-            if(done)
+            if(found)
             {
                 break;
             }
         }
-
-        command->included = included;
-        command->depth = depth;
-
-        for(auto& dependency : command->dependencies)
+        if(!found)
         {
-            if(dependency->depth < depth+1)
-            {
-                stack.push_back({dependency, depth+1, included});
-            }
+            throw std::runtime_error("The specified target could not be found:\n  " + std::string(target.target) + " (" + target.expanded.cstr() + ")");
         }
     }
-
-    if(!expandedTargets.empty())
-    {
-        std::vector<std::string> targetStrings;
-        targetStrings.reserve(targets.size());
-        for(auto& expandedTarget : expandedTargets)
-        {
-            targetStrings.push_back(std::string(expandedTarget.target) + " (" + expandedTarget.expanded.cstr() + ")");
-        }
-        throw std::runtime_error("The specified targets were not found:\n  " + str::join(targetStrings, "\n  "));
-    }
-
-    std::sort(outputCommands.begin(), outputCommands.end(), [](auto a, auto b) { return a->depth > b->depth; });
     
     TimeCache timeCache;
-    
-    for(auto command : outputCommands)
+
+    // TODO: Move this into the database
+    auto cmdFilePath = dataDir / "cmdlines.db";
+    auto cmdData = readFile(cmdFilePath);
+    std::unordered_map<StringId, std::string_view> cmdLines;
+    std::unordered_map<StringId, std::string_view> rspContents;
+
+    auto cmdDataView = std::string_view(cmdData);
+    while(!cmdDataView.empty())
     {
-        for(auto dependency : command->dependencies)
+        std::string_view line;
+        std::tie(line, cmdDataView) = str::split(cmdDataView, '\n');
+        auto [file, tmp] = str::split(line, 0);
+        auto [cmdLine, rspContent] = str::split(tmp, 0);
+        cmdLines[file] = cmdLine;
+        rspContents[file] = rspContent;
+    }
+
+    bool commandLinesChanged = false;
+    for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
+    {
+        // TODO: More descriptive names for the different concepts
+        const auto& command = commands[commandIndex];
+        const auto& commandDependencies = dependencies[commandIndex];
+        auto& filteredCommand = filteredCommands[commandIndex];
+
+        for(auto& path : command.outputs)
         {
-            if(dependency->dirty)
+            auto str = path.string();
+            auto strId = StringId(str);
+            if(cmdLines[strId] != command.command || rspContents[strId] != command.rspContents)
             {
-                command->dirty = true;
+#if LOG_DIRTY_REASON
+                std::cout << str << "\n";
+                std::cout << "\"" << cmdLines[strId] << "\" vs \"" << command.command << "\"\n";
+#endif
+                filteredCommand.dirty = true;
+                commandLinesChanged = true;
+            }
+        }
+        if(filteredCommand.dirty) continue;
+
+        for(auto dependency : dependencies[commandIndex])
+        {
+            if(filteredCommands[dependency].dirty)
+            {
+                filteredCommand.dirty = true;
                 break;
             }
         }
-        if(command->dirty) continue;
+        if(filteredCommand.dirty) continue;
 
         std::filesystem::file_time_type outputTime;
         outputTime = outputTime.max();
         std::error_code ec;
-        for(auto& output : command->outputs)
+        for(auto& output : command.outputs)
         {
-            outputTime = std::min(outputTime, timeCache.get(output, ec));
+            outputTime = std::min(outputTime, timeCache.get(StringId(output.string()), ec));
             if(ec)
             {
-                // LOG std::cout << "dirty: " << output << " did not exist.\n";
-                command->dirty = true;
+#if LOG_DIRTY_REASON
+                std::cout << "dirty: " << output << " did not exist.\n";
+#endif
+                filteredCommand.dirty = true;
                 break;
             }
         }
-        if(command->dirty) continue;
+        if(filteredCommand.dirty) continue;
 
-        for(auto& input : command->inputs)
+        for(auto& input : command.inputs)
         {
-            auto inputTime = timeCache.get(input, ec);
+            auto inputTime = timeCache.get(StringId(input.string()), ec);
             if(ec || inputTime > outputTime)
             {
                 if(ec)
                 {
-                    // LOG std::cout << "dirty: " << input << " did not exist.\n";
+#if LOG_DIRTY_REASON
+                    std::cout << "dirty: " << input << " did not exist.\n";
+#endif
                 }
                 else
                 {
-                    // LOG std::cout << "dirty: " << input << " was newer than output.\n";
+#if LOG_DIRTY_REASON
+                    std::cout << "dirty: " << input << " was newer than output.\n";
+#endif
                 }
-                command->dirty = true;
+                filteredCommand.dirty = true;
                 break;
             }
         }
-        if(command->dirty) continue;
+        if(filteredCommand.dirty) continue;
 
-        if(!command->depFile.empty())
+        if(!command.depFile.empty())
         {
-            auto data = readFile(command->depFile.cstr());
+            auto data = readFile(command.depFile);
             if(data.empty())
             {
-                // LOG std::cout << "dirty: \"" << command->depFile << "\" did not exist.\n";
-                command->dirty = true;
+#if LOG_DIRTY_REASON
+                std::cout << "dirty: \"" << command.depFile << "\" did not exist.\n";
+#endif
+                filteredCommand.dirty = true;
             }
             else
             {
@@ -590,28 +476,51 @@ static std::vector<PendingCommand*> processCommands(Environment& env, std::vecto
                     auto inputTime = timeCache.get(path, ec);
                     if(ec)
                     {
-                        // LOG std::cout << "dirty: \"" << path << "\" did not exist.\n";
+#if LOG_DIRTY_REASON
+                        std::cout << "dirty: \"" << path << "\" did not exist.\n";
+#endif
                     }
                     else if(inputTime > outputTime)
                     {
-                        // LOG std::cout << "dirty: " << path << " was newer than output.\n";
+#if LOG_DIRTY_REASON
+                        std::cout << "dirty: " << path << " was newer than output.\n";
+#endif
                     }
                     return ec || inputTime > outputTime;
                 });
                 if(dirty)
                 {
-                    // LOG std::cout << "dirty: Dependency file \"" << command->depFile << "\" returned true.\n";
+#if LOG_DIRTY_REASON
+                    std::cout << "dirty: Dependency file \"" << command.depFile << "\" returned true.\n";
+#endif
                 }
-                command->dirty = dirty;
+                filteredCommand.dirty = dirty;
             }
         }
     }
 
-    outputCommands.erase(std::remove_if(outputCommands.begin(), outputCommands.end(), [](auto command) { 
-            return !command->dirty || !command->included; 
-        }), outputCommands.end());
+    if(commandLinesChanged)
+    {
+        std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
+        
+        for(auto& command : commands)
+        {
+            for(auto& path : command.outputs)
+            {
+                auto str = path.string();
+                cmdFile.write(str.c_str(), str.size()+1);
+                cmdFile.write(command.command.c_str(), command.command.size()+1);
+                cmdFile.write(command.rspContents.c_str(), command.rspContents.size());
+                cmdFile.write("\n", 1);
+            }
+        }
+    }
 
-    return outputCommands;
+    filteredCommands.erase(std::remove_if(filteredCommands.begin(), filteredCommands.end(), [](auto& command) { 
+            return !command.dirty || !command.included;
+        }), filteredCommands.end());
+
+    return filteredCommands;
 }
 
 DirectBuilder::DirectBuilder()
@@ -620,29 +529,21 @@ DirectBuilder::DirectBuilder()
 
 void DirectBuilder::emit(Environment& env)
 {
-    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+    BuildConfigurator configurator(env);
 
-    std::vector<PendingCommand> pendingCommands;
-    configure(env);
+    auto filteredCommands = filterCommands(env, configurator.database, configurator.dataPath, targets.values);
 
-    pendingCommands.clear();
-
-    for(auto& project : env.projects)
-    {
-        collectCommands(env, pendingCommands, *targetPath, *project);
-    }
-    auto commands = processCommands(env, pendingCommands, targets.values);
-
-    if(commands.empty())
+    if(filteredCommands.empty())
     {
         std::cout << "Nothing to do. (Everything up to date.)\n" << std::flush;
     }
     else
     {
+        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
         std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-        size_t completedCommands = runCommands(commands, maxConcurrentCommands, verbose.value);
+        size_t completedCommands = runCommands(filteredCommands, configurator.database, maxConcurrentCommands, verbose.value);
 
-        std::cout << "\n" << std::to_string(completedCommands) << " of " << commands.size() << " targets rebuilt.\n" << std::flush;
+        std::cout << "\n" << std::to_string(completedCommands) << " of " << filteredCommands.size() << " targets rebuilt.\n" << std::flush;
 
         // TODO: Error exit code on failure
     }
@@ -674,7 +575,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
 
     Project& project = env.createProject("Generator", Executable);
-    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions/*, feature::Optimize*/ };
+    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += env.buildHDir;
@@ -688,13 +589,17 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     }
     outputEnv.addConfigurationDependency(buildOutput);
 
-    std::vector<PendingCommand> pendingCommands;
-    collectCommands(env, pendingCommands, outputPath, project);
+    Database database;
+    {
+        std::vector<CommandEntry> commands;
+        BuildConfigurator::collectCommands(env, commands, outputPath, project);
+        database.setCommands(std::move(commands));
+    }
 
-    auto commands = processCommands(env, pendingCommands, {});
+    auto filteredCommands = filterCommands(env, database, outputPath, {});
 
     // If nothing is to be done...
-    if(commands.empty())
+    if(filteredCommands.empty())
     {
         // Exit with OK if we're in a subprocess
         if(isSubProcess)
@@ -714,10 +619,10 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
     try
     {
         size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
-        size_t completedCommands = runCommands(commands, maxConcurrentCommands, false);
+        size_t completedCommands = runCommands(filteredCommands, database, maxConcurrentCommands, false);
 
         // Exit with failure if it fails.
-        if(completedCommands < commands.size())
+        if(completedCommands < filteredCommands.size())
         {
             // (and return the running binary since we didn't get a working new one)
             std::filesystem::rename(tempPath, buildOutput);

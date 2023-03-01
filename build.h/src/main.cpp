@@ -42,51 +42,6 @@ void printUsage(cli::Context& cliContext)
     }
 }
 
-bool configIsDirty(Environment& env) {
-    bool dirty = false;
-
-    std::string argumentString;
-    for(auto& arg : env.cliContext.allArguments)
-    {
-        argumentString += " " + str::quote(arg);
-    }
-    if(env.writeFile(*targetPath / ".generator" / (std::string(env.cliContext.action) + ".cmdline"), argumentString))
-    {
-        return true;
-    }
-
-    auto depFilePath{*targetPath / ".generator" / (std::string(env.cliContext.action) + ".confdeps")};
-    auto depData = readFile(depFilePath);
-    if(depData.empty())
-    {
-        dirty = true;
-    }
-    else
-    {
-        std::error_code ec;
-        auto outputTime = std::filesystem::last_write_time(depFilePath, ec);
-        dirty = parseDependencyData(depData, [outputTime](std::string_view path){
-            std::error_code ec;
-            auto time = std::filesystem::last_write_time(path, ec);
-            return ec || time > outputTime;
-        });
-    }
-
-    return dirty;
-}
-
-void writeConfigDeps(Environment& env) {
-    std::stringstream depData;
-    depData << ":\n";
-    for(auto& dep : env.configurationDependencies)
-    {
-        depData << "  " << str::replaceAll(dep.string(), " ", "\\ ") << " \\\n";
-    }
-
-    auto depFilePath{*targetPath / ".generator" / (std::string(env.cliContext.action) + ".confdeps")};
-    writeFile(depFilePath, depData.str(), false);
-}
-
 int defaultMain(int argc, const char** argv) {
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -105,12 +60,6 @@ int defaultMain(int argc, const char** argv) {
         if(cliContext.action.empty())
         {
             throw cli::argument_error("No action specified.");
-        }
-
-        if(cliContext.action != StringId("build") && !configIsDirty(env))
-        {
-            std::cout << "Up to date." << std::endl;
-            return 0;
         }
 
         auto& availableEmitters = Emitters::list();        
@@ -146,8 +95,6 @@ int defaultMain(int argc, const char** argv) {
         std::filesystem::current_path(env.configurationFile.parent_path());
 
         chosenEmitter->emit(env);
-
-        writeConfigDeps(env);
     }
     catch(const cli::argument_error& e)
     {
@@ -161,16 +108,19 @@ int defaultMain(int argc, const char** argv) {
         return -1;
     }
 
+    // TODO: Add an option to output build time?
+#if 0
     auto endTime = std::chrono::high_resolution_clock::now();
     auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
     if(msDuration > 1000)
     {
-        std::cout << "build time: " << (msDuration*0.001f) << "s" << std::endl;
+        std::cout << "--- " << (msDuration*0.001f) << "s ---" << std::endl;
     }
     else
     {
-        std::cout << "build time: " << msDuration << "ms" << std::endl;
+        std::cout << "--- " << msDuration << "ms ---" << std::endl;
     }
+#endif
 
     return 0;
 }

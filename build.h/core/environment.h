@@ -29,4 +29,18 @@ struct Environment
     std::vector<std::unique_ptr<Project>> projects;
 };
 
+class ConfigDependencyChecker
+{
+public:
+    ConfigDependencyChecker(Environment& env, std::filesystem::path path);
+    ~ConfigDependencyChecker();
+
+    bool isDirty();
+
+private:
+    bool _dirty;
+    Environment& _env;
+    std::filesystem::path _path;
+};
+
 void configure(Environment& env);

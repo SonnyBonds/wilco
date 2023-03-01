@@ -6,6 +6,12 @@ CompileCommands::CompileCommands()
 
 void CompileCommands::emit(Environment& env)
 {
+    ConfigDependencyChecker configChecker(env, *targetPath / ".generator/configure");
+    if(!configChecker.isDirty())
+    {
+        return;
+    }
+
     std::filesystem::create_directories(*targetPath.value);
     std::ofstream stream(*targetPath.value / "compile_commands.json");
     

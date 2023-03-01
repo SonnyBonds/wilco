@@ -216,6 +216,12 @@ NinjaEmitter::NinjaEmitter()
 
 void NinjaEmitter::emit(Environment& env)
 {
+    ConfigDependencyChecker configChecker(env, *targetPath / ".generator/ninja");
+    if(!configChecker.isDirty())
+    {
+        return;
+    }
+
     std::vector<std::filesystem::path> outputs;
     auto profiles = cli::Profile::list();
 
