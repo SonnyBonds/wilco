@@ -8,6 +8,7 @@
 #include "fileutil.h"
 
 #include <sstream>
+#include <chrono>
 
 void printUsage(cli::Context& cliContext)
 {
@@ -87,6 +88,8 @@ void writeConfigDeps(Environment& env) {
 }
 
 int defaultMain(int argc, const char** argv) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     cli::Context cliContext(
         std::filesystem::current_path(),
         argc > 0 ? argv[0] : "", 
@@ -156,6 +159,17 @@ int defaultMain(int argc, const char** argv) {
     {
         std::cerr << "ERROR: " << e.what() << '\n';
         return -1;
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+    if(msDuration > 1000)
+    {
+        std::cout << "build time: " << (msDuration*0.001f) << "s" << std::endl;
+    }
+    else
+    {
+        std::cout << "build time: " << msDuration << "ms" << std::endl;
     }
 
     return 0;
