@@ -58,7 +58,7 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
     }
 }
 
-BuildConfigurator::BuildConfigurator(Environment& env)
+BuildConfigurator::BuildConfigurator(Environment& env, bool verboser)
     : _dependencyChecker(env, *targetPath / ".generator/configure")
 {
     dataPath = *targetPath;
@@ -81,7 +81,10 @@ BuildConfigurator::BuildConfigurator(Environment& env)
     }
     else
     {
-        //std::cout << "Configuration in " << (*targetPath).string() << " is up to date\n";
+        if(verboser)
+        {
+            std::cout << "Configuration in " << (*targetPath).string() << " is up to date\n";
+        }
     }
 }
 

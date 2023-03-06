@@ -12,7 +12,7 @@ class Project;
 class BuildConfigurator
 {
 public:
-    BuildConfigurator(Environment& env);
+    BuildConfigurator(Environment& env, bool verboser = false);
     ~BuildConfigurator();
 
     static void collectCommands(Environment& env, std::vector<CommandEntry>& collectedCommands, const std::filesystem::path& projectDir, Project& project);
