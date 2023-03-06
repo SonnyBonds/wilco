@@ -5,11 +5,11 @@
 #include "core/property.h"
 #include "core/stringid.h"
 
-#include "emitters/compilecommands.h"
-#include "emitters/direct.h"
-#include "emitters/msvc.h"
-#include "emitters/ninja.h"
-#include "emitters/query.h"
+#include "actions/compilecommands.h"
+#include "actions/direct.h"
+#include "actions/msvc.h"
+#include "actions/ninja.h"
+#include "actions/query.h"
 
 #include "modules/bundle.h"
 #include "modules/command.h"

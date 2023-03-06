@@ -1,4 +1,4 @@
-#include "emitters/direct.h"
+#include "actions/direct.h"
 #include "dependencyparser.h"
 #include "fileutil.h"
 #include "util/commands.h"
@@ -524,10 +524,10 @@ static std::vector<PendingCommand> filterCommands(Environment& env, Database& da
 }
 
 DirectBuilder::DirectBuilder()
-    : Emitter("build", "Build output binaries.")
+    : Action("build", "Build output binaries.")
 { }
 
-void DirectBuilder::emit(Environment& env)
+void DirectBuilder::run(Environment& env)
 {
     BuildConfigurator configurator(env);
 
@@ -682,4 +682,4 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
 }
 
 
-EmitterInstance<DirectBuilder> DirectBuilder::instance;
+ActionInstance<DirectBuilder> DirectBuilder::instance;

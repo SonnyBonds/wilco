@@ -3,19 +3,19 @@
 #include <string>
 #include <vector>
 
-#include "core/emitter.h"
+#include "core/action.h"
 
-class Query : public Emitter
+class Query : public Action
 {
 public:
-    static EmitterInstance<Query> instance;
+    static ActionInstance<Query> instance;
 
     cli::BoolArgument listProjects{arguments, "projects", "List all defined projects."};
     cli::BoolArgument listProfiles{arguments, "profiles", "List all defined profiles."};
 
     Query();
 
-    virtual void emit(Environment& env) override;
+    virtual void run(Environment& env) override;
     void emitProjects(Environment& env);
     void emitProfiles(Environment& env);
 };

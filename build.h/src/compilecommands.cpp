@@ -1,10 +1,10 @@
-#include "emitters/compilecommands.h"
+#include "actions/compilecommands.h"
 
 CompileCommands::CompileCommands()
-    : Emitter("compilecommands", "Generate a compilecommands.json file.")
+    : Action("compilecommands", "Generate a compilecommands.json file.")
 { }
 
-void CompileCommands::emit(Environment& env)
+void CompileCommands::run(Environment& env)
 {
     ConfigDependencyChecker configChecker(env, *targetPath / ".generator/configure");
     if(!configChecker.isDirty())
@@ -79,4 +79,4 @@ void CompileCommands::emitCommands(Environment& env, std::ostream& stream, const
     }
 }
 
-EmitterInstance<CompileCommands> CompileCommands::instance;
+ActionInstance<CompileCommands> CompileCommands::instance;

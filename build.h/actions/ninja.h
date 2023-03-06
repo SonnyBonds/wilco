@@ -7,19 +7,19 @@
 #include <string>
 #include <vector>
 
-#include "core/emitter.h"
+#include "core/action.h"
 #include "core/project.h"
 #include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"
 
-class NinjaEmitter : public Emitter
+class NinjaEmitter : public Action
 {
 public:
-    static EmitterInstance<NinjaEmitter> instance;
+    static ActionInstance<NinjaEmitter> instance;
 
     NinjaEmitter();
 
-    virtual void emit(Environment& env) override;
+    virtual void run(Environment& env) override;
 };

@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/emitter.h"
+#include "core/action.h"
 #include "core/project.h"
 #include "core/stringid.h"
 #include "modules/command.h"
@@ -24,7 +24,7 @@
 
 struct PendingCommand;
 
-class DirectBuilder : public Emitter
+class DirectBuilder : public Action
 {
 private:
     struct TargetArgument : public cli::Argument
@@ -44,7 +44,7 @@ private:
     };
 
 public:
-    static EmitterInstance<DirectBuilder> instance;
+    static ActionInstance<DirectBuilder> instance;
 
     ProfileArgument profile{arguments};
     cli::BoolArgument verbose{arguments, "verbose", "Display full command line of commands as they are executed."};
@@ -54,5 +54,5 @@ public:
 
     static void buildSelf(cli::Context cliContext, Environment& outputEnv);
 
-    virtual void emit(Environment& env) override;
+    virtual void run(Environment& env) override;
 };

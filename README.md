@@ -15,7 +15,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 With build.h the C++ build environment itself is the only requirement for build configuration. build.h can either perform a build itself or generate build files for a build system like Ninja or Visual Studio.
 
-Build configuration is created by code rather than declarative data. Build.h acts more as a framework for easily generating project dependency graphs and emitting them to an actual builder. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
+Build configuration is created by code rather than declarative data. Build.h acts more as a framework for easily generating project dependency graphs and emitting them to an actual builder or build file generator. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
 
 # Concepts
 ## Project
@@ -29,13 +29,13 @@ A *Project* is the main entity of a build configuration. It consists of a name, 
 * *output.dir* - The target directory to output binaries to.
 * ...etc
 
-It is possible to add custom properies to projects, but they have very little inherent meaning apart from letting an *Emitter* do something useful with them. It can however sometimes be useful as metadata in the project generation itself, or possibly by custom emitters.
+It is possible to add custom properies to projects, but they have very little inherent meaning apart from letting an *Action* do something useful with them. It can however sometimes be useful as metadata in the project generation itself, or possibly by custom actions.
 
-## Emitters
-An *Emitter* takes the project structure constructed by the generator and emits the build files needed to actually build the projects. Examples of existing emitters are:
-* *Build* builder, which builds the project without further ado.
-* *Ninja* emitter, which emits Ninja files to use for building.
-* *CompileCommands* emitter, which emits a compile_commands.json file that can be used as metadata by applications like VS Code.
+## Actions
+An *Action* takes the project structure constructed by the generator and does something useful with it, e.g. building output binaries or generating build files for an IDE or other build system. Examples of existing actions are:
+* *Build* action, which builds the project without further ado.
+* *Ninja* action, which generates Ninja files to use for building.
+* *CompileCommands* action, which emits a compile_commands.json file that can be used as metadata by applications like VS Code.
 
 ## Profiles
 A profile is a set of configuration arguments, defining common combinations of options.
@@ -128,5 +128,5 @@ This is so far mostly a proof of concept and many real life requirements for it 
 * Build environment discovery done by the bootstrapper works for simple environments, but can probably fairly easily be extended to be much more versatile.
 * Names of different concepts are a bit all over the place and may need some renaming.
 * Calling the configuration source/executable "build" yields a bit confusing command lines.
-* More emitters.
+* More actions.
 * More common utilities.

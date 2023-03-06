@@ -2,7 +2,7 @@
 #include "core/environment.h"
 #include "modules/toolchain.h"
 #include "util/commands.h"
-#include "emitters/direct.h"
+#include "actions/direct.h"
 
 void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEntry>& collectedCommands, const std::filesystem::path& projectDir, Project& project)
 {

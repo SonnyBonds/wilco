@@ -1,7 +1,7 @@
 #include "core/environment.h"
 #include "core/os.h"
 #include "core/stringid.h"
-#include "emitters/direct.h"
+#include "actions/direct.h"
 #include "util/commands.h"
 #include "util/cli.h"
 #include "dependencyparser.h"
@@ -15,10 +15,10 @@ void printUsage(cli::Context& cliContext)
     std::cout << "Usage: " + cliContext.invocation + " [action] [options]\n\n";
 
     std::cout << "\nAvailable actions:\n";
-    for(auto emitter : Emitters::list())
+    for(auto action : Actions::list())
     {
-        std::cout << "\n" << emitter->name << ": " << emitter->description << "\n";
-        for(auto argument : emitter->arguments)
+        std::cout << "\n" << action->name << ": " << action->description << "\n";
+        for(auto argument : action->arguments)
         {
             std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
         }
@@ -62,19 +62,19 @@ int defaultMain(int argc, const char** argv) {
             throw cli::argument_error("No action specified.");
         }
 
-        auto& availableEmitters = Emitters::list();        
+        auto& availableActions = Actions::list();        
 
-        Emitter* chosenEmitter = nullptr;
-        for(auto emitter : availableEmitters)
+        Action* chosenAction = nullptr;
+        for(auto action : availableActions)
         {
-            if(emitter->name == cliContext.action)
+            if(action->name == cliContext.action)
             {
-                chosenEmitter = emitter;
+                chosenAction = action;
                 break;
             }
         }
 
-        if(!chosenEmitter)
+        if(!chosenAction)
         {
             throw cli::argument_error("Unknown action \"" + std::string(cliContext.action) + "\"");
         }
@@ -84,7 +84,7 @@ int defaultMain(int argc, const char** argv) {
         // relevant paths should probably be made available so things can use
         // them explicitly
         std::filesystem::current_path(cliContext.startPath);
-        cliContext.extractArguments(chosenEmitter->arguments);
+        cliContext.extractArguments(chosenAction->arguments);
         cliContext.extractArguments(cli::Argument::globalList());
 
         for(auto& argument : cliContext.unusedArguments)
@@ -94,7 +94,7 @@ int defaultMain(int argc, const char** argv) {
 
         std::filesystem::current_path(env.configurationFile.parent_path());
 
-        chosenEmitter->emit(env);
+        chosenAction->run(env);
     }
     catch(const cli::argument_error& e)
     {

@@ -1,4 +1,4 @@
-#include "emitters/ninja.h"
+#include "actions/ninja.h"
 #include "util/process.h"
 
 struct NinjaWriter
@@ -207,14 +207,14 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
     return ninjaName;
 }
 
-EmitterInstance<NinjaEmitter> NinjaEmitter::instance;
+ActionInstance<NinjaEmitter> NinjaEmitter::instance;
 
 NinjaEmitter::NinjaEmitter()
-    : Emitter("ninja", "Generate ninja build files.")
+    : Action("ninja", "Generate ninja build files.")
 {
 }
 
-void NinjaEmitter::emit(Environment& env)
+void NinjaEmitter::run(Environment& env)
 {
     ConfigDependencyChecker configChecker(env, *targetPath / ".generator/ninja");
     if(!configChecker.isDirty())

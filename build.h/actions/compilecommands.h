@@ -11,7 +11,7 @@
 
 #include "core/stringid.h"
 #include "core/environment.h"
-#include "core/emitter.h"
+#include "core/action.h"
 #include "core/project.h"
 #include "core/stringid.h"
 #include "modules/command.h"
@@ -20,14 +20,14 @@
 #include "util/process.h"
 #include "util/string.h"
 
-class CompileCommands : public Emitter
+class CompileCommands : public Action
 {
 public:
-    static EmitterInstance<CompileCommands> instance;
+    static ActionInstance<CompileCommands> instance;
 
     CompileCommands();
 
-    virtual void emit(Environment& env) override;
+    virtual void run(Environment& env) override;
 
 private:
     static void emitCommands(Environment& env, std::ostream& stream, const std::filesystem::path& root, Project& project, bool& first);

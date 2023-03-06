@@ -1,4 +1,4 @@
-#include "emitters/msvc.h"
+#include "actions/msvc.h"
 #include "toolchains/cl.h"
 #include "util/commands.h"
 #include "util/process.h"
@@ -118,10 +118,10 @@ struct SimpleXmlWriter
     }
 };
 
-EmitterInstance<MsvcEmitter> MsvcEmitter::instance;
+ActionInstance<MsvcEmitter> MsvcEmitter::instance;
 
 MsvcEmitter::MsvcEmitter()
-    : Emitter("msvc", "Generate Msvc project files.")
+    : Action("msvc", "Generate Msvc project files.")
 {
 }
 
@@ -619,7 +619,7 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     return vcprojName;
 }
 
-void MsvcEmitter::emit(Environment& env)
+void MsvcEmitter::run(Environment& env)
 {
     ConfigDependencyChecker configChecker(env, *targetPath / ".generator/msvc");
     if(!configChecker.isDirty())

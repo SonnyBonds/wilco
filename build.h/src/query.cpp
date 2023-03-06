@@ -1,12 +1,12 @@
-#include "emitters/query.h"
+#include "actions/query.h"
 
 Query::Query()
-    : Emitter("query", "Retrieve information about the build configuration.")
+    : Action("query", "Retrieve information about the build configuration.")
 {
     arguments.erase(std::remove(arguments.begin(), arguments.end(), &targetPath), arguments.end());
 }
 
-void Query::emit(Environment& env)
+void Query::run(Environment& env)
 {
     if(!listProjects && !listProfiles)
     {
@@ -41,4 +41,4 @@ void Query::emitProfiles(Environment& env)
     }
 }
 
-EmitterInstance<Query> Query::instance;
+ActionInstance<Query> Query::instance;

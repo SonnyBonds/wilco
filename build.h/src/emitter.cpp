@@ -1,25 +1,25 @@
-#include "core/emitter.h"
+#include "core/action.h"
 #include "util/commands.h"
 
 cli::PathArgument targetPath{"build-path", "Target path for build files.", "buildfiles"};
 
-static std::vector<Emitter*>& getEmitters()
+static std::vector<Action*>& getActions()
 {
-    static std::vector<Emitter*> emitters;
-    return emitters;
+    static std::vector<Action*> actions;
+    return actions;
 }
 
-void Emitters::install(Emitter* emitter)
+void Actions::install(Action* action)
 {
-    getEmitters().push_back(emitter);
+    getActions().push_back(action);
 }
 
-const std::vector<Emitter*>& Emitters::list()
+const std::vector<Action*>& Actions::list()
 {
-    return getEmitters();
+    return getActions();
 }
 
-Emitter::Emitter(StringId name, std::string description)
+Action::Action(StringId name, std::string description)
     : name(name)
     , description(std::move(description))
 {

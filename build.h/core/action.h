@@ -10,37 +10,37 @@
 
 extern cli::PathArgument targetPath;
 
-struct Emitter;
+struct Action;
 
-struct Emitters
+struct Actions
 {
-    static void install(Emitter* emitter);
-    static const std::vector<Emitter*>& list();
+    static void install(Action* action);
+    static const std::vector<Action*>& list();
 };
 
 template<typename T>
-struct EmitterInstance
+struct ActionInstance
 {
-    EmitterInstance()
+    ActionInstance()
     {
         static T instance;
-        Emitters::install(&instance);
+        Actions::install(&instance);
     }
 };
 
-struct Emitter
+struct Action
 {
     const StringId name;
     const std::string description;
     std::vector<cli::Argument*> arguments;
     std::vector<std::string> generatorCliArguments;
 
-    Emitter(StringId name, std::string description);
+    Action(StringId name, std::string description);
 
-    Emitter(const Emitter& other) = delete;
-    Emitter& operator=(const Emitter& other) = delete;
+    Action(const Action& other) = delete;
+    Action& operator=(const Action& other) = delete;
 
-    virtual void emit(Environment& env) = 0;
+    virtual void run(Environment& env) = 0;
 
 protected:
 };

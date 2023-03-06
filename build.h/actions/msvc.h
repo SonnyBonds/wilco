@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "core/emitter.h"
+#include "core/action.h"
 #include "core/project.h"
 #include "core/stringid.h"
 #include "modules/command.h"
@@ -15,12 +15,12 @@
 #include "toolchains/detected.h"
 #include "util/string.h"
 
-class MsvcEmitter : public Emitter
+class MsvcEmitter : public Action
 {
 public:
-    static EmitterInstance<MsvcEmitter> instance;
+    static ActionInstance<MsvcEmitter> instance;
 
     MsvcEmitter();
 
-    virtual void emit(Environment& env) override;
+    virtual void run(Environment& env) override;
 };
