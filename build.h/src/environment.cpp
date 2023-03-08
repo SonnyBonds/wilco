@@ -1,15 +1,11 @@
 #include "core/environment.h"
 #include "util/process.h"
 #include "fileutil.h"
-#include "dependencyparser.h"
-#include <sstream>
-#include <fstream>
+
+std::set<std::filesystem::path> Environment::configurationDependencies;
 
 Environment::Environment(cli::Context& cliContext)
-    : configurationFile(process::findCurrentModulePath().replace_extension(".cpp")) // Wish this was a bit more robust but __BASE_FILE__ isn't available everywhere...
-    , startupDir(std::filesystem::current_path())
-    , buildHDir(std::filesystem::absolute(__FILE__).parent_path().parent_path())
-    , cliContext(cliContext)
+    : cliContext(cliContext)
 {
 }
 
@@ -78,72 +74,12 @@ std::vector<std::filesystem::path> Environment::listFiles(const std::filesystem:
 
 void Environment::addConfigurationDependency(std::filesystem::path path)
 {
-    configurationDependencies.insert(path);    
+    configurationDependencies.insert(path);
 }
 
 Project& Environment::createProject(std::string name, ProjectType type)
 {
     projects.emplace_back(new Project(std::move(name), type));
     return *projects.back();
-}
-
-ConfigDependencyChecker::ConfigDependencyChecker(Environment& env, std::filesystem::path path)
-    : _env(env), _path(path)
-{
-    _dirty = false;
-
-    std::string argumentString;
-    bool first = true;
-    for(auto& arg : env.cliContext.allArguments)
-    {
-        if(first)
-        {
-            first = false;
-            // Skip the "action" argument
-            continue;
-        }
-        argumentString += " " + str::quote(arg);
-    }
-    if(_env.writeFile(_path.string() + ".cmdline", argumentString))
-    {
-        _dirty = true;
-        return;
-    }
-
-    auto depFilePath{_path.string() + ".confdeps"};
-    auto depData = readFile(depFilePath);
-    if(depData.empty())
-    {
-        _dirty = true;
-        return;
-    }
-    else
-    {
-        std::error_code ec;
-        auto outputTime = std::filesystem::last_write_time(depFilePath, ec);
-        _dirty = parseDependencyData(depData, [outputTime](std::string_view path){
-            std::error_code ec;
-            auto time = std::filesystem::last_write_time(path, ec);
-            return ec || time > outputTime;
-        });
-    }
-}
-
-ConfigDependencyChecker::~ConfigDependencyChecker()
-{
-    std::stringstream depData;
-    depData << ":\n";
-    for(auto& dep : _env.configurationDependencies)
-    {
-        depData << "  " << str::replaceAll(dep.string(), " ", "\\ ") << " \\\n";
-    }
-
-    auto depFilePath{_path.string() + ".confdeps"};
-    writeFile(depFilePath, depData.str(), false);
-}
-
-bool ConfigDependencyChecker::isDirty()
-{
-    return _dirty;    
 }
 

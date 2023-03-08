@@ -57,13 +57,17 @@ void Configure::ProfileArgument::extract(std::vector<std::string>& inputValues)
     }
 }
 
+void Configure::ProfileArgument::reset()
+{
+}
+
 Configure::Configure()
     : Action("configure", "Configure build")
 { }
 
-void Configure::run(Environment &env)
+void Configure::run(cli::Context context)
 {
-    BuildConfigurator configurator(env, true);
+    BuildConfigurator configurator(context, false);
 }
 
 ActionInstance<Configure> Configure::instance;

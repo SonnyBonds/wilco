@@ -4,6 +4,7 @@
 #include "util/process.h"
 #include "util/uuid.h"
 #include "fileutil.h"
+#include "buildconfigurator.h"
 #include <sstream>
 
 static uuid::uuid projectNamespaceUuid(0x8a168540, 0x2d194237, 0x99da3cc8, 0xae8b0d4e);
@@ -196,7 +197,7 @@ struct ProjectMatrixEntry
 
 }
 
-static std::string emitProject(Environment& env, std::ostream& solutionStream, const std::filesystem::path& projectDir, const ProjectMatrixEntry& projectEntry)
+static std::string emitProject(std::ostream& solutionStream, const std::filesystem::path& projectDir, const ProjectMatrixEntry& projectEntry)
 {
     std::cout << "Emitting '" << projectEntry.name << "'\n";
 
@@ -619,13 +620,14 @@ static std::string emitProject(Environment& env, std::ostream& solutionStream, c
     return vcprojName;
 }
 
-void MsvcEmitter::run(Environment& env)
+void MsvcEmitter::run(cli::Context cliContext)
 {
-    ConfigDependencyChecker configChecker(env, *targetPath / ".generator/msvc");
-    if(!configChecker.isDirty())
+    if(!BuildConfigurator::checkDependencies(cliContext, *targetPath / ".generator/msvc"))
     {
         return;
     }
+
+    cliContext.extractArguments(arguments);
 
     struct ProfileEntry
     {
@@ -640,7 +642,11 @@ void MsvcEmitter::run(Environment& env)
     std::vector<ProfileEntry> profiles;
     for(auto& profile : cli::Profile::list())
     {
-        configure(env);
+        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
+        confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
+        cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
+
+        Environment env = BuildConfigurator::configureEnvironment(configureContext);
 
         auto& generatorProject = env.createProject("_generator", Command);
         {
@@ -653,7 +659,7 @@ void MsvcEmitter::run(Environment& env)
             // TODO: Should probably have a different output here. Possibly the solution file, 
             // but it would get removed when doing a "clean" and I'm not sure that's a good idea.
             auto outputPath = *targetPath / ".generator/msvc.cmdline";
-            generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { env.configurationFile }, { outputPath }, env.startupDir, {}, "Check build config." };
+            generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { cliContext.configurationFile }, { outputPath }, cliContext.startPath, {}, "Check build config." };
         }
 
         for(auto& project : env.projects)
@@ -672,9 +678,6 @@ void MsvcEmitter::run(Environment& env)
         }
 
         profiles.push_back({profile.name, std::move(env.projects)});
-
-        // Construct a new one since we've moved the old away
-        env.projects = std::vector<std::unique_ptr<Project>>();
     }
     
     std::vector<ProjectMatrixEntry> projectMatrix;
@@ -727,7 +730,7 @@ void MsvcEmitter::run(Environment& env)
             folders.insert(folder);
         }
 
-        emitProject(env, solutionStream, *targetPath, projectEntry);
+        emitProject(solutionStream, *targetPath, projectEntry);
     }
 
     for (auto& folder : folders)
@@ -778,4 +781,6 @@ void MsvcEmitter::run(Environment& env)
     solutionStream << "EndGlobal\n";
 
     writeFile(*targetPath / (solutionName + ".sln"), solutionStream.str());
+
+    BuildConfigurator::writeDependencies(*targetPath / ".generator/msvc");
 }

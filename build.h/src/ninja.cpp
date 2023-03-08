@@ -1,5 +1,6 @@
 #include "actions/ninja.h"
 #include "util/process.h"
+#include "buildconfigurator.h"
 
 struct NinjaWriter
 {
@@ -214,13 +215,14 @@ NinjaEmitter::NinjaEmitter()
 {
 }
 
-void NinjaEmitter::run(Environment& env)
+void NinjaEmitter::run(cli::Context cliContext)
 {
-    ConfigDependencyChecker configChecker(env, *targetPath / ".generator/ninja");
-    if(!configChecker.isDirty())
+    if(!BuildConfigurator::checkDependencies(cliContext, *targetPath / ".generator/ninja"))
     {
         return;
     }
+
+    cliContext.extractArguments(arguments);
 
     std::vector<std::filesystem::path> outputs;
     auto profiles = cli::Profile::list();
@@ -232,7 +234,11 @@ void NinjaEmitter::run(Environment& env)
 
     for(auto& profile : profiles)
     {
-        configure(env);
+        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
+        confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
+        cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
+
+        Environment env = BuildConfigurator::configureEnvironment(configureContext);
 
         std::filesystem::path profileTargetPath = *targetPath;
         if(!profile.name.empty())
@@ -264,11 +270,13 @@ void NinjaEmitter::run(Environment& env)
             argumentString += " " + str::quote(arg);
         }
         
-        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, env.startupDir, {}, "Check build config." };
+        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, cliContext.startPath, {}, "Check build config." };
         auto outputName = emitProject(env, profileTargetPath, generatorProject, "", true);
         ninja.subninja(outputName);
 
         env.projects.clear();
     }
+
+    BuildConfigurator::writeDependencies(*targetPath / ".generator/ninja");
 }
 

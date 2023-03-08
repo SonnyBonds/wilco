@@ -15,7 +15,5 @@ public:
 
     Query();
 
-    virtual void run(Environment& env) override;
-    void emitProjects(Environment& env);
-    void emitProfiles(Environment& env);
+    virtual void run(cli::Context cliContext) override;
 };

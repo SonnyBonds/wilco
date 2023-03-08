@@ -13,8 +13,8 @@ public:
     void setCommands(std::vector<CommandEntry> commands);
 
     // TODO: Better data structure for this
-    const std::vector<std::vector<uint32_t>>& getDependencies();
-    const std::vector<CommandEntry>& getCommands();
+    const std::vector<std::vector<uint32_t>>& getDependencies() const;
+    const std::vector<CommandEntry>& getCommands() const;
 
 private:
     std::vector<CommandEntry> _commands;

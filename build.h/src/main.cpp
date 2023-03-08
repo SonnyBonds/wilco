@@ -51,11 +51,9 @@ int defaultMain(int argc, const char** argv) {
         std::vector<std::string>(argv+std::min(1, argc), argv+argc));
     try
     {
-        Environment env(cliContext);
+        DirectBuilder::buildSelf(cliContext);
 
-        DirectBuilder::buildSelf(cliContext, env);
-
-        std::filesystem::current_path(env.configurationFile.parent_path());
+        std::filesystem::current_path(cliContext.configurationFile.parent_path());
 
         if(cliContext.action.empty())
         {
@@ -79,22 +77,7 @@ int defaultMain(int argc, const char** argv) {
             throw cli::argument_error("Unknown action \"" + std::string(cliContext.action) + "\"");
         }
 
-        // We want path arguments to be relative the start path, but
-        // it's a bit messy to switch this back and forth. The various
-        // relevant paths should probably be made available so things can use
-        // them explicitly
-        std::filesystem::current_path(cliContext.startPath);
-        cliContext.extractArguments(chosenAction->arguments);
-        cliContext.extractArguments(cli::Argument::globalList());
-
-        for(auto& argument : cliContext.unusedArguments)
-        {
-            throw cli::argument_error("Argument \"" + argument + "\" was not recognized.");
-        }
-
-        std::filesystem::current_path(env.configurationFile.parent_path());
-
-        chosenAction->run(env);
+        chosenAction->run(cliContext);
     }
     catch(const cli::argument_error& e)
     {

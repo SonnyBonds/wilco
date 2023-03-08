@@ -33,6 +33,8 @@ private:
 
         virtual void extract(std::vector<std::string>& values) override;
 
+        virtual void reset() override;
+
         std::vector<StringId> values;
     };
 
@@ -44,7 +46,7 @@ public:
 
     DirectBuilder();
 
-    static void buildSelf(cli::Context cliContext, Environment& outputEnv);
+    static void buildSelf(cli::Context cliContext);
 
-    virtual void run(Environment& env) override;
+    virtual void run(cli::Context cliContext) override;
 };

@@ -55,6 +55,11 @@ void DirectBuilder::TargetArgument::extract(std::vector<std::string>& inputValue
     }
 }
 
+void DirectBuilder::TargetArgument::reset()
+{
+    values.clear();
+}
+
 struct PendingCommand
 {
     uint32_t command;
@@ -224,7 +229,7 @@ static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Databas
     return completed;
 }
 
-static std::vector<PendingCommand> filterCommands(Environment& env, Database& database, const std::filesystem::path& dataDir, std::vector<StringId> targets)
+static std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath, Database& database, const std::filesystem::path& dataPath, std::vector<StringId> targets)
 {
     bool allIncluded = targets.empty();
 
@@ -244,8 +249,6 @@ static std::vector<PendingCommand> filterCommands(Environment& env, Database& da
         StringId target;
         StringId expanded;
     };
-
-    std::filesystem::path invocationPath = env.startupDir;
 
     std::vector<ExpandedTarget> expandedTargets;
     expandedTargets.reserve(targets.size());
@@ -312,7 +315,7 @@ static std::vector<PendingCommand> filterCommands(Environment& env, Database& da
     TimeCache timeCache;
 
     // TODO: Move this into the database
-    auto cmdFilePath = dataDir / "cmdlines.db";
+    auto cmdFilePath = dataPath / "cmdlines.db";
     auto cmdData = readFile(cmdFilePath);
     std::unordered_map<StringId, std::string_view> cmdLines;
     std::unordered_map<StringId, std::string_view> rspContents;
@@ -471,11 +474,11 @@ DirectBuilder::DirectBuilder()
     : Action("build", "Build output binaries.")
 { }
 
-void DirectBuilder::run(Environment& env)
+void DirectBuilder::run(cli::Context cliContext)
 {
-    BuildConfigurator configurator(env);
+    BuildConfigurator configurator(cliContext);
 
-    auto filteredCommands = filterCommands(env, configurator.database, configurator.dataPath, targets.values);
+    auto filteredCommands = filterCommands(cliContext.startPath, configurator.database, configurator.dataPath, targets.values);
 
     if(filteredCommands.empty())
     {
@@ -493,7 +496,7 @@ void DirectBuilder::run(Environment& env)
     }
 }
 
-void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
+void DirectBuilder::buildSelf(cli::Context cliContext)
 {
     Environment env(cliContext);
 
@@ -515,23 +518,25 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
         ext = ".exe";
     }
 
-    auto tempPath = outputPath / std::filesystem::path(env.configurationFile).filename().replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
-    auto buildOutput = std::filesystem::path(env.configurationFile).replace_extension(ext);
+    auto tempPath = outputPath / std::filesystem::path(cliContext.configurationFile).filename().replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
+    auto buildOutput = std::filesystem::path(cliContext.configurationFile).replace_extension(ext);
+    
+    auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
 
     Project& project = env.createProject("Generator", Executable);
     project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
-    project.includePaths += env.buildHDir;
+    project.includePaths += buildHDir;
     project.output = buildOutput;
-    project.files += env.configurationFile;
-    project.files += env.listFiles(env.buildHDir / "src");
+    project.files += cliContext.configurationFile;
+    project.files += env.listFiles(buildHDir / "src");
 
     for(auto& file : project.files)
     {
-        outputEnv.addConfigurationDependency(file.path);
+        env.addConfigurationDependency(file.path);
     }
-    outputEnv.addConfigurationDependency(buildOutput);
+    env.addConfigurationDependency(buildOutput);
 
     Database database;
     {
@@ -540,7 +545,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
         database.setCommands(std::move(commands));
     }
 
-    auto filteredCommands = filterCommands(env, database, outputPath, {});
+    auto filteredCommands = filterCommands(cliContext.startPath, database, outputPath, {});
 
     // If nothing is to be done...
     if(filteredCommands.empty())
@@ -595,7 +600,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
         argumentString += " " + str::quote(arg);
     }
 
-    std::string restartCommandLine = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string());
+    std::string restartCommandLine = "cd " + str::quote(cliContext.startPath.string()) + " && " + str::quote((cliContext.configurationFile.parent_path() / buildOutput).string());
     restartCommandLine += argumentString;
     restartCommandLine += " --internal-restart";
 
@@ -618,7 +623,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext, Environment& outputEnv)
         iterations++;
     }
 
-    std::string buildCommandLine = "cd " + str::quote(env.startupDir.string()) + " && " + str::quote((env.configurationFile.parent_path() / buildOutput).string());
+    std::string buildCommandLine = "cd " + str::quote(cliContext.startPath.string()) + " && " + str::quote((cliContext.configurationFile.parent_path() / buildOutput).string());
     buildCommandLine += argumentString;
 
     auto result = process::run(buildCommandLine, true);

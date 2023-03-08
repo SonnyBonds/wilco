@@ -22,5 +22,5 @@ public:
 
     MsvcEmitter();
 
-    virtual void run(Environment& env) override;
+    virtual void run(cli::Context cliContext) override;
 };

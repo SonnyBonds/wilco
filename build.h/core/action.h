@@ -40,7 +40,7 @@ struct Action
     Action(const Action& other) = delete;
     Action& operator=(const Action& other) = delete;
 
-    virtual void run(Environment& env) = 0;
+    virtual void run(cli::Context cliContext) = 0;
 
 protected:
 };

@@ -175,6 +175,26 @@ inline std::pair<std::string, std::string> split(const std::string& str, char de
     }
 }
 
+inline std::vector<std::string> splitAll(const std::string& str, char delimiter)
+{
+    std::vector<std::string> result;
+
+    size_t startPos = 0;
+    while(startPos < str.size())
+    {
+        size_t endPos = str.find(delimiter, startPos);
+        if(endPos == std::string::npos)
+        {
+            result.push_back(str.substr(startPos));
+            break;
+        }
+        result.push_back(str.substr(startPos, endPos-startPos));
+        startPos = endPos + 1;
+    }
+
+    return result;
+}
+
 inline std::string quote(std::string str, char escapeChar = '\\', std::string_view escapedChars = "\"\\")
 {
     for(auto it = str.begin(); it != str.end(); ++it)

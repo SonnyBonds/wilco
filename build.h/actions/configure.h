@@ -10,6 +10,8 @@ private:
         ProfileArgument(std::vector<cli::Argument*>& argumentList);
 
         virtual void extract(std::vector<std::string>& values) override;
+
+        virtual void reset() override;
     };
 
 public:
@@ -19,5 +21,5 @@ public:
 
     Configure();
 
-    virtual void run(Environment& env);
+    virtual void run(cli::Context cliContext);
 };

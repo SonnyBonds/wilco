@@ -171,12 +171,12 @@ void Database::save(std::filesystem::path path)
     }
 }
 
-const std::vector<std::vector<uint32_t>>& Database::getDependencies()
+const std::vector<std::vector<uint32_t>>& Database::getDependencies() const
 {
     return _dependencies;
 }
 
-const std::vector<CommandEntry>& Database::getCommands()
+const std::vector<CommandEntry>& Database::getCommands() const
 {
     return _commands;
 }

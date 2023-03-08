@@ -5,7 +5,6 @@
 #include "core/property.h"
 #include "core/stringid.h"
 
-#include "actions/compilecommands.h"
 #include "actions/direct.h"
 #include "actions/msvc.h"
 #include "actions/ninja.h"

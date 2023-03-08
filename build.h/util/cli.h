@@ -9,6 +9,7 @@
 #include <utility>
 #include <variant>
 
+#include "util/process.h"
 #include "util/string.h"
 
 namespace cli
@@ -61,6 +62,8 @@ struct Argument
         return false;
     }
 
+    virtual void reset() = 0;
+
     std::string example;
     std::string description;
 
@@ -99,6 +102,11 @@ struct BoolArgument : public Argument
         return false;
     }
 
+    void reset() override
+    {
+        value = false;
+    }
+
     explicit operator bool() const { return value; }
 
     std::string name;
@@ -116,8 +124,9 @@ struct StringArgument : public Argument
         this->name = std::move(name);
         this->example = "--" + this->name + "=<value>";
         this->description = std::move(description);
+        this->defaultValue = defaultValue;
         
-        value = std::move(defaultValue);
+        value = defaultValue;
         if(value)
         {
             this->description += " [default:" + std::string(*value) + "]";
@@ -154,12 +163,19 @@ struct StringArgument : public Argument
         return true;        
     }
 
+    void reset() override
+    {
+        value = defaultValue;
+    }
+
+
     explicit operator bool() const { return value.has_value(); }
 
     StringId operator*() { return *value; }
 
     std::string name;
     std::optional<StringId> value;
+    std::optional<StringId> defaultValue;
 };
 
 struct PathArgument : public Argument
@@ -173,8 +189,9 @@ struct PathArgument : public Argument
         this->name = std::move(name);
         this->example = "--" + this->name + "=<value>";
         this->description = std::move(description);
+        this->defaultValue = defaultValue;
         
-        value = std::move(defaultValue);
+        value = defaultValue;
         if(value)
         {
             this->description += " [default:" + value->string() + "]";
@@ -212,12 +229,22 @@ struct PathArgument : public Argument
         return true;
     }
 
+    void reset() override
+    {
+        value = defaultValue;
+        if(value)
+        {
+            value = std::filesystem::absolute(*value);
+        }
+    }
+
     explicit operator bool() const { return value.has_value(); }
 
     std::filesystem::path& operator*() { return *value; }
 
     std::string name;
     std::optional<std::filesystem::path> value;
+    std::optional<std::filesystem::path> defaultValue;
 };
 
 
@@ -226,6 +253,7 @@ struct Context
     Context(std::filesystem::path startPath, std::string invocation, std::vector<std::string> arguments)
         : startPath(std::move(startPath))
         , invocation(std::move(invocation))
+        , configurationFile(process::findCurrentModulePath().replace_extension(".cpp")) // Wish this was a bit more robust but __BASE_FILE__ isn't available everywhere...
         , allArguments(std::move(arguments))
     {
         unusedArguments = allArguments;
@@ -236,15 +264,32 @@ struct Context
         }
     }
 
+    void requireAllArgumentsUsed()
+    {
+        for(auto& argument : unusedArguments)
+        {
+            throw cli::argument_error("Argument \"" + argument + "\" was not recognized.");
+        }
+    }
+
     void extractArguments(const std::vector<Argument*>& arguments)
     {
+        // We want path arguments to be relative the start path, but
+        // it's a bit messy to switch this back and forth. The various
+        // relevant paths should probably be made available so things can use
+        // them explicitly
+        auto originalPath = std::filesystem::current_path();
+        std::filesystem::current_path(startPath);
         for(auto argument : arguments)
         {
+            argument->reset();
             argument->extract(unusedArguments);
         }
+        std::filesystem::current_path(originalPath);
     }
     
     const std::filesystem::path startPath;
+    const std::filesystem::path configurationFile;
     const std::string invocation;
     const std::vector<std::string> allArguments;
     std::vector<std::string> unusedArguments;
