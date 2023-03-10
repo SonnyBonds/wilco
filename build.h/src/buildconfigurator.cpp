@@ -142,7 +142,6 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
 
         _updateDependencies = true;
         std::cout << "Done.\n";
-        std::filesystem::current_path(cliContext.startPath);
     }
     else
     {
