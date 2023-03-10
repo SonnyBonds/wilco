@@ -476,6 +476,8 @@ DirectBuilder::DirectBuilder()
 
 void DirectBuilder::run(cli::Context cliContext)
 {
+    cliContext.extractArguments(arguments);
+    
     BuildConfigurator configurator(cliContext);
 
     auto filteredCommands = filterCommands(cliContext.startPath, configurator.database, configurator.dataPath, targets.values);
