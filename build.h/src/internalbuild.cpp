@@ -178,40 +178,68 @@ static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Databas
                     }
                 }
 
-                command.result = std::async(std::launch::async, [&command, &commandDefinition, &doneMutex, &doneCommands](){
-                    for(auto& output : commandDefinition.outputs)
+                command.result = std::async(std::launch::async, [&command, &commandDefinition, &doneMutex, &doneCommands]() -> process::ProcessResult
+                {
+                    process::ProcessResult result = {1, "Unknown error."};
+                    try
                     {
-                        std::filesystem::path path(output);
-                        if(path.has_parent_path())
+                        for(auto& output : commandDefinition.outputs)
                         {
-                            std::filesystem::create_directories(path.parent_path());
+                            std::filesystem::path path(output);
+                            if(path.has_parent_path())
+                            {
+                                std::filesystem::create_directories(path.parent_path());
+                            }
+                        }
+
+                        if(!commandDefinition.rspFile.empty())
+                        {
+                            // TODO: Error handling
+    #if _WIN32
+                            FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbN");
+    #else
+                            FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbe");
+    #endif
+                            if(!file)
+                            {
+                                throw std::system_error(errno, std::generic_category(), "Failed to open rsp file \"" + commandDefinition.rspFile.string() + "\" for writing");
+                            }
+                            
+                            auto writeResult = fwrite(commandDefinition.rspContents.data(), 1, commandDefinition.rspContents.size(), file);
+                            if(writeResult < commandDefinition.rspContents.size())
+                            {
+                                throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + commandDefinition.rspFile.string() + "\"");
+                            }
+
+                            auto closeResult = fclose(file);
+                            if(closeResult != 0)
+                            {
+                                throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + commandDefinition.rspFile.string() + "\".");
+                            }
+                        }
+
+                        result = process::run(commandDefinition.command + " 2>&1");
+
+                        if(!commandDefinition.rspFile.empty())
+                        {
+                            std::error_code ec;
+                            std::filesystem::remove(commandDefinition.rspFile, ec);
                         }
                     }
-
-                    if(!commandDefinition.rspFile.empty())
+                    catch(const std::exception& e)
                     {
-                        // TODO: Error handling
-#if _WIN32
-                        FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbN");
-#else
-                        FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbe");
-#endif
-                        fwrite(commandDefinition.rspContents.data(), 1, commandDefinition.rspContents.size(), file);
-                        fclose(file);
+                        result = {1, e.what()};
                     }
-
-                    auto result = process::run(commandDefinition.command + " 2>&1");
-
-                    if(!commandDefinition.rspFile.empty())
+                    catch(...)
                     {
-                        std::error_code ec;
-                        std::filesystem::remove(commandDefinition.rspFile, ec);
+                        result = {1, "Unknown error."};
                     }
                     
                     {
                         std::scoped_lock doneLock(doneMutex);
                         doneCommands.push_back(&command);
                     }
+
                     return result;
                 });
                 runningCommands.push_back(&command);
