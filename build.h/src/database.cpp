@@ -272,12 +272,44 @@ void Database::setCommands(std::vector<CommandEntry> commands)
 
     std::sort(proxies.begin(), proxies.end(), [](const auto& a, const auto& b) { return a.depth > b.depth; });
 
+    std::vector<Id> idRemap;
+    idRemap.resize(commands.size());
+
     _commands.clear();
     _commands.reserve(commands.size());
     _dependencies.reserve(commands.size());
-    for(auto& proxy : proxies)
+    
     {
-        _commands.push_back(std::move(commands[proxy.commandId]));
-        _dependencies.push_back(std::move(proxy.dependencies));
+        Id id = 0;
+        for(auto& proxy : proxies)
+        {
+            idRemap[proxy.commandId] = id;
+            ++id;
+            _commands.push_back(std::move(commands[proxy.commandId]));
+            _dependencies.push_back(std::move(proxy.dependencies));
+        }
+    }
+
+    for(auto& commandDependencies : _dependencies)
+    {
+        for(auto& dependency : commandDependencies)
+        {
+            dependency = idRemap[dependency];
+        }
+    }
+
+    for(size_t index = 0; index < _dependencies.size(); ++index)
+    {
+        for(auto dep : _dependencies[index])
+        {
+            if(dep >= _commands.size())
+            {
+                throw std::runtime_error("Internal error - dependency index out of bounds.");
+            }
+            if(dep >= index)
+            {
+                throw std::runtime_error("Invalid command dependency:\n  \"" + _commands[index].description + "\"\n  depends on \n  \"" + _commands[dep].description + "\"\nEither there is a cyclic dependency, or an internal error in the dependency resolution.");
+            }
+        }
     }
 }
