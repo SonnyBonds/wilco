@@ -123,9 +123,15 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
     bool configDirty = checkDependencies(configureContext, *targetPath / ".generator/configure");
 
     _databasePath = dataPath / ".build_db";
-    if(configDirty || !database.load(_databasePath))
+    // TODO: Loading the file dependencies would be enough if the config is dirty anyway
+    if (!database.load(_databasePath))
     {
-        std::cout << "Reconfiguring " << (*targetPath).string() << "...\n";
+        configDirty = true;
+    }
+
+    if(configDirty)
+    {
+        std::cout << "Reconfiguring " << (*targetPath).string() << "..." << std::endl;
 
         Environment env = configureEnvironment(configureContext);
 

@@ -92,10 +92,13 @@ struct ListPropertyValue
     
     template<typename T>
     ListPropertyValue& operator +=(T other) {
+        // This whole thing is pretty sad, but we need to push the value into the list
+        // first even if it's a duplicate, because the duplicate tracker can only compare 
+        // items that are actually in the value list.
         _value.push_back(std::move(other));
         if(!_allowDuplicates)
         {
-            auto it = _duplicateTracker.insert(_value.size() - 1);
+            auto it = _duplicateTracker.insert((int)_value.size() - 1);
             if (!it.second)
             {
                 // If it already existed, we still update it because there are cases where items have the same main value/hash but still wants secondary values/options overwritten

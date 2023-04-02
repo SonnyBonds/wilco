@@ -54,7 +54,7 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, std::f
             { feature::Cpp17, " /std:c++17"},
             { feature::Cpp20, " /std:c++20"},
             { feature::Cpp23, " /std:c++23"},
-            { feature::Optimize, " /Ox"},
+            { feature::Optimize, " /O2"},
             { feature::OptimizeSize, " /Os"},
             { feature::DebugSymbols, " /Zi"},
             { feature::WarningsAsErrors, " /WX"},
@@ -297,7 +297,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             if(!msvcExt.pch.header.empty() && msvcExt.pch.source == input.path)
             {
                 command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.filename().string());
-                command.outputs = { pchOutput };
+                command.outputs.push_back(pchOutput);
             }
             else if(ignorePch.find(StringId(input.path.lexically_normal().string())) != ignorePch.end())
             {

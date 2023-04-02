@@ -39,12 +39,8 @@
 #include <stdint.h>
 #include "util/hash.h"
 
-typedef struct {
-	uint32_t lo, hi;
-	uint32_t a, b, c, d;
-	unsigned char buffer[64];
-	uint32_t block[16];
-} MD5_CTX;
+namespace hash::detail
+{
 
 /*
  * The basic MD5 functions.
@@ -293,31 +289,61 @@ static void MD5_Final(unsigned char *result, MD5_CTX *ctx)
 	memset(ctx, 0, sizeof(*ctx));
 }
 
+}
+
 namespace hash
 {
+	Md5::Md5()
+	{
+		MD5_Init(&_context);
+	}
+
+	void Md5::digest(const char* data, size_t size)
+	{
+		MD5_Update(&_context, data, size);
+	}
+
+    void Md5::digest(std::string_view input)
+	{
+		MD5_Update(&_context, input.data(), input.size());
+	}
+
+    std::array<unsigned char, 16> Md5::finalize()
+	{
+		std::array<unsigned char, 16> result;
+		MD5_Final(result.data(), &_context);
+		return result;
+	}
+
+	std::array<unsigned char, 16> md5(const char* data, size_t size)
+	{
+		Md5 hasher;
+		hasher.digest(data, size);
+		return hasher.finalize();
+	}
+
 	std::array<unsigned char, 16> md5(std::string_view input)
 	{
-		MD5_CTX ctx;
-		MD5_Init(&ctx);
-		MD5_Update(&ctx, input.data(), input.size());
-		
-		std::array<unsigned char, 16> result;
-		MD5_Final(result.data(), &ctx);
+		Md5 hasher;
+		hasher.digest(input.data(), input.size());
+		return hasher.finalize();
+	}
+
+	std::string md5String(std::array<unsigned char, 16> hash)
+	{
+		static const char* symbols = "0123456789abcdef";
+		std::string result;
+		result.reserve(hash.size()*2);
+		for(size_t i=0; i<hash.size(); ++i)
+		{
+			result.push_back(symbols[(hash[i] >> 4) & 0xf]);
+			result.push_back(symbols[hash[i] & 0xf]);
+		}
 		return result;
 	}
 
 	std::string md5String(std::string_view input)
 	{
-		auto md5Data = md5(input);
-
-		static const char* symbols = "0123456789abcdef";
-		std::string result;
-		result.reserve(md5Data.size()*2);
-		for(size_t i=0; i<md5Data.size(); ++i)
-		{
-			result.push_back(symbols[(md5Data[i] >> 4) & 0xf]);
-			result.push_back(symbols[md5Data[i] & 0xf]);
-		}
-		return result;
+		return md5String(md5(input));
 	}
 }

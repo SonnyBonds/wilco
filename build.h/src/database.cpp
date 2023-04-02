@@ -6,16 +6,19 @@
 #include <string_view>
 #include <iostream>
 
+#include "util/hash.h"
+#include "dependencyparser.h"
+
 #pragma pack(1)
 struct Header
 {
     uint32_t magic = 'bldh';
-    uint32_t version = 1;
+    uint32_t version = 2;
     char str[8] = {'b', 'u', 'i', 'l', 'd', 'd', 'b', '\0'};
 };
 #pragma pack()
 
-static void writeStr(std::ostream& stream, const std::string& str)
+static void writeString(std::ostream& stream, const std::string& str)
 {
     stream.write(str.c_str(), str.size()+1);
 };
@@ -23,6 +26,35 @@ static void writeStr(std::ostream& stream, const std::string& str)
 static void writeUInt(std::ostream& stream, uint32_t value)
 {
     stream.write(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
+}
+
+static void writeSignature(std::ostream& stream, Signature signature)
+{
+    stream.write(reinterpret_cast<const char*>(&signature), sizeof(Signature));
+}
+
+static void writeStringList(std::ostream& stream, const std::vector<std::string>& list)
+{
+    writeUInt(stream, list.size());
+    for(auto& item : list)
+    {
+        writeString(stream, item);
+    }
+}
+
+static void writePathList(std::ostream& stream, const std::vector<std::filesystem::path>& list)
+{
+    writeUInt(stream, list.size());
+    for(auto& item : list)
+    {
+        writeString(stream, item.string());
+    }
+}
+
+static void writeIdList(std::ostream& stream, const std::vector<CommandId>& list)
+{
+    writeUInt(stream, list.size());
+    stream.write(reinterpret_cast<const char*>(list.data()), sizeof(CommandId) * list.size());
 }
 
 static void readData(std::string_view data, size_t& pos, char* output, size_t amount)
@@ -56,6 +88,62 @@ static uint32_t readUInt(std::string_view data, size_t& pos)
     return result;
 }
 
+static Signature readSignature(std::string_view data, size_t& pos)
+{
+    Signature result = {};
+    readData(data, pos, reinterpret_cast<char*>(&result), sizeof(result));
+    return result;
+}
+
+static std::vector<std::string> readStringList(std::string_view data, size_t& pos)
+{
+    uint32_t size = readUInt(data, pos);
+    std::vector<std::string> result;
+    result.reserve(size);
+    for(uint32_t i=0; i < size; ++i)
+    {
+        result.push_back(std::string(readString(data, pos)));
+    }
+    return result;
+}
+
+static std::vector<std::filesystem::path> readPathList(std::string_view data, size_t& pos)
+{
+    uint32_t size = readUInt(data, pos);
+    std::vector<std::filesystem::path> result;
+    result.reserve(size);
+    for(uint32_t i=0; i < size; ++i)
+    {
+        result.push_back(std::filesystem::path(readString(data, pos)));
+    }
+    return result;
+}
+
+static std::vector<CommandId> readIdList(std::string_view data, size_t& pos)
+{
+    uint32_t size = readUInt(data, pos);
+    std::vector<CommandId> result;
+    result.resize(size);
+    readData(data, pos, (char*)result.data(), sizeof(CommandId) * size);
+    return result;
+}
+
+Signature computeCommandSignature(const CommandEntry& command)
+{
+    hash::Md5 hasher;
+    hasher.digest(command.command);
+    hasher.digest(command.rspContents);
+    for(auto& input : command.inputs)
+    {
+        hasher.digest(reinterpret_cast<const char*>(input.native().data()), input.native().size() * sizeof(std::filesystem::path::string_type::value_type));
+    }
+    for(auto& output : command.outputs)
+    {
+        hasher.digest(reinterpret_cast<const char*>(output.native().data()), output.native().size() * sizeof(std::filesystem::path::string_type::value_type));
+    }
+    return hasher.finalize();
+}
+
 Database::Database()
 { }
 
@@ -64,7 +152,9 @@ bool Database::load(std::filesystem::path path)
     try
     {
         _commands.clear();
-        _dependencies.clear();
+        _commandDependencies.clear();
+        _commandSignatures.clear();
+        _fileDependencies.clear();
 
         // TODO: Memory map the inputs?
         _commandData = readFile(path.string() + ".commands");
@@ -85,8 +175,9 @@ bool Database::load(std::filesystem::path path)
 
         uint32_t numCommands = readUInt(_commandData, pos);
         _commands.reserve(numCommands);
-        std::vector<std::vector<uint32_t>> dependencies;
-        _dependencies.resize(numCommands);
+        _commandDependencies.resize(numCommands);
+        _commandSignatures.reserve(numCommands);
+        _depFileSignatures.reserve(numCommands);
         for(uint32_t index = 0; index < numCommands; ++index)
         {
             CommandEntry command;
@@ -97,27 +188,17 @@ bool Database::load(std::filesystem::path path)
             command.depFile = readString(_commandData, pos);
             command.rspFile = readString(_commandData, pos);
             command.rspContents = readString(_commandData, pos);
-            auto numInputs = readUInt(_commandData, pos);
-            command.inputs.reserve(numInputs);
-            for(uint32_t input = 0; input < numInputs; ++input)
-            {
-                command.inputs.push_back(readString(_commandData, pos));
-            }
-            auto numOutputs = readUInt(_commandData, pos);
-            command.outputs.reserve(numOutputs);
-            for(uint32_t output = 0; output < numOutputs; ++output)
-            {
-                command.outputs.push_back(readString(_commandData, pos));
-            }
+            command.inputs = readPathList(_commandData, pos);
+            command.outputs = readPathList(_commandData, pos);
+            _commandSignatures.push_back(readSignature(_commandData, pos));
+            _depFileSignatures.push_back(readSignature(_commandData, pos));
 
-            auto numDependencies = readUInt(_commandData, pos);
-            if(numDependencies > numCommands)
+            _commandDependencies[index] = readIdList(_commandData, pos);
+            if(_commandDependencies[index].size() > numCommands)
             {
                 throw std::runtime_error("Dependency count out of bounds.");
             }
-            _dependencies[index].resize(numDependencies);
-            readData(_commandData, pos, reinterpret_cast<char*>(_dependencies[index].data()), sizeof(uint32_t) * numDependencies);
-            for(auto dep : _dependencies[index])
+            for(auto dep : _commandDependencies[index])
             {
                 if(dep >= index)
                 {
@@ -133,52 +214,123 @@ bool Database::load(std::filesystem::path path)
         std::cout << "Existing build database incompatible or corrupted. (" << e.what() << ")" << std::endl;
         _commandData.clear();
         _commands.clear();
-        _dependencies.clear();
+        _commandDependencies.clear();
+        _fileDependencies.clear();
         return false;
     }
 
+    try
+    {
+        // TODO: Memory map the inputs?
+        _dependencyData = readFile(path.string() + ".deps");
+        if(_dependencyData.size() == 0)
+        {
+            rebuildFileDependencies();
+            return true;
+        }
+
+        size_t pos = 0;
+        Header loadedHeader = {};
+        readData(_dependencyData, pos, (char*)(&loadedHeader), sizeof(Header));
+        Header referenceHeader = {};
+        if(memcmp(&referenceHeader, &loadedHeader, sizeof(Header)) != 0)
+        {
+            throw std::runtime_error("Mismatching header.");
+        }
+
+        uint32_t numDependencies = readUInt(_dependencyData, pos);
+        _fileDependencies.reserve(numDependencies);
+        for(uint32_t index = 0; index < numDependencies; ++index)
+        {
+            FileDependencies fileDeps;
+            // TODO: Reference into the loaded command data instead of copying
+            fileDeps.path = readString(_dependencyData, pos);
+            fileDeps.dependentCommands = readIdList(_dependencyData, pos);
+            for(auto dep : fileDeps.dependentCommands)
+            {
+                if(dep >= _commands.size())
+                {
+                    throw std::runtime_error("Dependency index out of bounds.");
+                }
+            }
+            readData(_dependencyData, pos, (char*)fileDeps.signature.data(), sizeof(fileDeps.signature));
+            _fileDependencies.push_back(std::move(fileDeps));
+        }
+    }
+    catch(const std::exception& e)
+    {
+        std::cout << "Existing dependency database incompatible or corrupted. (" << e.what() << ")" << std::endl;
+        rebuildFileDependencies();
+    }
+    
     return true;
 }
 
 void Database::save(std::filesystem::path path)
 {
-    std::ofstream commandFile(path.string() + ".commands", std::ios::binary);
-    Header header;
-    commandFile.write(reinterpret_cast<const char*>(&header), sizeof(Header));
-
-    writeUInt(commandFile, _commands.size());
-    for(uint32_t index = 0; index < _commands.size(); ++index)
     {
-        auto& command = _commands[index];
-        writeStr(commandFile, command.command);
-        writeStr(commandFile, command.description);
-        writeStr(commandFile, command.workingDirectory.string());
-        writeStr(commandFile, command.depFile.string());
-        writeStr(commandFile, command.rspFile.string());
-        writeStr(commandFile, command.rspContents);
-        writeUInt(commandFile, command.inputs.size());
-        for(auto& input : command.inputs)
+        std::ofstream commandFile(path.string() + ".commands", std::ios::binary);
+        Header header;
+        commandFile.write(reinterpret_cast<const char*>(&header), sizeof(Header));
+
+        writeUInt(commandFile, _commands.size());
+        for(uint32_t index = 0; index < _commands.size(); ++index)
         {
-            writeStr(commandFile, input.string());
+            auto& command = _commands[index];
+            writeString(commandFile, command.command);
+            writeString(commandFile, command.description);
+            writeString(commandFile, command.workingDirectory.string());
+            writeString(commandFile, command.depFile.string());
+            writeString(commandFile, command.rspFile.string());
+            writeString(commandFile, command.rspContents);
+            writePathList(commandFile, command.inputs);
+            writePathList(commandFile, command.outputs);
+            writeSignature(commandFile, _commandSignatures[index]);
+            writeSignature(commandFile, _depFileSignatures[index]);
+            writeIdList(commandFile, _commandDependencies[index]);
         }
-        writeUInt(commandFile, command.outputs.size());
-        for(auto& output : command.outputs)
+    }
+
+    {
+        std::ofstream dependencyFile(path.string() + ".deps", std::ios::binary);
+        Header header;
+        dependencyFile.write(reinterpret_cast<const char*>(&header), sizeof(Header));
+
+        writeUInt(dependencyFile, _fileDependencies.size());
+        for(uint32_t index = 0; index < _fileDependencies.size(); ++index)
         {
-            writeStr(commandFile, output.string());
+            auto& fileDeps = _fileDependencies[index];
+            writeString(dependencyFile, fileDeps.path.string());
+            writeIdList(dependencyFile, fileDeps.dependentCommands);
+            //std::cout << fileDeps.path << " - " << hash::md5String(fileDeps.signature) << std::endl;
+            dependencyFile.write((const char*)fileDeps.signature.data(), sizeof(fileDeps.signature));
         }
-        writeUInt(commandFile, _dependencies[index].size());
-        commandFile.write(reinterpret_cast<const char*>(_dependencies[index].data()), sizeof(uint32_t) * _dependencies[index].size());
     }
 }
 
-const std::vector<std::vector<uint32_t>>& Database::getDependencies() const
+const std::vector<CommandDependencies>& Database::getCommandDependencies() const
 {
-    return _dependencies;
+    return _commandDependencies;
+}
+
+std::vector<FileDependencies>& Database::getFileDependencies()
+{
+    return _fileDependencies;
 }
 
 const std::vector<CommandEntry>& Database::getCommands() const
 {
     return _commands;
+}
+
+std::vector<Signature>& Database::getCommandSignatures()
+{
+    return _commandSignatures;
+}
+
+std::vector<Signature>& Database::getDepFileSignatures()
+{
+    return _depFileSignatures;
 }
 
 void Database::setCommands(std::vector<CommandEntry> commands)
@@ -188,23 +340,22 @@ void Database::setCommands(std::vector<CommandEntry> commands)
         throw std::runtime_error(std::to_string(commands.size()) + " is a lot of commands.");
     }
 
-    using Id = uint32_t;
-    struct CommandProxy
+    struct CommandSortProxy
     {
-        Id commandId;
+        CommandId id;
         bool dirty = false;
         bool included = false;
         int depth = 0;
-        std::vector<uint32_t> dependencies;
+        CommandDependencies dependencies;
     };
 
-    std::vector<CommandProxy> proxies;
-    proxies.reserve(commands.size());
+    std::vector<CommandSortProxy> sortProxies;
+    sortProxies.reserve(commands.size());
 
-    std::unordered_map<std::filesystem::path, Id> commandMap;
+    std::unordered_map<std::filesystem::path, CommandId> commandMap;
     for(uint32_t i=0; i<commands.size(); ++i)
     {
-        proxies.push_back({i});
+        sortProxies.push_back({i});
         auto& command = commands[i];
 
         for(auto& output : command.outputs)
@@ -219,88 +370,86 @@ void Database::setCommands(std::vector<CommandEntry> commands)
         }
     }
 
-    for(auto& proxy : proxies)
+    for(auto& sortProxy : sortProxies)
     {
-        auto& command = commands[proxy.commandId];
-        proxy.dependencies.reserve(command.inputs.size());
+        auto& command = commands[sortProxy.id];
+        sortProxy.dependencies.reserve(command.inputs.size());
         for(auto& input : command.inputs)
         {
             auto it = commandMap.find(input);
             if(it != commandMap.end())
             {
-                proxy.dependencies.push_back(it->second);
+                sortProxy.dependencies.push_back(it->second);
             }
         }
     }
 
-    using It = decltype(proxies.begin());
-    It next = proxies.begin();
+    using It = decltype(sortProxies.begin());
+    It next = sortProxies.begin();
     struct StackEntry
     {
-        Id commandId;
+        CommandId id;
         int depth;
     };
     std::vector<StackEntry> stack;
-    stack.reserve(proxies.size());
-    while(next != proxies.end() || !stack.empty())
+    stack.reserve(sortProxies.size());
+    while(next != sortProxies.end() || !stack.empty())
     {
-        Id commandId;
+        CommandId id;
         int depth = 0;
         if(stack.empty())
         {
-            commandId = next->commandId;
-            depth = proxies[commandId].depth;
+            id = next->id;
+            depth = sortProxies[id].depth;
             ++next;
         }
         else
         {
-            commandId = stack.back().commandId;
+            id = stack.back().id;
             depth = stack.back().depth;
             stack.pop_back();
         }
 
-        proxies[commandId].depth = depth;
+        sortProxies[id].depth = depth;
 
-        for(auto dependency : proxies[commandId].dependencies)
+        for(auto dependency : sortProxies[id].dependencies)
         {
-            if(proxies[dependency].depth < depth+1)
+            if(sortProxies[dependency].depth < depth+1)
             {
                 stack.push_back({dependency, depth+1});
             }
         }
     }
 
-    std::sort(proxies.begin(), proxies.end(), [](const auto& a, const auto& b) { return a.depth > b.depth; });
+    std::sort(sortProxies.begin(), sortProxies.end(), [](const auto& a, const auto& b) { return a.depth > b.depth; });
 
-    std::vector<Id> idRemap;
+    std::vector<CommandId> idRemap;
     idRemap.resize(commands.size());
 
     _commands.clear();
+    _depFileSignatures.clear();
     _commands.reserve(commands.size());
-    _dependencies.reserve(commands.size());
+    _commandDependencies.clear();
+    _commandDependencies.reserve(commands.size());
     
     {
-        Id id = 0;
-        for(auto& proxy : proxies)
+        CommandId id = 0;
+        for(auto& sortProxy : sortProxies)
         {
-            idRemap[proxy.commandId] = id;
+            idRemap[sortProxy.id] = id;
             ++id;
-            _commands.push_back(std::move(commands[proxy.commandId]));
-            _dependencies.push_back(std::move(proxy.dependencies));
+            _commands.push_back(std::move(commands[sortProxy.id]));
+            _commandDependencies.push_back(std::move(sortProxy.dependencies));
+            for(auto& dependency : _commandDependencies.back())
+            {
+                dependency = idRemap[dependency];
+            }
         }
     }
 
-    for(auto& commandDependencies : _dependencies)
+    for(size_t index = 0; index < _commandDependencies.size(); ++index)
     {
-        for(auto& dependency : commandDependencies)
-        {
-            dependency = idRemap[dependency];
-        }
-    }
-
-    for(size_t index = 0; index < _dependencies.size(); ++index)
-    {
-        for(auto dep : _dependencies[index])
+        for(auto dep : _commandDependencies[index])
         {
             if(dep >= _commands.size())
             {
@@ -312,4 +461,89 @@ void Database::setCommands(std::vector<CommandEntry> commands)
             }
         }
     }
+
+    // Transfer any previous recorded signatures, and add blank entries for non-existing (because they should be rebuilt) 
+    std::unordered_set<Signature> existingSignatures;
+    existingSignatures.insert(_commandSignatures.begin(), _commandSignatures.end());
+    _commandSignatures.clear();
+    _commandSignatures.reserve(_commands.size());
+    for(auto& command : _commands)
+    {
+        auto signature = computeCommandSignature(command);
+        if(existingSignatures.find(signature) != existingSignatures.end())
+        {
+            _commandSignatures.push_back(signature);
+        }
+        else
+        {
+            _commandSignatures.push_back(Signature{});
+        }
+    }
+
+    rebuildFileDependencies();
 }
+
+void Database::rebuildFileDependencies()
+{
+    std::unordered_set<std::filesystem::path> outputs;
+    for(size_t index = 0; index < _commands.size(); ++index)
+    {
+        for(auto& output : _commands[index].outputs)
+        {
+            outputs.insert(output);
+        }
+    }
+
+    _depFileSignatures.clear();
+    _depFileSignatures.reserve(_commands.size());
+
+    std::unordered_map<std::filesystem::path, std::vector<uint32_t>> depCommands;
+    for(size_t index = 0; index < _commands.size(); ++index)
+    {
+        auto& command = _commands[index];
+        Signature depFileSignature = {};
+        if(!command.depFile.empty())
+        {
+            auto depContents = readFile(command.depFile);
+            depFileSignature = hash::md5(depContents);
+            // parseDependencyData is destructive, so do the hash first
+            parseDependencyData(depContents, [&outputs, &depCommands, index](std::string_view path) {
+                if(outputs.find(path) == outputs.end())
+                {
+                    depCommands[path].push_back(index);
+                }
+                return false;
+            });
+        }
+        _depFileSignatures.push_back(depFileSignature);
+
+        for(auto& input : command.inputs)
+        {
+            if(outputs.find(input) == outputs.end())
+            {
+                depCommands[input].push_back(index);
+            }
+        }
+    }
+
+    std::unordered_map<std::filesystem::path, Signature> existingSignatures;
+    for(auto& dep : _fileDependencies)
+    {
+        existingSignatures[dep.path] = dep.signature;
+    }
+
+    _fileDependencies.clear();
+    _fileDependencies.reserve(depCommands.size());
+
+    for(auto& entry : depCommands)
+    {
+        Signature signature = {};
+        auto it = existingSignatures.find(entry.first);
+        if(it != existingSignatures.end())
+        {
+            signature = it->second;
+        }
+        _fileDependencies.push_back({std::move(entry.first), std::move(entry.second), signature});
+    }
+}
+

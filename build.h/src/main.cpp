@@ -4,6 +4,7 @@
 #include "actions/direct.h"
 #include "util/commands.h"
 #include "util/cli.h"
+#include "util/interrupt.h"
 #include "dependencyparser.h"
 #include "fileutil.h"
 
@@ -45,13 +46,19 @@ void printUsage(cli::Context& cliContext)
 int defaultMain(int argc, const char** argv) {
     auto startTime = std::chrono::high_resolution_clock::now();
 
+    interrupt::installHandlers();
+    
     cli::Context cliContext(
         std::filesystem::current_path(),
         argc > 0 ? argv[0] : "", 
         std::vector<std::string>(argv+std::min(1, argc), argv+argc));
     try
     {
-        DirectBuilder::buildSelf(cliContext);
+        cliContext.extractArguments(cli::Argument::globalList());
+        if(!noRebuild)
+        {
+            DirectBuilder::buildSelf(cliContext);
+        }
 
         std::filesystem::current_path(cliContext.configurationFile.parent_path());
 

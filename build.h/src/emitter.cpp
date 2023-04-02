@@ -2,6 +2,7 @@
 #include "util/commands.h"
 
 cli::PathArgument targetPath{"build-path", "Target path for build files.", "buildfiles"};
+cli::BoolArgument noRebuild{"no-self-update", "Don't rebuild the builder itself even if it has changed."};
 
 static std::vector<Action*>& getActions()
 {

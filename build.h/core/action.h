@@ -9,6 +9,7 @@
 #include "util/cli.h"
 
 extern cli::PathArgument targetPath;
+extern cli::BoolArgument noRebuild;
 
 struct Action;
 

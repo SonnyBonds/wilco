@@ -68,7 +68,7 @@ inline ProcessResult run(std::string command, bool echoOutput = false)
         try
         {
             std::array<char, 2048> buffer;
-            while(auto bytesRead = read(pipeFd, buffer.data(), buffer.size()))
+            while(auto bytesRead = read(pipeFd, buffer.data(), (unsigned int)buffer.size()))
             {
                 if(bytesRead < 0)
                 {

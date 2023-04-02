@@ -3,13 +3,16 @@
 template<typename Callable>
 bool parseDependencyData(std::string& data, Callable callable)
 {
+    auto isspace = [](char c){
+        return c == ' ' || c == '\n' || c == '\r';
+    };
     size_t pos = 0;
     auto skipWhitespace = [&](){
         while(pos < data.size())
         {
             char c = data[pos];
-            if(!std::isspace(data[pos]) && 
-                (data[pos] != '\\' || pos == data.size()-1 || !std::isspace(data[pos+1])))
+            if(!isspace(data[pos]) && 
+                (data[pos] != '\\' || pos == data.size()-1 || !isspace(data[pos+1])))
             {
                 break;
             }
@@ -107,6 +110,19 @@ bool parseDependencyData(std::string& data, Callable callable)
             return true;
         }
         return false;
+    };
+
+    auto readString = [&]()
+    {
+        size_t endPos = data.find((char)0, pos);
+        if(endPos == std::string::npos)
+        {
+            throw std::runtime_error("Failed to find end of string in input.");
+        }
+
+        std::string_view result = data.substr(pos, endPos-pos);
+        pos = endPos + 1;
+        return result;
     };
 
     skipWhitespace();

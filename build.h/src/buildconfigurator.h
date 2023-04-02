@@ -7,7 +7,7 @@
 #include <optional>
 #include <filesystem>
 
-class Project;
+struct Project;
 
 class BuildConfigurator
 {

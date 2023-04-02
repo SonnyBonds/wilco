@@ -6,30 +6,65 @@
 #include "buildconfigurator.h"
 #include <iostream>
 #include <chrono>
+#include "util/hash.h"
+#include "util/interrupt.h"
 
 static const int EXIT_RESTART = 10;
 
 #define LOG_DIRTY_REASON 0
 
-struct TimeCache
+struct PendingCommand
 {
-public:
-    std::filesystem::file_time_type get(StringId path, std::error_code& errorCode)
-    {
-        auto it = _times.find(path);
-        if(it != _times.end())
-        {
-            errorCode = it->second.second;
-            return it->second.first;
-        }
-
-        auto time = std::filesystem::last_write_time(path.cstr(), errorCode);
-        _times.insert(std::make_pair(path, std::make_pair(time, errorCode)));
-        return time;
-    }
-private:        
-    std::unordered_map<StringId, std::pair<std::filesystem::file_time_type, std::error_code>> _times;
+    uint32_t command;
+    bool included = false;
+    std::future<process::ProcessResult> result;
 };
+
+static Signature computeFileSignature(std::filesystem::path path)
+{
+    std::error_code ec;
+    auto time = std::filesystem::last_write_time(path, ec);
+    if(ec)
+    {
+        return {};
+    }
+
+    return hash::md5(reinterpret_cast<const char*>(&time), sizeof(time));    
+}
+
+static void checkInputSignatures(std::vector<Signature>& commandSignatures, std::vector<PendingCommand>& filteredCommands, std::vector<FileDependencies>::iterator begin, std::vector<FileDependencies>::iterator end)
+{
+    Signature emptySignature;
+    for(auto fileDependency = begin; fileDependency != end; ++fileDependency)
+    {
+        std::error_code ec;
+        bool dirty = false;
+        auto signature = computeFileSignature(fileDependency->path);
+        if(signature == emptySignature)
+        {
+    #if LOG_DIRTY_REASON
+            std::cout << "dirty: " << fileDependency->path << " did not exist.\n";
+    #endif
+            dirty = true;
+            fileDependency->signature = {};
+        }
+        else if(signature != fileDependency->signature)
+        {
+    #if LOG_DIRTY_REASON
+            std::cout << "dirty: " << fileDependency->path << " has been touched. (" << hash::md5String(fileDependency->signature) << " vs " << hash::md5String(signature) << ")\n";
+    #endif
+            dirty = true;
+            fileDependency->signature = signature;
+        }
+        if(dirty)
+        {
+            for(auto& commandId : fileDependency->dependentCommands)
+            {
+                commandSignatures[commandId] = {};
+            }
+        }
+    }
+}
 
 DirectBuilder::TargetArgument::TargetArgument(std::vector<cli::Argument*>& argumentList)
 {
@@ -60,18 +95,14 @@ void DirectBuilder::TargetArgument::reset()
     values.clear();
 }
 
-struct PendingCommand
-{
-    uint32_t command;
-    bool dirty = false;
-    bool included = false;
-    std::future<process::ProcessResult> result;
-};
-
 static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& database, size_t maxConcurrentCommands, bool verbose)
 {
     const auto& commandDefinitions = database.getCommands();
-    const auto& dependencies = database.getDependencies();
+    const auto& dependencies = database.getCommandDependencies();
+    auto& commandSignatures = database.getCommandSignatures();
+    auto& depFileSignatures = database.getDepFileSignatures();
+
+    std::unordered_map<std::filesystem::path, Signature> newInputSignatures;
 
     // Not loving this, but since the dependency map are indices
     // in the unfiltered commands we need the full list
@@ -82,6 +113,8 @@ static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Databas
     {
         commandCompleted[filteredCommands.command] = false;
     }
+
+    bool rebuildDependencies = false;
 
     size_t count = 0;
     size_t completed = 0;
@@ -105,17 +138,48 @@ static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Databas
 
                 auto result = command->result.get();
                 auto output = str::trim(std::string_view(result.output));
-                if(!output.empty())
+
+                // TODO: Make something better than a hardcoded filter for CL filename echo
+                if(!commandDefinitions[command->command].inputs.empty() && output == commandDefinitions[command->command].inputs.front().filename())
+                {
+                    output = {};
+                }
+
+                if(!output.empty() && !interrupt::isInterrupted())
                 {
                     std::cout << "\n" << output;
                 }
-                if(result.exitCode != 0)
+
+                if(interrupt::isInterrupted())
+                {
+                    halt = true;
+                }
+                else if(result.exitCode != 0)
                 {
                     std::cout << "\nCommand returned " + std::to_string(result.exitCode);
                     halt = true;
                 }
                 else
                 {
+                    if(!commandDefinitions[command->command].depFile.empty())
+                    {
+                        auto depFileContents = readFile(commandDefinitions[command->command].depFile);
+                        auto depFileSignature = hash::md5(depFileContents);
+                        if(depFileSignature != depFileSignatures[command->command])
+                        {
+                            parseDependencyData(depFileContents, [&newInputSignatures](std::string_view path){
+                                auto it = newInputSignatures.find(path);
+                                if(it == newInputSignatures.end())
+                                {
+                                    newInputSignatures[path] = computeFileSignature(path);
+                                }
+
+                                return false;
+                            });
+                            rebuildDependencies = true;
+                        }
+                    }
+                    commandSignatures[command->command] = computeCommandSignature(commandDefinitions[command->command]);
                     ++completed;
                 }
                 it = doneCommands.erase(it);
@@ -254,6 +318,31 @@ static size_t runCommands(std::vector<PendingCommand>& filteredCommands, Databas
 
     std::cout << "\n" << std::flush;
 
+    if(rebuildDependencies)
+    {
+        if(!newInputSignatures.empty())
+        {
+            auto& fileDependencies = database.getFileDependencies();
+            for(auto& input : fileDependencies)
+            {
+                auto it = newInputSignatures.find(input.path);
+                if(it != newInputSignatures.end())
+                {
+                    input.signature = it->second;
+                    newInputSignatures.erase(it);
+                }
+            }
+
+            for(auto& signature : newInputSignatures)
+            {
+                fileDependencies.push_back({signature.first, {}, signature.second});
+            }
+        }
+
+        std::cout << "Updating dependency graph." << std::endl;
+        database.rebuildFileDependencies(); 
+    }
+
     return completed;
 }
 
@@ -262,7 +351,9 @@ static std::vector<PendingCommand> filterCommands(std::filesystem::path invocati
     bool allIncluded = targets.empty();
 
     auto& commands = database.getCommands();
-    auto& dependencies = database.getDependencies();
+    auto& dependencies = database.getCommandDependencies();
+    auto& commandSignatures = database.getCommandSignatures();
+    auto& fileDependencies = database.getFileDependencies();
 
     std::vector<PendingCommand> filteredCommands;
     filteredCommands.reserve(commands.size());
@@ -340,23 +431,29 @@ static std::vector<PendingCommand> filterCommands(std::filesystem::path invocati
         }
     }
     
-    TimeCache timeCache;
-
-    // TODO: Move this into the database
-    auto cmdFilePath = dataPath / "cmdlines.db";
-    auto cmdData = readFile(cmdFilePath);
-    std::unordered_map<StringId, std::string_view> cmdLines;
-    std::unordered_map<StringId, std::string_view> rspContents;
-
-    auto cmdDataView = std::string_view(cmdData);
-    while(!cmdDataView.empty())
+    //std::cout << fileDependencies.size() << " file dependencies.\n";
     {
-        std::string_view line;
-        std::tie(line, cmdDataView) = str::split(cmdDataView, '\n');
-        auto [file, tmp] = str::split(line, 0);
-        auto [cmdLine, rspContent] = str::split(tmp, 0);
-        cmdLines[file] = cmdLine;
-        rspContents[file] = rspContent;
+        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+        std::vector<std::future<void>> futures;
+        size_t numEntries = fileDependencies.size();
+        for(size_t i = 0; i < maxConcurrentCommands; ++i)
+        {
+            int start = i * numEntries / maxConcurrentCommands;
+            int end = (i+1) * numEntries / maxConcurrentCommands;
+            futures.push_back(std::async(std::launch::async, [
+                start, 
+                end, 
+                &filteredCommands, 
+                &commandSignatures,
+                &fileDependencies]()
+            {
+                checkInputSignatures(commandSignatures, filteredCommands, fileDependencies.begin() + start, fileDependencies.begin() + end);
+            }));
+        }
+        for(auto& future : futures)
+        {
+            future.wait();
+        }
     }
 
     bool commandLinesChanged = false;
@@ -366,133 +463,39 @@ static std::vector<PendingCommand> filterCommands(std::filesystem::path invocati
         const auto& command = commands[commandIndex];
         const auto& commandDependencies = dependencies[commandIndex];
         auto& filteredCommand = filteredCommands[commandIndex];
+        auto& commandSignature = commandSignatures[commandIndex];
 
-        for(auto& path : command.outputs)
+        if (commandSignature == EMPTY_SIGNATURE)
         {
-            auto str = path.string();
-            auto strId = StringId(str);
-            if(cmdLines[strId] != command.command || rspContents[strId] != command.rspContents)
-            {
 #if LOG_DIRTY_REASON
-                std::cout << str << "\n";
-                std::cout << "\"" << cmdLines[strId] << "\" vs \"" << command.command << "\"\n";
+            std::cout << "dirty: Signature missing for " << command.description << std::endl;
 #endif
-                filteredCommand.dirty = true;
-                commandLinesChanged = true;
-            }
+            continue;
         }
-        if(filteredCommand.dirty) continue;
+        if(commandSignature != computeCommandSignature(command))
+        {
+#if LOG_DIRTY_REASON
+            std::cout << "dirty: Signature mismatching for " << command.description << std::endl;
+#endif
+            commandSignature = {};
+            continue;
+        }
 
         for(auto dependency : dependencies[commandIndex])
         {
-            if(filteredCommands[dependency].dirty)
+            if(commandSignatures[dependency] == EMPTY_SIGNATURE)
             {
-                filteredCommand.dirty = true;
+#if LOG_DIRTY_REASON
+                std::cout << "dirty: Transitive " << command.description << std::endl;
+#endif
+                commandSignature = {};
                 break;
-            }
-        }
-        if(filteredCommand.dirty) continue;
-
-        std::filesystem::file_time_type outputTime;
-        outputTime = outputTime.max();
-        std::error_code ec;
-        for(auto& output : command.outputs)
-        {
-            outputTime = std::min(outputTime, timeCache.get(StringId(output.string()), ec));
-            if(ec)
-            {
-#if LOG_DIRTY_REASON
-                std::cout << "dirty: " << output << " did not exist.\n";
-#endif
-                filteredCommand.dirty = true;
-                break;
-            }
-        }
-        if(filteredCommand.dirty) continue;
-
-        for(auto& input : command.inputs)
-        {
-            auto inputTime = timeCache.get(StringId(input.string()), ec);
-            if(ec || inputTime > outputTime)
-            {
-                if(ec)
-                {
-#if LOG_DIRTY_REASON
-                    std::cout << "dirty: " << input << " did not exist.\n";
-#endif
-                }
-                else
-                {
-#if LOG_DIRTY_REASON
-                    std::cout << "dirty: " << input << " was newer than output.\n";
-#endif
-                }
-                filteredCommand.dirty = true;
-                break;
-            }
-        }
-        if(filteredCommand.dirty) continue;
-
-        if(!command.depFile.empty())
-        {
-            auto data = readFile(command.depFile);
-            if(data.empty())
-            {
-#if LOG_DIRTY_REASON
-                std::cout << "dirty: \"" << command.depFile << "\" did not exist.\n";
-#endif
-                filteredCommand.dirty = true;
-            }
-            else
-            {
-                bool dirty = parseDependencyData(data, [&outputTime, &timeCache](std::string_view path)
-                {
-                    std::error_code ec;
-                    auto inputTime = timeCache.get(path, ec);
-                    if(ec)
-                    {
-#if LOG_DIRTY_REASON
-                        std::cout << "dirty: \"" << path << "\" did not exist.\n";
-#endif
-                    }
-                    else if(inputTime > outputTime)
-                    {
-#if LOG_DIRTY_REASON
-                        std::cout << "dirty: " << path << " was newer than output.\n";
-#endif
-                    }
-                    return ec || inputTime > outputTime;
-                });
-                if(dirty)
-                {
-#if LOG_DIRTY_REASON
-                    std::cout << "dirty: Dependency file \"" << command.depFile << "\" returned true.\n";
-#endif
-                }
-                filteredCommand.dirty = dirty;
             }
         }
     }
 
-    if(commandLinesChanged)
-    {
-        std::ofstream cmdFile(cmdFilePath, std::ostream::binary);
-        
-        for(auto& command : commands)
-        {
-            for(auto& path : command.outputs)
-            {
-                auto str = path.string();
-                cmdFile.write(str.c_str(), str.size()+1);
-                cmdFile.write(command.command.c_str(), command.command.size()+1);
-                cmdFile.write(command.rspContents.c_str(), command.rspContents.size());
-                cmdFile.write("\n", 1);
-            }
-        }
-    }
-
-    filteredCommands.erase(std::remove_if(filteredCommands.begin(), filteredCommands.end(), [](auto& command) { 
-            return !command.dirty || !command.included;
+    filteredCommands.erase(std::remove_if(filteredCommands.begin(), filteredCommands.end(), [&commandSignatures](auto& command) { 
+            return commandSignatures[command.command] != EMPTY_SIGNATURE || !command.included;
         }), filteredCommands.end());
 
     return filteredCommands;
@@ -554,7 +557,13 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
     auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
 
     Project& project = env.createProject("Generator", Executable);
-    project.features += { feature::Cpp17, feature::DebugSymbols, feature::Exceptions, feature::Optimize };
+    project.features += { 
+        feature::Cpp17, 
+        feature::DebugSymbols, 
+        feature::Exceptions, 
+        feature::Optimize,
+        feature::msvc::SharedRuntime
+    };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += buildHDir;
@@ -569,6 +578,8 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
     env.addConfigurationDependency(buildOutput);
 
     Database database;
+    auto databasePath = outputPath / ".build_db";
+    database.load(databasePath);
     {
         std::vector<CommandEntry> commands;
         BuildConfigurator::collectCommands(env, commands, outputPath, project);
@@ -600,9 +611,12 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
         size_t completedCommands = runCommands(filteredCommands, database, maxConcurrentCommands, false);
 
+        database.save(databasePath);
+
         // Exit with failure if it fails.
         if(completedCommands < filteredCommands.size())
         {
+            
             // (and return the running binary since we didn't get a working new one)
             std::filesystem::rename(tempPath, buildOutput);
             std::exit(EXIT_FAILURE);
@@ -612,6 +626,8 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         // In case of emergency, return the running binary with exception-less error handling
         std::error_code ec;
         std::filesystem::rename(tempPath, buildOutput, ec);
+
+        database.save(databasePath);
         throw;
     }
 
