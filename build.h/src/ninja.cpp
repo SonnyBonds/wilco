@@ -12,6 +12,15 @@ struct NinjaWriter
     {
     }
 
+    std::string escape(std::string input)
+    {
+        str::replaceAllInPlace(input, "$", "$$");
+        str::replaceAllInPlace(input, ":", "$:");
+        str::replaceAllInPlace(input, " ", "$ ");
+        str::replaceAllInPlace(input, "\n", "$\n");
+        return input;
+    }
+
     void subninja(std::string_view name)
     {
         _stream << "subninja " << name << "\n";
@@ -22,26 +31,13 @@ struct NinjaWriter
         _stream << name << " = " << value << "\n";
     }
 
-    void rule(std::string_view name, std::string_view command, std::string_view depfile = {}, std::string_view deps = {}, std::string_view description = {}, bool generator = false)
+    void rule(std::string_view name, std::string_view command, std::vector<std::pair<std::string_view, std::string_view>> properties)
     {
         _stream << "rule " << name << "\n";
         _stream << "  command = " << command << "\n";
-        if(!depfile.empty())
+        for(auto& prop : properties)
         {
-            _stream << "  depfile = " << depfile << "\n";
-        }
-        if(!deps.empty())
-        {
-            _stream << "  deps = " << deps << "\n";
-        }
-        if(!description.empty())
-        {
-            _stream << "  description = " << description << "\n";
-        }
-        if(generator)
-        {
-            _stream << "  generator = 1\n";
-            _stream << "  restat = 1\n";
+            _stream << "  " << prop.first << " = " << prop.second << "\n";
         }
         _stream << "\n";
     }
@@ -51,14 +47,14 @@ struct NinjaWriter
         _stream << "build ";
         for(auto& output : outputs)
         {
-            _stream << output << " ";
+            _stream << escape(output) << " ";
         }
 
         _stream << ": " << rule << " ";
 
         for(auto& input : inputs)
         {
-            _stream << input << " ";
+            _stream << escape(input) << " ";
         }
 
         if(!implicitInputs.empty())
@@ -66,7 +62,7 @@ struct NinjaWriter
             _stream << "| ";
             for(auto& implicitInput : implicitInputs)
             {
-                _stream << implicitInput << " ";
+                _stream << escape(implicitInput) << " ";
             }
         }
         if(!orderInputs.empty())
@@ -74,7 +70,7 @@ struct NinjaWriter
             _stream << "|| ";
             for(auto& orderInput : orderInputs)
             {
-                _stream << orderInput << " ";
+                _stream << escape(orderInput) << " ";
             }
         }
         _stream << "\n";
@@ -86,6 +82,19 @@ struct NinjaWriter
         _stream << "\n";
     }
 };
+
+static std::string_view depFileFormatStr(const CommandEntry& command)
+{
+    switch(command.depFile.format)
+    {
+        case DepFile::Format::GCC:
+            return "gcc";
+        case DepFile::Format::MSVC:
+            return "msvc";
+        default:
+            throw std::runtime_error("Unknown depfile format for '" + command.description + "'.");
+    }
+}
 
 static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId profileName, bool generator)
 {
@@ -133,13 +142,34 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
     }
 
     std::string prologue;
-    // TODO: Target platform
-    /*if(windows)
+    // TODO: Current isn't necessarily the host system
+    if(OperatingSystem::current() == Windows)
     {
         prologue += "cmd /c ";
-    }*/
+    }
     prologue += "cd \"$cwd\" && ";
-    ninja.rule("command", prologue + "$cmd", "$depfile", "", "$desc", generator);
+    if(generator)
+    {
+        ninja.rule("command", prologue + "$cmd", {
+            {"depfile", "$command_depfile"}, 
+            {"deps", "$command_depfile_format"}, 
+            {"description", "$command_desc"},
+            {"rspfile", "$command_rspfile"},
+            {"rspfile_content", "$command_rspfile_content"},
+            {"generator", "1"},
+            {"restat", "1"},
+        });
+    }
+    else
+    {
+        ninja.rule("command", prologue + "$cmd", {
+            {"depfile", "$command_depfile"}, 
+            {"deps", "$command_depfile_format"}, 
+            {"description", "$command_desc"},
+            {"rspfile", "$command_rspfile"},
+            {"rspfile_content", "$command_rspfile_content"},
+        });
+    }
 
     std::vector<std::string> generatorDep = { "_generator" };
     std::vector<std::string> emptyDeps = { };
@@ -177,18 +207,33 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         projectOutputs.insert(projectOutputs.end(), outputStrs.begin(), outputStrs.end());
 
         std::string depfileStr;
-        if(!command.depFile.empty())
+        if(!command.depFile.path.empty())
         {
             depfileStr = (pathOffset / command.depFile).string();
+        }
+
+        std::string rspfileStr;
+        if(!command.rspFile.empty())
+        {
+            rspfileStr = (pathOffset / command.rspFile).string();
         }
 
         std::vector<std::pair<std::string_view, std::string_view>> variables;
         variables.push_back({"cmd", command.command});
         variables.push_back({"cwd", cwdStr});
-        variables.push_back({"depfile", depfileStr});
+        if(!depfileStr.empty())
+        {
+            variables.push_back({"command_depfile", depfileStr});
+            variables.push_back({"command_depfile_format", depFileFormatStr(command)});
+        }
+        if(!rspfileStr.empty())
+        {
+            variables.push_back({"command_rspfile", rspfileStr});
+            variables.push_back({"command_rspfile_content", command.rspContents});
+        }
         if(!command.description.empty())
         {
-            variables.push_back({"desc", command.description});
+            variables.push_back({"command_desc", command.description});
         }
 
         std::vector<std::string> confDeps;
@@ -243,7 +288,6 @@ void NinjaEmitter::run(cli::Context cliContext)
 
     cliContext.extractArguments(arguments);
 
-    std::vector<std::filesystem::path> outputs;
     auto profiles = cli::Profile::list();
 
     if(profiles.empty())
@@ -251,8 +295,14 @@ void NinjaEmitter::run(cli::Context cliContext)
         profiles.push_back(cli::Profile{ "", {} });
     }
 
+    auto baseConfigDependencies = Environment::configurationDependencies;
     for(auto& profile : profiles)
     {
+        // Since this is global state we need to reset it before each config run
+        // because the ninja files are separate and shouldn't get eachother's
+        // config dependencies.
+        Environment::configurationDependencies = baseConfigDependencies;
+        
         std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
         confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
@@ -269,6 +319,7 @@ void NinjaEmitter::run(cli::Context cliContext)
         auto outputFile = profileTargetPath / "build.ninja";
         NinjaWriter ninja(outputFile);
 
+        std::vector<std::filesystem::path> outputs;
         for(auto& project : env.projects)
         {
             auto outputName = emitProject(env, profileTargetPath, *project, profile.name, false);
@@ -292,8 +343,6 @@ void NinjaEmitter::run(cli::Context cliContext)
         generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, cliContext.startPath, {}, "Check build config." };
         auto outputName = emitProject(env, profileTargetPath, generatorProject, "", true);
         ninja.subninja(outputName);
-
-        env.projects.clear();
     }
 
     BuildConfigurator::updateConfigDatabase(configDatabase, args);

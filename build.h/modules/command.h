@@ -6,13 +6,39 @@
 
 #include "core/property.h"
 
+struct DepFile
+{
+    std::filesystem::path path;
+    enum Format
+    {
+        GCC,
+        MSVC
+    } format = GCC;
+
+    DepFile& operator =(std::filesystem::path path)
+    {
+        this->path = std::move(path);
+        return *this;
+    }
+
+    operator const std::filesystem::path&() const
+    {
+        return path;
+    }
+
+    operator bool() const
+    {
+        return !path.empty();
+    }
+};
+
 struct CommandEntry
 {
     std::string command;
     std::vector<std::filesystem::path> inputs;
     std::vector<std::filesystem::path> outputs;
     std::filesystem::path workingDirectory;
-    std::filesystem::path depFile;
+    DepFile depFile;
     std::string description;
     std::filesystem::path rspFile;
     std::string rspContents;
@@ -23,7 +49,7 @@ struct CommandEntry
                outputs == other.outputs &&
                inputs == other.inputs &&
                workingDirectory == other.workingDirectory &&
-               depFile == other.depFile;
+               depFile.path == other.depFile.path;
     }
 };
 

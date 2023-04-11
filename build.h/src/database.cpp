@@ -13,7 +13,7 @@
 struct Header
 {
     uint32_t magic = 'bldh';
-    uint32_t version = 2;
+    uint32_t version = 3;
     char str[8] = {'b', 'u', 'i', 'l', 'd', 'd', 'b', '\0'};
 };
 #pragma pack()
@@ -55,6 +55,15 @@ static void writeIdList(std::ostream& stream, const std::vector<CommandId>& list
 {
     writeUInt(stream, list.size());
     stream.write(reinterpret_cast<const char*>(list.data()), sizeof(CommandId) * list.size());
+}
+
+static void writeDepFile(std::ostream& stream, const DepFile& depFile)
+{
+    writeString(stream, depFile.path.string());
+    if(!depFile.path.empty())
+    {
+        writeUInt(stream, depFile.format);
+    }
 }
 
 static void readData(std::string_view data, size_t& pos, char* output, size_t amount)
@@ -128,6 +137,28 @@ static std::vector<CommandId> readIdList(std::string_view data, size_t& pos)
     return result;
 }
 
+static DepFile readDepFile(std::string_view data, size_t& pos)
+{
+    DepFile result;
+    result.path = readString(data, pos);
+    if(!result.path.empty())
+    {
+        uint32_t format = readUInt(data, pos);
+        switch (format)
+        {
+        case DepFile::Format::GCC:
+            result.format = DepFile::Format::GCC;
+            break;
+        case DepFile::Format::MSVC:
+            result.format = DepFile::Format::MSVC;
+            break;
+        default:
+            throw std::runtime_error("Unknown depfile format type for " + result.path.string() + ".");
+        }
+    }
+    return result;
+}
+
 Signature computeCommandSignature(const CommandEntry& command)
 {
     hash::Md5 hasher;
@@ -185,7 +216,7 @@ bool Database::load(std::filesystem::path path)
             command.command = readString(_commandData, pos);
             command.description = readString(_commandData, pos);
             command.workingDirectory = readString(_commandData, pos);
-            command.depFile = readString(_commandData, pos);
+            command.depFile = readDepFile(_commandData, pos);
             command.rspFile = readString(_commandData, pos);
             command.rspContents = readString(_commandData, pos);
             command.inputs = readPathList(_commandData, pos);
@@ -280,7 +311,7 @@ void Database::save(std::filesystem::path path)
             writeString(commandFile, command.command);
             writeString(commandFile, command.description);
             writeString(commandFile, command.workingDirectory.string());
-            writeString(commandFile, command.depFile.string());
+            writeDepFile(commandFile, command.depFile);
             writeString(commandFile, command.rspFile.string());
             writeString(commandFile, command.rspContents);
             writePathList(commandFile, command.inputs);
@@ -502,7 +533,7 @@ void Database::rebuildFileDependencies()
     {
         auto& command = _commands[index];
         Signature depFileSignature = {};
-        if(!command.depFile.empty())
+        if(command.depFile)
         {
             auto depContents = readFile(command.depFile);
             depFileSignature = hash::md5(depContents);

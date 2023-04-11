@@ -307,7 +307,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             {
                 command.inputs.push_back(pchOutput);
             }
-            command.depFile = output.string() + ".d";
+            command.depFile = { output.string() + ".d", DepFile::Format::MSVC };
         }
         else
         {

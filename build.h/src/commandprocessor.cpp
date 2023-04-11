@@ -120,7 +120,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                 }
                 else
                 {
-                    if(!commandDefinitions[command->command].depFile.empty())
+                    if(commandDefinitions[command->command].depFile)
                     {
                         auto depFileContents = readFile(commandDefinitions[command->command].depFile);
                         auto depFileSignature = hash::md5(depFileContents);
