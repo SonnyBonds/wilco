@@ -6,6 +6,8 @@
 #include "fileutil.h"
 #include "buildconfigurator.h"
 #include <sstream>
+#include "database.h"
+#include "commandprocessor.h"
 
 static uuid::uuid projectNamespaceUuid(0x8a168540, 0x2d194237, 0x99da3cc8, 0xae8b0d4e);
 static uuid::uuid filterNamespaceUuid(0x4d136782, 0x745f4680, 0xb816b3e3, 0x636a84c3);
@@ -622,7 +624,24 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
 
 void MsvcEmitter::run(cli::Context cliContext)
 {
-    if(!BuildConfigurator::checkDependencies(cliContext, *targetPath / ".generator/msvc"))
+    auto configDatabasePath = *targetPath / ".msvc_db";
+    Database configDatabase;
+    bool configDirty = !configDatabase.load(configDatabasePath);
+
+    std::vector<std::string> args;
+    args = cliContext.allArguments;
+    if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
+    {
+        configDirty = true;
+    }
+
+    if(!configDirty)
+    {
+        auto configCommands = filterCommands(cliContext.startPath, configDatabase, *targetPath, {});
+        configDirty = !configCommands.empty();
+    }
+
+    if(!configDirty)
     {
         return;
     }
@@ -651,8 +670,8 @@ void MsvcEmitter::run(cli::Context cliContext)
         auto& generatorProject = env.createProject("_generator", Command);
         {
             std::string argumentString;
-            for(auto& arg : env.cliContext.allArguments)
-            {
+            for(auto& arg : cliContext.allArguments)
+            {   
                 argumentString += " " + str::quote(arg);
             }
 
@@ -679,6 +698,8 @@ void MsvcEmitter::run(cli::Context cliContext)
 
         profiles.push_back({profile.name, std::move(env.projects)});
     }
+
+    BuildConfigurator::updateConfigDatabase(configDatabase, args);
     
     std::vector<ProjectMatrixEntry> projectMatrix;
     for(auto& projectName : projectNames)
@@ -782,5 +803,5 @@ void MsvcEmitter::run(cli::Context cliContext)
 
     writeFile(*targetPath / (solutionName + ".sln"), solutionStream.str());
 
-    BuildConfigurator::writeDependencies(*targetPath / ".generator/msvc");
+    configDatabase.save(configDatabasePath);
 }

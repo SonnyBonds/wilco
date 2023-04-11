@@ -16,14 +16,14 @@ public:
     ~BuildConfigurator();
 
     static void collectCommands(Environment& env, std::vector<CommandEntry>& collectedCommands, const std::filesystem::path& projectDir, Project& project);
-    static bool checkDependencies(cli::Context& cliContext, std::filesystem::path cachePath);
-    static void writeDependencies(std::filesystem::path cachePath);
+    static void updateConfigDatabase(Database& database, const std::vector<std::string>& args);
     static Environment configureEnvironment(cli::Context& cliContext);
 
     cli::Context cliContext;
     Database database;
+    Database configDatabase;
     std::filesystem::path dataPath;
 private:
     std::filesystem::path _databasePath;
-    bool _updateDependencies;
+    std::filesystem::path _configDatabasePath;
 };

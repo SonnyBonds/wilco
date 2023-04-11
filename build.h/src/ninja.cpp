@@ -1,6 +1,8 @@
 #include "actions/ninja.h"
 #include "util/process.h"
 #include "buildconfigurator.h"
+#include "database.h"
+#include "commandprocessor.h"
 
 struct NinjaWriter
 {
@@ -217,7 +219,24 @@ NinjaEmitter::NinjaEmitter()
 
 void NinjaEmitter::run(cli::Context cliContext)
 {
-    if(!BuildConfigurator::checkDependencies(cliContext, *targetPath / ".generator/ninja"))
+    auto configDatabasePath = *targetPath / ".ninja_db";
+    Database configDatabase;
+    bool configDirty = !configDatabase.load(configDatabasePath);
+
+    std::vector<std::string> args;
+    args = cliContext.allArguments;
+    if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
+    {
+        configDirty = true;
+    }
+
+    if(!configDirty)
+    {
+        auto configCommands = filterCommands(cliContext.startPath, configDatabase, *targetPath, {});
+        configDirty = !configCommands.empty();
+    }
+
+    if(!configDirty)
     {
         return;
     }
@@ -265,7 +284,7 @@ void NinjaEmitter::run(cli::Context cliContext)
         auto& generatorProject = env.createProject("_generator", Command);
 
         std::string argumentString;
-        for(auto& arg : env.cliContext.allArguments)
+        for(auto& arg : cliContext.allArguments)
         {
             argumentString += " " + str::quote(arg);
         }
@@ -277,6 +296,8 @@ void NinjaEmitter::run(cli::Context cliContext)
         env.projects.clear();
     }
 
-    BuildConfigurator::writeDependencies(*targetPath / ".generator/ninja");
+    BuildConfigurator::updateConfigDatabase(configDatabase, args);
+
+    configDatabase.save(configDatabasePath);
 }
 

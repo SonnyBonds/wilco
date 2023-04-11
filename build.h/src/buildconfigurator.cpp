@@ -6,6 +6,7 @@
 #include "actions/configure.h"
 #include "fileutil.h"
 #include "dependencyparser.h"
+#include "commandprocessor.h"
 #include <sstream>
 #include <fstream>
 
@@ -96,43 +97,52 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
 
 BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExisting)
     : cliContext(std::move(cliContext))
-    , _updateDependencies(false)
 {
     dataPath = *targetPath;
+
+    _configDatabasePath = dataPath / ".config_db";
+    bool configDirty = !configDatabase.load(_configDatabasePath);
 
     std::vector<std::string> args;
     if(updateExisting)
     {
-        auto previousCommandLine = readFile(*targetPath / ".generator/configure.cmdline");
-        args = str::splitAll(previousCommandLine, '\n');
-#if DEBUG_LOG
-        std::cout << "using previous: " << str::join(args, " ") << std::endl;
-#endif
+        if(!configDatabase.getCommands().empty())
+        {
+            args = str::splitAll(configDatabase.getCommands()[0].command, '\n');
+        }
+        else
+        {
+            configDirty = true;
+        }
     }
     else
     {
         args = cliContext.allArguments;
-#if DEBUG_LOG
-        std::cout << "using actual: " << str::join(args, " ") << std::endl;
-#endif
+        if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
+        {
+            configDirty = true;
+        }
     }
 
-    cli::Context configureContext(cliContext.startPath, cliContext.invocation, args);
-
-    std::filesystem::current_path(configureContext.configurationFile.parent_path());
-    bool configDirty = checkDependencies(configureContext, *targetPath / ".generator/configure");
+    if(!configDirty)
+    {
+        auto configCommands = filterCommands(cliContext.startPath, configDatabase, dataPath, {});
+        configDirty = !configCommands.empty();
+    }
 
     _databasePath = dataPath / ".build_db";
-    // TODO: Loading the file dependencies would be enough if the config is dirty anyway
     if (!database.load(_databasePath))
     {
         configDirty = true;
     }
 
+    std::filesystem::current_path(cliContext.configurationFile.parent_path());
+
     if(configDirty)
     {
         std::cout << "Reconfiguring " << (*targetPath).string() << "..." << std::endl;
 
+        cli::Context configureContext(cliContext.startPath, cliContext.invocation, args);
         Environment env = configureEnvironment(configureContext);
 
         std::vector<CommandEntry> commands;
@@ -142,11 +152,12 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
         }
         database.setCommands(std::move(commands));
 
-        std::ofstream compileCommandsStream(*targetPath / "compile_commands.json");
+        std::stringstream compileCommandsStream;
         generateCompileCommandsJson(compileCommandsStream, database);
-        env.addConfigurationDependency(*targetPath / "compile_commands.json");
+        env.writeFile(*targetPath / "compile_commands.json", compileCommandsStream.str());
 
-        _updateDependencies = true;
+        updateConfigDatabase(configDatabase, args);
+
         std::cout << "Done.\n";
     }
     else
@@ -167,76 +178,34 @@ BuildConfigurator::~BuildConfigurator()
         database.save(_databasePath);
     }
 
-    if(_updateDependencies)
+    if(!_configDatabasePath.empty())
     {
-        writeDependencies(*targetPath / ".generator/configure");
+        configDatabase.save(_configDatabasePath);
     }
 }
 
-bool BuildConfigurator::checkDependencies(cli::Context& cliContext, std::filesystem::path cachePath)
+void BuildConfigurator::updateConfigDatabase(Database& database, const std::vector<std::string>& args)
 {
-    std::string argumentString = str::join(cliContext.allArguments, "\n");
-
-    auto cmdFilePath = cachePath.string() + ".cmdline";
-    Environment::addConfigurationDependency(cmdFilePath);
-    auto depFilePath{cachePath.string() + ".confdeps"};
-    Environment::addConfigurationDependency(depFilePath);
-
-    if(writeFile(cmdFilePath, argumentString))
+    // This command is never meant to be executed as an actual shell command, but uses the same
+    // mechanics for dependency checking.
+    CommandEntry configCommand;
+    configCommand.description = "Configure";
+    configCommand.command = str::join(args, "\n");
+    configCommand.inputs.reserve(Environment::configurationDependencies.size());
+    for(auto& input : Environment::configurationDependencies)
     {
-#if DEBUG_LOG
-        std::cout << "differing command line\n";
-#endif
-        return true;
+        configCommand.inputs.push_back(input);
     }
+    database.setCommands({configCommand});
+    database.getCommandSignatures()[0] = computeCommandSignature(database.getCommands()[0]);
 
-    auto depData = readFile(depFilePath);
-    if(depData.empty())
+    // Recompute all input signatures. If a file has changed _while_ the configuration
+    // is running, those changes will not trigger a new run. Maybe there is a better
+    // scheme for this.
+    for(auto& input : database.getFileDependencies())
     {
-#if DEBUG_LOG
-        std::cout << "no depdata\n";
-#endif
-        return true;
+        input.signature = computeFileSignature(input.path);
     }
-    else
-    {
-        std::error_code ec;
-        auto outputTime = std::filesystem::last_write_time(depFilePath, ec);
-        bool dirty = parseDependencyData(depData, [outputTime](std::string_view path){
-            std::error_code ec;
-            auto time = std::filesystem::last_write_time(path, ec);
-#if DEBUG_LOG
-            if(ec)
-            {
-                std::cout << path << " error\n";
-            }
-            if(time > outputTime)
-            {
-                std::cout << path << " dirty\n";
-            }
-#endif
-            return ec || time > outputTime;
-        });
-        if(dirty)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void BuildConfigurator::writeDependencies(std::filesystem::path cachePath)
-{
-    std::stringstream depData;
-    depData << ":\n";
-    for(auto& dep : Environment::configurationDependencies)
-    {
-        depData << "  " << str::replaceAll(dep.string(), " ", "\\ ") << " \\\n";
-    }
-
-    auto depFilePath{cachePath.string() + ".confdeps"};
-    writeFile(depFilePath, depData.str(), false);
 }
 
 Environment BuildConfigurator::configureEnvironment(cli::Context &cliContext)
