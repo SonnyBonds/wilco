@@ -308,6 +308,16 @@ namespace hash
 		MD5_Update(&_context, input.data(), input.size());
 	}
 
+	void Md5::digest(const wchar_t* data, size_t size)
+	{
+		MD5_Update(&_context, (const char*)data, sizeof(wchar_t) * size);
+	}
+
+    void Md5::digest(std::wstring_view input)
+	{
+		MD5_Update(&_context, input.data(), input.size());
+	}
+
     std::array<unsigned char, 16> Md5::finalize()
 	{
 		std::array<unsigned char, 16> result;

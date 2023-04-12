@@ -6,6 +6,7 @@
 using CommandId = uint32_t;
 
 using Signature = std::array<unsigned char, 16>;
+using SignaturePair = std::pair<Signature, Signature>;
 static constexpr Signature EMPTY_SIGNATURE = {}; 
 
 template<>
@@ -26,7 +27,7 @@ struct FileDependencies
 {
     std::filesystem::path path;
     std::vector<CommandId> dependentCommands;
-    Signature signature;
+    SignaturePair signaturePair;
 };
 
 using CommandDependencies = std::vector<CommandId>;

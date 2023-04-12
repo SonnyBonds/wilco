@@ -13,7 +13,7 @@
 struct Header
 {
     uint32_t magic = 'bldh';
-    uint32_t version = 3;
+    uint32_t version = 4;
     char str[8] = {'b', 'u', 'i', 'l', 'd', 'd', 'b', '\0'};
 };
 #pragma pack()
@@ -284,7 +284,8 @@ bool Database::load(std::filesystem::path path)
                     throw std::runtime_error("Dependency index out of bounds.");
                 }
             }
-            readData(_dependencyData, pos, (char*)fileDeps.signature.data(), sizeof(fileDeps.signature));
+            fileDeps.signaturePair.first = readSignature(_dependencyData, pos);
+            fileDeps.signaturePair.second = readSignature(_dependencyData, pos);
             _fileDependencies.push_back(std::move(fileDeps));
         }
     }
@@ -333,8 +334,8 @@ void Database::save(std::filesystem::path path)
             auto& fileDeps = _fileDependencies[index];
             writeString(dependencyFile, fileDeps.path.string());
             writeIdList(dependencyFile, fileDeps.dependentCommands);
-            //std::cout << fileDeps.path << " - " << hash::md5String(fileDeps.signature) << std::endl;
-            dependencyFile.write((const char*)fileDeps.signature.data(), sizeof(fileDeps.signature));
+            writeSignature(dependencyFile, fileDeps.signaturePair.first);
+            writeSignature(dependencyFile, fileDeps.signaturePair.second);
         }
     }
 }
@@ -557,10 +558,10 @@ void Database::rebuildFileDependencies()
         }
     }
 
-    std::unordered_map<std::filesystem::path, Signature> existingSignatures;
+    std::unordered_map<std::filesystem::path, SignaturePair> existingSignatures;
     for(auto& dep : _fileDependencies)
     {
-        existingSignatures[dep.path] = dep.signature;
+        existingSignatures[dep.path] = dep.signaturePair;
     }
 
     _fileDependencies.clear();
@@ -568,13 +569,13 @@ void Database::rebuildFileDependencies()
 
     for(auto& entry : depCommands)
     {
-        Signature signature = {};
+        SignaturePair signaturePair = {};
         auto it = existingSignatures.find(entry.first);
         if(it != existingSignatures.end())
         {
-            signature = it->second;
+            signaturePair = it->second;
         }
-        _fileDependencies.push_back({std::move(entry.first), std::move(entry.second), signature});
+        _fileDependencies.push_back({std::move(entry.first), std::move(entry.second), signaturePair});
     }
 }
 

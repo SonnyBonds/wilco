@@ -20,30 +20,61 @@ Signature computeFileSignature(std::filesystem::path path)
     return hash::md5(reinterpret_cast<const char*>(&time), sizeof(time));    
 }
 
+Signature computeDirectorySignature(std::filesystem::path path)
+{
+    std::error_code ec;
+    if(!std::filesystem::is_directory(path))
+    {
+        return {};
+    }
+
+    hash::Md5 hasher;
+    for(auto entry : std::filesystem::directory_iterator(path))
+    {
+        hasher.digest(entry.path().native());
+    }
+    return hasher.finalize();
+}
+
+bool updatePathSignature(SignaturePair& signaturePair, const std::filesystem::path& path)
+{
+    auto signature = computeFileSignature(path);
+    if(signature == EMPTY_SIGNATURE)
+    {
+#if LOG_DIRTY_REASON
+        std::cout << "dirty: " << path << " did not exist.\n";
+#endif
+        signaturePair.first = {};
+        signaturePair.second = {};
+        return true;
+    }
+
+    if(signature == signaturePair.first)
+    {
+        return false;
+    }
+
+    signaturePair.first = signature;
+
+    signature = computeDirectorySignature(path);
+    std::error_code ec;
+    if(signature != EMPTY_SIGNATURE && signaturePair.second == signature)
+    {
+        return false;
+    }
+
+#if LOG_DIRTY_REASON
+    std::cout << "dirty: " << path << " has been touched.\n";
+#endif
+    signaturePair.second = signature;
+    return true;
+}
+
 void checkInputSignatures(std::vector<Signature>& commandSignatures, std::vector<PendingCommand>& filteredCommands, std::vector<FileDependencies>::iterator begin, std::vector<FileDependencies>::iterator end)
 {
-    Signature emptySignature;
     for(auto fileDependency = begin; fileDependency != end; ++fileDependency)
     {
-        std::error_code ec;
-        bool dirty = false;
-        auto signature = computeFileSignature(fileDependency->path);
-        if(signature == emptySignature)
-        {
-    #if LOG_DIRTY_REASON
-            std::cout << "dirty: " << fileDependency->path << " did not exist.\n";
-    #endif
-            dirty = true;
-            fileDependency->signature = {};
-        }
-        else if(signature != fileDependency->signature)
-        {
-    #if LOG_DIRTY_REASON
-            std::cout << "dirty: " << fileDependency->path << " has been touched. (" << hash::md5String(fileDependency->signature) << " vs " << hash::md5String(signature) << ")\n";
-    #endif
-            dirty = true;
-            fileDependency->signature = signature;
-        }
+        bool dirty = updatePathSignature(fileDependency->signaturePair, fileDependency->path);
         if(dirty)
         {
             for(auto& commandId : fileDependency->dependentCommands)
@@ -61,7 +92,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
     auto& commandSignatures = database.getCommandSignatures();
     auto& depFileSignatures = database.getDepFileSignatures();
 
-    std::unordered_map<std::filesystem::path, Signature> newInputSignatures;
+    std::unordered_map<std::filesystem::path, SignaturePair> newInputSignatures;
 
     // Not loving this, but since the dependency map are indices
     // in the unfiltered commands we need the full list
@@ -130,7 +161,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                                 auto it = newInputSignatures.find(path);
                                 if(it == newInputSignatures.end())
                                 {
-                                    newInputSignatures[path] = computeFileSignature(path);
+                                    updatePathSignature(newInputSignatures[path], path);
                                 }
 
                                 return false;
@@ -287,7 +318,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                 auto it = newInputSignatures.find(input.path);
                 if(it != newInputSignatures.end())
                 {
-                    input.signature = it->second;
+                    input.signaturePair = it->second;
                     newInputSignatures.erase(it);
                 }
             }

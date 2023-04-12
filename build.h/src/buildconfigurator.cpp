@@ -204,7 +204,7 @@ void BuildConfigurator::updateConfigDatabase(Database& database, const std::vect
     // scheme for this.
     for(auto& input : database.getFileDependencies())
     {
-        input.signature = computeFileSignature(input.path);
+        updatePathSignature(input.signaturePair, input.path);
     }
 }
 

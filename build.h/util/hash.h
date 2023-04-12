@@ -24,6 +24,8 @@ public:
 
     void digest(const char* data, size_t size);
     void digest(std::string_view input);
+	void digest(const wchar_t* data, size_t size);
+    void digest(std::wstring_view input);
 
     std::array<unsigned char, 16> finalize();
 private:
