@@ -50,7 +50,7 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
 
     auto toolchainOutputs = toolchain->process(project, {}, dataDir);
 
-    collectedCommands.reserve(collectedCommands.size() + commands.size());
+    collectedCommands.reserve(collectedCommands.size() + commands.size() + 1);
     for(auto& command : commands)
     {
         CommandEntry adjustedCommand = command;
@@ -61,9 +61,32 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
             cwd = ".";
         }
         std::string cwdStr = cwd.string();
-        adjustedCommand.command = "cd \"" + cwdStr + "\" && " + command.command;
+        if(!command.command.empty())
+        {
+            adjustedCommand.command = "cd \"" + cwdStr + "\" && " + command.command;
+        }
+        else if(!command.outputs.empty())
+        {
+            throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has outputs but no actual command to produce them.");
+        }
         collectedCommands.push_back(std::move(adjustedCommand));
     }
+
+    CommandEntry phonyProjectCommand;
+    std::set<std::filesystem::path> inputs;
+    std::set<std::filesystem::path> outputs;
+    for(auto& command : collectedCommands)
+    {
+        inputs.insert(command.inputs.begin(), command.inputs.end());
+        outputs.insert(command.outputs.begin(), command.outputs.end());
+    }
+
+    // List all outputs that haven't been consumed within the project (e.g. intermediate obj files)
+    // as inputs to a phony command that can be used for partial builds.
+    // We could list all outputs, but this makes the resulting command a bit cleaner.
+    std::set_difference(outputs.begin(), outputs.end(), inputs.begin(), inputs.end(), std::back_inserter(phonyProjectCommand.inputs));
+    phonyProjectCommand.description = project.name;
+    collectedCommands.push_back(std::move(phonyProjectCommand));
 }
 
 static void generateCompileCommandsJson(std::ostream& stream, const Database& database)

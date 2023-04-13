@@ -85,6 +85,59 @@ void checkInputSignatures(std::vector<Signature>& commandSignatures, std::vector
     }
 }
 
+static process::ProcessResult runCommand(const CommandEntry& command)
+{
+    if(command.command.empty())
+    {
+        return { 0 };
+    }
+
+    for(auto& output : command.outputs)
+    {
+        std::filesystem::path path(output);
+        if(path.has_parent_path())
+        {
+            std::filesystem::create_directories(path.parent_path());
+        }
+    }
+
+    if(!command.rspFile.empty())
+    {
+        // TODO: Error handling
+#if _WIN32
+        FILE* file = fopen(command.rspFile.string().c_str(), "wbN");
+#else
+        FILE* file = fopen(command.rspFile.string().c_str(), "wbe");
+#endif
+        if(!file)
+        {
+            throw std::system_error(errno, std::generic_category(), "Failed to open rsp file \"" + command.rspFile.string() + "\" for writing");
+        }
+        
+        auto writeResult = fwrite(command.rspContents.data(), 1, command.rspContents.size(), file);
+        if(writeResult < command.rspContents.size())
+        {
+            throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + command.rspFile.string() + "\"");
+        }
+
+        auto closeResult = fclose(file);
+        if(closeResult != 0)
+        {
+            throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + command.rspFile.string() + "\".");
+        }
+    }
+
+    process::ProcessResult result = process::run(command.command + " 2>&1");
+
+    if(!command.rspFile.empty())
+    {
+        std::error_code ec;
+        std::filesystem::remove(command.rspFile, ec);
+    }
+
+    return result;
+}
+
 size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& database, size_t maxConcurrentCommands, bool verbose)
 {
     const auto& commandDefinitions = database.getCommands();
@@ -237,48 +290,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                     process::ProcessResult result = {1, "Unknown error."};
                     try
                     {
-                        for(auto& output : commandDefinition.outputs)
-                        {
-                            std::filesystem::path path(output);
-                            if(path.has_parent_path())
-                            {
-                                std::filesystem::create_directories(path.parent_path());
-                            }
-                        }
-
-                        if(!commandDefinition.rspFile.empty())
-                        {
-                            // TODO: Error handling
-    #if _WIN32
-                            FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbN");
-    #else
-                            FILE* file = fopen(commandDefinition.rspFile.string().c_str(), "wbe");
-    #endif
-                            if(!file)
-                            {
-                                throw std::system_error(errno, std::generic_category(), "Failed to open rsp file \"" + commandDefinition.rspFile.string() + "\" for writing");
-                            }
-                            
-                            auto writeResult = fwrite(commandDefinition.rspContents.data(), 1, commandDefinition.rspContents.size(), file);
-                            if(writeResult < commandDefinition.rspContents.size())
-                            {
-                                throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + commandDefinition.rspFile.string() + "\"");
-                            }
-
-                            auto closeResult = fclose(file);
-                            if(closeResult != 0)
-                            {
-                                throw std::system_error(errno, std::generic_category(), "Failed to write rsp file \"" + commandDefinition.rspFile.string() + "\".");
-                            }
-                        }
-
-                        result = process::run(commandDefinition.command + " 2>&1");
-
-                        if(!commandDefinition.rspFile.empty())
-                        {
-                            std::error_code ec;
-                            std::filesystem::remove(commandDefinition.rspFile, ec);
-                        }
+                        result = runCommand(commandDefinition);
                     }
                     catch(const std::exception& e)
                     {
@@ -363,23 +375,7 @@ std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath,
     expandedTargets.reserve(targets.size());
     for(auto& target : targets)
     {
-        bool done = false;
-#if TODO
-        for(auto& project : env.projects)
-        {
-            if(project->name == target)
-            {
-                // TODO: There could be more outputs from other commands in the project.
-                expandedTargets.push_back({project->output.fullPath().string(), std::filesystem::absolute(project->output).lexically_normal().string()});
-                done = true;
-                break;
-            }
-        }
-#endif
-        if(!done)
-        {
-            expandedTargets.push_back({target, (invocationPath / target.cstr()).lexically_normal().string()});
-        }
+        expandedTargets.push_back({target, (invocationPath / target.cstr()).lexically_normal().string()});
     }
 
     std::vector<size_t> stack;
@@ -401,6 +397,20 @@ std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath,
         bool found = false;
         for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
         {
+            if(target.target == StringId(commands[commandIndex].description))
+            {
+                markIncluded(commandIndex);
+                found = true;
+            }
+            for(auto& input : commands[commandIndex].inputs)
+            {
+                if(target.expanded == StringId(input.string()))
+                {
+                    markIncluded(commandIndex);
+                    found = true;
+                    break;
+                }
+            }
             for(auto& output : commands[commandIndex].outputs)
             {
                 if(target.expanded == StringId(output.string()))
@@ -484,8 +494,9 @@ std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath,
         }
     }
 
-    filteredCommands.erase(std::remove_if(filteredCommands.begin(), filteredCommands.end(), [&commandSignatures](auto& command) { 
-            return commandSignatures[command.command] != EMPTY_SIGNATURE || !command.included;
+    filteredCommands.erase(std::remove_if(filteredCommands.begin(), filteredCommands.end(), [&commands, &commandSignatures](auto& command) { 
+            // TODO: commands[command.command].command is clearly an indicator some stuff needs renaming...
+            return commands[command.command].command.empty() || commandSignatures[command.command] != EMPTY_SIGNATURE || !command.included;
         }), filteredCommands.end());
 
     return filteredCommands;
