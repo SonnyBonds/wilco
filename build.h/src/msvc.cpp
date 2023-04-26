@@ -324,13 +324,11 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                 xml.shortTag("MultiProcessorCompilation", {}, "true");
 
                 auto& pchHeader = config.project->ext<extensions::Msvc>().pch.header;
-#if TODO
-                if (pchHeader.isSet())
+                if (!pchHeader.empty())
                 {
                     xml.shortTag("PrecompiledHeader", {}, "Use");
-                    xml.shortTag("PrecompiledHeaderFile", {}, pchHeader.value().filename().string());
+                    xml.shortTag("PrecompiledHeaderFile", {}, pchHeader.filename().string());
                 }
-#endif
 
                 std::map<Feature, std::string> featureMap = {
                     { feature::Cpp11, "<LanguageStandard>stdcpp11</LanguageStandard>"},
@@ -448,8 +446,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                 for (auto& config : projectEntry.configs)
                 {
                     const auto& msvcExt = config.project->ext<extensions::Msvc>();
-#if TODO
-                    if (msvcExt.pch.source.isSet() && msvcExt.pch.source == input.path.string())
+                    if (!msvcExt.pch.source.empty() && msvcExt.pch.source == input.path)
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
                     }
@@ -457,7 +454,6 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     {
                         xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
                     }
-#endif
                 }
             }
 
