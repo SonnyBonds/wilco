@@ -456,46 +456,115 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     }
                 }
             }
+        }
 
-            for (auto& config : projectEntry.configs)
+        std::string buildDependsOn = "$(BuildDependsOn)";
+
+        for (auto& config : projectEntry.configs)
+        {
+            int index = 0;
+            auto outputPath = std::filesystem::absolute(config.project->output);
+            bool postBuild = false;
+            for(auto& command : config.project->commands)
             {
-                int index = 0;
-                for(auto& command : config.project->commands)
+                if(command.inputs.empty())
                 {
-                    if(command.inputs.empty())
-                    {
-                        throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no inputs.");
-                    }
-                    if(command.outputs.empty())
-                    {
-                        throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no outputs.");
-                    }
-                    std::string mainInput = (pathOffset / command.inputs.front()).string();
-                    auto tag = xml.tag("CustomBuild", { {"Include", mainInput}, {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} });
+                    throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no inputs.");
+                }
+                if(command.outputs.empty())
+                {
+                    throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no outputs.");
+                }
 
-                    xml.shortTag("Message", {}, command.description);
-                    xml.shortTag("Command", {}, "cd " + str::quote((pathOffset / command.workingDirectory).string()) + " && " + command.command);
+                auto targetName = "Command" + std::to_string(index) + "_" + config.name.cstr();
 
-                    std::string inputsStr;
-                    std::string outputsStr;
-                    bool firstInput = true;
+                std::string inputsString;
+                std::string outputsString;
+                std::string readTlogString;
+                std::string writeTlogString;
+                {
+                    auto tag = xml.tag("ItemGroup");
+                    bool first = true;
                     for(auto& input : command.inputs)
                     {
-                        if(firstInput)
+                        if(!first)
                         {
-                            firstInput = false;
-                            continue;
+                            inputsString += ";";
                         }
-                        inputsStr += input.string() + ";";
-                    }
-                    xml.shortTag("AdditionalInputs", {}, inputsStr);
+                        first = false;
+                        auto relativePath = (pathOffset / input).lexically_normal();
+                        auto absolutePath = std::filesystem::absolute(relativePath);
+                        if(!postBuild && outputPath == absolutePath)
+                        {
+                            postBuild = true;
+                        }
 
+                        inputsString += relativePath.string();
+                        if(!readTlogString.empty())
+                        {
+                            readTlogString += ";";
+                        }
+                        readTlogString += "^" + absolutePath.string();
+
+                        if(writeTlogString.empty())
+                        {
+                            writeTlogString += "^";
+                        }
+                        else
+                        {
+                            writeTlogString += "|";
+                        }
+                        writeTlogString += absolutePath.string();
+                    }
+                    first = true;
                     for(auto& output : command.outputs)
                     {
-                        outputsStr += output.string() + ";";
+                        if(!first)
+                        {
+                            outputsString += ";";
+                        }
+                        first = false;
+                        auto relativePath = (pathOffset / output).lexically_normal();
+                        auto absolutePath = std::filesystem::absolute(relativePath);
+                        outputsString += relativePath.string();
+
+                        if(!writeTlogString.empty())
+                        {
+                            writeTlogString += ";";
+                        }
+                        writeTlogString += absolutePath.string();
                     }
-                    xml.shortTag("Outputs", {}, outputsStr);
                 }
+
+                {
+                    auto tag = xml.tag("Target", { {"Name", targetName}, {"Inputs", inputsString}, {"Outputs", outputsString}, {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} });
+
+                    xml.shortTag("WriteLinesToFile", { 
+                        { "File", "$(TLogLocation)" + targetName + ".read.1u.tlog" }, 
+                        { "Lines", readTlogString }, 
+                        { "Overwrite", "true" }, 
+                        { "Encoding", "Unicode" }, 
+                    });
+                    xml.shortTag("WriteLinesToFile", { 
+                        { "File", "$(TLogLocation)" + targetName + ".write.1u.tlog" }, 
+                        { "Lines", writeTlogString }, 
+                        { "Overwrite", "true" }, 
+                        { "Encoding", "Unicode" }, 
+                    });
+                    xml.shortTag("Message", { {"Text", command.description}, {"Importance", "high"} });
+                    xml.shortTag("Exec", { {"Command", "cd " + str::quote((pathOffset / command.workingDirectory).string()) + " && " + command.command} });
+                }
+
+                if(postBuild)
+                {
+                    buildDependsOn = buildDependsOn + ";" + targetName;
+                }
+                else
+                {
+                    buildDependsOn = targetName + ";" + buildDependsOn;
+                }
+
+                ++index;
             }
         }
 
@@ -538,9 +607,13 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         }        
 
         xml.closedTag("Import", {{ "Project", "$(VCTargetsPath)\\Microsoft.Cpp.targets"}});
-
         {
             auto tag = xml.tag("ImportGroup", {{"Label", "ExtensionTargets"}});
+        }
+
+        {
+            auto tag = xml.tag("PropertyGroup");
+            xml.shortTag("BuildDependsOn", {}, buildDependsOn);
         }
     }
 
@@ -665,16 +738,21 @@ void MsvcEmitter::run(cli::Context cliContext)
 
         auto& generatorProject = env.createProject("_generator", Command);
         {
+            auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
+            generatorProject.includePaths += buildHDir;
+            generatorProject.features += feature::Cpp17;
+            generatorProject.files += configureContext.configurationFile;
+            
             std::string argumentString;
             for(auto& arg : cliContext.allArguments)
             {   
                 argumentString += " " + str::quote(arg);
             }
 
-            // TODO: Should probably have a different output here. Possibly the solution file, 
-            // but it would get removed when doing a "clean" and I'm not sure that's a good idea.
-            auto outputPath = *targetPath / ".generator/msvc.cmdline";
-            generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { cliContext.configurationFile }, { outputPath }, cliContext.startPath, {}, "Check build config." };
+            // Input/output is set to dummy values to trigger a run every build.
+            // The VS up-to-date check does not support folders, and will trigger
+            // always anyway
+            generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { "__dummy__input__" }, { "__dummy__output__" }, cliContext.startPath, {}, "Check build config." };
         }
 
         for(auto& project : env.projects)
