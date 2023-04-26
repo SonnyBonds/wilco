@@ -69,18 +69,18 @@ struct SimpleXmlWriter
 
     void escape(std::string& input)
     {
+        str::replaceAllInPlace(input, "&", "&amp;"); // TODO: Maybe don't escape if it already is an &entity;...
         str::replaceAllInPlace(input, "<", "&lt;");
         str::replaceAllInPlace(input, ">", "&gt;");
-        str::replaceAllInPlace(input, "&", "&amp;"); // TODO: Maybe don't escape if it already is an &entity;...
         str::replaceAllInPlace(input, "\"", "&quot;");
         str::replaceAllInPlace(input, "'", "&apos;");
     }
 
     std::string escaped(std::string input)
     {
+        str::replaceAllInPlace(input, "&", "&amp;"); // TODO: Maybe don't escape if it already is an &entity;...
         str::replaceAllInPlace(input, "<", "&lt;");
         str::replaceAllInPlace(input, ">", "&gt;");
-        str::replaceAllInPlace(input, "&", "&amp;"); // TODO: Maybe don't escape if it already is an &entity;...
         str::replaceAllInPlace(input, "\"", "&quot;");
         str::replaceAllInPlace(input, "'", "&apos;");
         return input;
@@ -91,7 +91,7 @@ struct SimpleXmlWriter
         stream << str::padLeft("<" + tag, indent);
         for(auto& attribute : attributes)
         {
-            stream << " " << attribute.first << "=" << str::quote(attribute.second, ' ', {});
+            stream << " " << attribute.first << "=" << str::quote(escaped(attribute.second), ' ', {});
         }
         stream << ">\n";
         indent += 2;
@@ -105,7 +105,7 @@ struct SimpleXmlWriter
         stream << str::padLeft("<" + tag, indent);
         for(auto& attribute : attributes)
         {
-            stream << " " << attribute.first << "=" << str::quote(attribute.second, ' ', {});
+            stream << " " << attribute.first << "=" << str::quote(escaped(attribute.second), ' ', {});
         }
         stream << ">" << content << "</" << tag << ">\n";
     }
@@ -115,7 +115,7 @@ struct SimpleXmlWriter
         stream << str::padLeft("<" + tag, indent);
         for(auto& attribute : attributes)
         {
-            stream << " " << attribute.first << "=" << str::quote(attribute.second, ' ', {});
+            stream << " " << attribute.first << "=" << str::quote(escaped(attribute.second), ' ', {});
         }
         stream << " />\n";
     }
