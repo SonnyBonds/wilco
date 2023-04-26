@@ -388,15 +388,16 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     std::string additionalDependencies;
                     for (auto& lib : config.project->libs)
                     {
-                        std::string suffix;
-                        if (!lib.has_parent_path() && lib.is_relative())
+                        additionalDependencies += (pathOffset / lib).lexically_normal().string();
+                        if (!lib.has_extension())
                         {
-                            additionalDependencies += lib.string();
+                            additionalDependencies += ".lib";
                         }
-                        else
-                        {
-                            additionalDependencies += (pathOffset / lib).string();
-                        }
+                        additionalDependencies += ";";
+                    }
+                    for (auto& lib : config.project->systemLibs)
+                    {
+                        additionalDependencies += lib.string();
                         if (!lib.has_extension())
                         {
                             additionalDependencies += ".lib";
@@ -404,6 +405,13 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                         additionalDependencies += ";";
                     }
                     xml.shortTag("AdditionalDependencies", {}, additionalDependencies + "%(AdditionalDependencies)");
+
+                    std::string additionalLibraryDirectories;
+                    for (auto& libPath : config.project->libPaths)
+                    {
+                        additionalLibraryDirectories += (pathOffset / libPath).lexically_normal().string() + ";";
+                    }
+                    xml.shortTag("AdditionalLibraryDirectories", {}, additionalLibraryDirectories + "%(AdditionalLibraryDirectories)");
 
                     std::string extraFlags;
                     for (auto& flag : config.project->ext<extensions::Msvc>().linkerFlags)
