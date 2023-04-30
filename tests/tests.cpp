@@ -1,6 +1,6 @@
 #define CATCH_CONFIG_MAIN
 #define CUSTOM_BUILD_H_MAIN
-#include "build.h"
+#include "wilco.h"
 #undef INPUT
 #include "catch2/catch.hpp"
 

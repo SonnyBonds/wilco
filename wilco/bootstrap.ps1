@@ -5,7 +5,7 @@ $params["BUILD_FILE"] = $params["INPUT_BASE"]
 $params["OUTPUT_BASE"] = (Get-Item $params["INPUT_CPP"]).BaseName
 $params["BUILD_DIR"] = ([String](Split-Path -Path $params["INPUT_CPP"]) -replace "\\", "/")
 $params["OUTPUT"] = (Join-Path $params["BUILD_DIR"] ($params["OUTPUT_BASE"] + ".exe")) -replace "\\", "/"
-$params["BUILD_H_DIR"] = $PSScriptRoot -replace "\\", "/"
+$params["WILCO_DIR"] = $PSScriptRoot -replace "\\", "/"
 $params["START_DIR"] = (Get-Location).Path -replace "\\", "/"
 $params["BUILD_ARGS"] = $args | Select-Object -Skip 1
 
@@ -17,7 +17,7 @@ $selected_toolchain_desc = "(selected by default)"
 function Write-Usage()
 {
     $command = $MyInvocation.MyCommand
-    Write-Host "Usage: $command path/to/build.cpp [--help] [--toolchain=toolchain]" 
+    Write-Host "Usage: $command path/to/wilco.cpp [--help] [--toolchain=toolchain]" 
     if($toolchains.Count -gt 0)
     {
         Write-Host "Discovered toolchains:"
@@ -119,13 +119,13 @@ function Find-Cl {
     catch { return }
 
     $lib_flags = ($result["LIB_PATHS"] -split ";" | ForEach-Object { "/LIBPATH:" + $PSItem })
-    $include_flags = (($result["INCLUDE_PATHS"] -split ";") + (, $params["BUILD_H_DIR"]) | ForEach-Object { "/I" + $PSItem })
+    $include_flags = (($result["INCLUDE_PATHS"] -split ";") + (, $params["WILCO_DIR"]) | ForEach-Object { "/I" + $PSItem })
     $define_flags = ($params.Keys | ForEach-Object { "/D" + $PSItem + '=\"' + $params[$PSItem] + '\"' })
     
     $toolchains[$Id] = @{
         Description = $description
         Command = $CL
-        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi", "/MP") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
+        Args = ("/nologo", "/std:c++17", "/EHsc", "/Zi", "/MP") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["WILCO_DIR"] + "/src/*.cpp"), ("/Fe:" + $params["OUTPUT"]), "/link") + $lib_flags
         Declaration = "inline ClToolchainProvider ${Id}(`"$Id`", `"$CL`", `"$RC`",  `"$LINK`",  `"$LIB`", {$SYS_INCLUDES}, {$SYS_LIBS});`n"
     }
 
@@ -160,7 +160,7 @@ function Find-Clang {
     if (-not(Test-Path -Path $LINKER -PathType Leaf)) { return }
     if (-not(Test-Path -Path $ARCHIVER -PathType Leaf)) { return }
 
-    $include_flags = ((,$params["BUILD_H_DIR"]) | ForEach-Object { "-I" + $PSItem })
+    $include_flags = ((,$params["WILCO_DIR"]) | ForEach-Object { "-I" + $PSItem })
     $define_flags = ($params.Keys | ForEach-Object { "-D" + $PSItem + '=\"' + $params[$PSItem] + '\"' })
 
     $COMPILER = $COMPILER -replace "\\", "/"
@@ -171,7 +171,7 @@ function Find-Clang {
         Description = $Description + $where
         
         Command = "$COMPILER"
-        Args = (,"-g", "-static", "-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["BUILD_H_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
+        Args = (,"-g", "-static", "-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["WILCO_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
         Declaration = "inline GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`",  `"$LINKER`",  `"$ARCHIVER`");`n"
     }
 
@@ -217,7 +217,7 @@ foreach ($id in $toolchains.Keys)
 
 $toolchain_contents += "`n}`n`ninline ToolchainProvider* defaultToolchain = &detected_toolchains::${selected_toolchain};`n"
 
-Set-Content -Path ($params["BUILD_H_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
+Set-Content -Path ($params["WILCO_DIR"] + "/toolchains/_detected_toolchains.h") -Encoding ASCII -Value $toolchain_contents
 
 $toolchain = $toolchains[$selected_toolchain]
 $description = $toolchain["Description"]

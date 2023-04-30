@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 display_usage() { 
-	echo "Usage: $0 path/to/build.cpp [--help] [--toolchain=toolchain]" 
+	echo "Usage: $0 path/to/wilco.cpp [--help] [--toolchain=toolchain]" 
     if [ ! -z "$toolchain_list" ]; then
         echo "Discovered toolchains:"
         echo "$toolchain_list"
@@ -57,7 +57,7 @@ fi
 
 
 INPUT="$1"; shift
-BUILD_H_DIR=`full_path "$0"`
+WILCO_DIR=`full_path "$0"`
 BUILD_DIR=`full_path "$INPUT"`
 INPUT_BASE=$(basename "$INPUT")
 OUTPUT="${INPUT%.*}"
@@ -66,7 +66,7 @@ OUTPUT_BASE=$(basename "$OUTPUT")
 if [ ! -f "$INPUT" ]; then
     fail_usage "Expected a build source file as first argument, got $INPUT"
 elif [ "$INPUT" = "$OUTPUT" ]; then
-    fail_usage "Expected an input with extension, e.g. 'build.cpp', got $INPUT"
+    fail_usage "Expected an input with extension, e.g. 'wilco.cpp', got $INPUT"
 fi
 
 if [ "${OUTPUT#*/}" = "${OUTPUT}" ]; then
@@ -98,7 +98,7 @@ try_gcc()
     if [ -z "$4" ]; then return; fi
     if [ -z "$5" ]; then return; fi
     local selected=
-    local this_compile_command="$3"\ $6$7$8$9\ -g\ -std=c++17\ -I"$BUILD_H_DIR"\ -o\ "$OUTPUT"\ "$INPUT"\ "$BUILD_H_DIR"/src/*.cpp
+    local this_compile_command="$3"\ $6$7$8$9\ -g\ -std=c++17\ -I"$WILCO_DIR"\ -o\ "$OUTPUT"\ "$INPUT"\ "$WILCO_DIR"/src/*.cpp
     if [ -z "$selected_toolchain" ]; then
         local selected="(selected by default)"
         compile_command="$this_compile_command"
@@ -134,7 +134,7 @@ fi
 set -e
 echo "Bootstrapping using $selected_toolchain_desc"...
 #"$OUTPUT" "$@"
-echo "$toolchain_contents" > "$BUILD_H_DIR/toolchains/_detected_toolchains.h"
+echo "$toolchain_contents" > "$WILCO_DIR/toolchains/_detected_toolchains.h"
 $compile_command
 echo Done!
 echo Run \'"$OUTPUT"\' to build.
