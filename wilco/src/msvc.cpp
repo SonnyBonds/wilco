@@ -577,6 +577,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         }
 
         {
+            std::set<std::string> resFiles;
             auto tag = xml.tag("ItemGroup");
             for(auto& input : projectEntry.configs.front().project->files) // TODO: Not just pick files from the first config, but do something clever
             {
@@ -586,7 +587,18 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     continue;
                 }
 
-                xml.shortTag("ResourceCompile", { {"Include", (pathOffset / input.path).string()} });
+                auto tag = xml.tag("ResourceCompile", { {"Include", (pathOffset / input.path).string()} });
+
+                // Disambiguate files with the same name. Don't do this for all files, because msbuild
+                // only compiles files in parallel that have the exact same compile settings, and specific obj output
+                // will cause them to differ.
+                if (!resFiles.insert(input.path.filename().string()).second)
+                {
+                    std::string resPath = input.path.string();
+                    str::replaceAllInPlace(resPath, ":", "_");
+                    str::replaceAllInPlace(resPath, "..", "__");
+                    xml.shortTag("ResourceOutputFileName", {}, "$(IntDir)\\" + resPath + ".res");
+                }
             }
         }
 
