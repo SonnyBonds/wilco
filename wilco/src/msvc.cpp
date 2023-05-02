@@ -751,7 +751,8 @@ void MsvcEmitter::run(cli::Context cliContext)
     for(auto& profile : cli::Profile::list())
     {
         std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
-        confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
+        confArgs.insert(confArgs.end(), cliContext.allArguments.begin(), cliContext.allArguments.end());
+        confArgs.erase(std::remove(confArgs.begin(), confArgs.end(), "msvc"), confArgs.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
 
         Environment env = BuildConfigurator::configureEnvironment(configureContext);
