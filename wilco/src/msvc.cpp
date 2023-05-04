@@ -743,6 +743,11 @@ void MsvcEmitter::run(cli::Context cliContext)
 
     cliContext.extractArguments(arguments);
     
+    if(force)
+    {
+        configDirty = true;
+    }
+
     if(!configDirty)
     {
         return;

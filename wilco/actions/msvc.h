@@ -18,6 +18,8 @@
 class MsvcEmitter : public Action
 {
 public:
+    cli::BoolArgument force{arguments, "force", "Run even if no configuration changes are detected."};
+
     static ActionInstance<MsvcEmitter> instance;
 
     MsvcEmitter();
