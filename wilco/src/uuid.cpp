@@ -1,6 +1,7 @@
 #include "util/uuid.h"
 #include "util/hash.h"
 #include <iostream>
+#include <cstring>
 
 namespace uuid
 {
@@ -126,7 +127,7 @@ uuid generateV3(uuid nameSpace, std::string_view name) {
     std::string str;
     str.reserve(16 + name.size());
     str.resize(16);
-    memcpy(str.data(), nameSpace.data.data(), 16);
+    std::memcpy(str.data(), nameSpace.data.data(), 16);
     str += name;
     std::array<unsigned char, 16> data = hash::md5(str);
     data[6] = (data[6] & 0x0f) | (3 << 4);

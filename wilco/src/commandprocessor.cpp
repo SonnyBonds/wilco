@@ -5,8 +5,23 @@
 #include "fileutil.h"
 #include "dependencyparser.h"
 #include <assert.h>
+#include <thread>
+#include <filesystem>
 
 #define LOG_DIRTY_REASON 0
+
+namespace 
+{
+    // Some implementations provide a std::hash specialization for std::filesystem::path and some
+    // don't, so we roll our own (using std::filesystem::hash_value)
+    struct PathHash
+    {
+        std::size_t operator()(const std::filesystem::path& path) const
+        {
+            return std::filesystem::hash_value(path);
+        }
+    };
+}
 
 Signature computeFileSignature(std::filesystem::path path)
 {
@@ -145,7 +160,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
     auto& commandSignatures = database.getCommandSignatures();
     auto& depFileSignatures = database.getDepFileSignatures();
 
-    std::unordered_map<std::filesystem::path, SignaturePair> newInputSignatures;
+    std::unordered_map<std::filesystem::path, SignaturePair, PathHash> newInputSignatures;
 
     // Not loving this, but since the dependency map are indices
     // in the unfiltered commands we need the full list

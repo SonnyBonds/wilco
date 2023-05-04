@@ -9,6 +9,7 @@
 #include "util/hash.h"
 #include "util/interrupt.h"
 #include "commandprocessor.h"
+#include "toolchains/cl.h"
 
 static const int EXIT_RESTART = 10;
 
@@ -91,8 +92,10 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         ext = ".exe";
     }
 
-    auto tempPath = outputPath / std::filesystem::path(cliContext.configurationFile).filename().replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
-    auto buildOutput = std::filesystem::path(cliContext.configurationFile).replace_extension(ext);
+    auto tempPath = outputPath / std::filesystem::path(cliContext.configurationFile).filename();
+    tempPath.replace_extension(ext + (isSubProcess ? ".running_sub" : ".running"));
+    auto buildOutput = std::filesystem::path(cliContext.configurationFile);
+    buildOutput.replace_extension(ext);
     
     auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
 

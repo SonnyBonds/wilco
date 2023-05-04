@@ -2,6 +2,7 @@
 
 #include "modules/command.h"
 #include <array>
+#include <cstring>
 
 using CommandId = uint32_t;
 
@@ -17,7 +18,7 @@ struct std::hash<Signature>
         // Just use the first N bytes as hash
         std::size_t val;
         static_assert(sizeof(val) <= sizeof(Signature));
-        memcpy(&val, &signature, sizeof(val));
+        std::memcpy(&val, &signature, sizeof(val));
         return val;
     }
 };

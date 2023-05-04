@@ -1,6 +1,7 @@
 #include <array>
 #include <fstream>
 #include <iostream>
+#include <cstring>
 
 inline std::string readFile(std::filesystem::path path)
 {
@@ -60,7 +61,7 @@ inline bool writeFile(std::filesystem::path path, const std::string& data, bool 
                 {
                     break;
                 }
-                if(memcmp(data.data() + pos, buffer.data(), chunk) != 0)
+                if(std::memcmp(data.data() + pos, buffer.data(), chunk) != 0)
                 {
                     break;
                 }

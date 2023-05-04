@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 template<typename Callable>
 bool parseDependencyData(std::string& data, Callable callable)
 {
@@ -90,7 +92,7 @@ bool parseDependencyData(std::string& data, Callable callable)
             }
             if(offset > 0)
             {
-                memmove(data.data()+lastBreak-offset, data.data()+lastBreak, pos-lastBreak);
+                std::memmove(data.data()+lastBreak-offset, data.data()+lastBreak, pos-lastBreak);
             }
             if(escape)
             {
@@ -120,7 +122,7 @@ bool parseDependencyData(std::string& data, Callable callable)
             throw std::runtime_error("Failed to find end of string in input.");
         }
 
-        std::string_view result = data.substr(pos, endPos-pos);
+        std::string_view result = std::string_view(data).substr(pos, endPos-pos);
         pos = endPos + 1;
         return result;
     };

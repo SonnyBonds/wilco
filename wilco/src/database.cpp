@@ -5,9 +5,23 @@
 #include <fstream>
 #include <string_view>
 #include <iostream>
+#include <filesystem>
 
 #include "util/hash.h"
 #include "dependencyparser.h"
+
+namespace 
+{
+    // Some implementations provide a std::hash specialization for std::filesystem::path and some
+    // don't, so we roll our own (using std::filesystem::hash_value)
+    struct PathHash
+    {
+        std::size_t operator()(const std::filesystem::path& path) const
+        {
+            return std::filesystem::hash_value(path);
+        }
+    };
+}
 
 #pragma pack(1)
 struct Header
@@ -73,7 +87,7 @@ static void readData(std::string_view data, size_t& pos, char* output, size_t am
         throw std::runtime_error("Reading past the end of input.");
     }
 
-    memcpy(output, data.data() + pos, amount);
+    std::memcpy(output, data.data() + pos, amount);
     pos += amount;
 }
 
@@ -198,7 +212,7 @@ bool Database::load(std::filesystem::path path)
         Header loadedHeader = {};
         readData(_commandData, pos, (char*)(&loadedHeader), sizeof(Header));
         Header referenceHeader = {};
-        if(memcmp(&referenceHeader, &loadedHeader, sizeof(Header)) != 0)
+        if(std::memcmp(&referenceHeader, &loadedHeader, sizeof(Header)) != 0)
         {
             throw std::runtime_error("Mismatching header.");
         }
@@ -264,7 +278,7 @@ bool Database::load(std::filesystem::path path)
         Header loadedHeader = {};
         readData(_dependencyData, pos, (char*)(&loadedHeader), sizeof(Header));
         Header referenceHeader = {};
-        if(memcmp(&referenceHeader, &loadedHeader, sizeof(Header)) != 0)
+        if(std::memcmp(&referenceHeader, &loadedHeader, sizeof(Header)) != 0)
         {
             throw std::runtime_error("Mismatching header.");
         }
@@ -384,7 +398,7 @@ void Database::setCommands(std::vector<CommandEntry> commands)
     std::vector<CommandSortProxy> sortProxies;
     sortProxies.reserve(commands.size());
 
-    std::unordered_map<std::filesystem::path, CommandId> commandMap;
+    std::unordered_map<std::filesystem::path, CommandId, PathHash> commandMap;
     for(uint32_t i=0; i<commands.size(); ++i)
     {
         sortProxies.push_back({i});
@@ -517,7 +531,7 @@ void Database::setCommands(std::vector<CommandEntry> commands)
 
 void Database::rebuildFileDependencies()
 {
-    std::unordered_set<std::filesystem::path> outputs;
+    std::unordered_set<std::filesystem::path, PathHash> outputs;
     for(size_t index = 0; index < _commands.size(); ++index)
     {
         for(auto& output : _commands[index].outputs)
@@ -529,7 +543,7 @@ void Database::rebuildFileDependencies()
     _depFileSignatures.clear();
     _depFileSignatures.reserve(_commands.size());
 
-    std::unordered_map<std::filesystem::path, std::vector<uint32_t>> depCommands;
+    std::unordered_map<std::filesystem::path, std::vector<uint32_t>, PathHash> depCommands;
     for(size_t index = 0; index < _commands.size(); ++index)
     {
         auto& command = _commands[index];
@@ -558,7 +572,7 @@ void Database::rebuildFileDependencies()
         }
     }
 
-    std::unordered_map<std::filesystem::path, SignaturePair> existingSignatures;
+    std::unordered_map<std::filesystem::path, SignaturePair, PathHash> existingSignatures;
     for(auto& dep : _fileDependencies)
     {
         existingSignatures[dep.path] = dep.signaturePair;
