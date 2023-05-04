@@ -6,8 +6,8 @@
 *.ilk
 *.prev
 bin
-build
-build.exe
-!build/
+wilco
+wilco.exe
+!wilco/
 buildfiles
 _detected_toolchains.h
