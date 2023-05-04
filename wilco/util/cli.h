@@ -50,6 +50,7 @@ struct Argument
             auto& argStr = *it;
             if(tryExtractArgument(argStr))
             {
+                rawValue = argStr;
                 values.erase(it);
                 return;
             }
@@ -66,6 +67,7 @@ struct Argument
 
     std::string example;
     std::string description;
+    std::string rawValue;
 
     static inline std::vector<cli::Argument*>& globalList()
     {

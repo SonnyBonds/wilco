@@ -23,6 +23,8 @@ DirectBuilder::TargetArgument::TargetArgument(std::vector<cli::Argument*>& argum
 
 void DirectBuilder::TargetArgument::extract(std::vector<std::string>& inputValues)
 {
+    rawValue.clear();
+
     auto it = inputValues.begin();
     while(it != inputValues.end())
     {
@@ -30,9 +32,10 @@ void DirectBuilder::TargetArgument::extract(std::vector<std::string>& inputValue
            it->substr(0, 2) == "--")
         {
             ++it;
-            continue;            
+            continue;
         }
         values.push_back(std::move(*it));
+        rawValue += (rawValue.empty() ? "" : " ") + *it;
         inputValues.erase(it);
     }
 }

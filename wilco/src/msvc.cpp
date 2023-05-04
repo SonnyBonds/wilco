@@ -717,11 +717,22 @@ void MsvcEmitter::run(cli::Context cliContext)
     Database configDatabase;
     bool configDirty = !configDatabase.load(configDatabasePath);
 
-    std::vector<std::string> args;
-    args = cliContext.allArguments;
-    if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
+    std::vector<std::string> baseArguments;
+
+    for(auto& argument : cli::Argument::globalList())
     {
-        configDirty = true;
+        if(!argument->rawValue.empty())
+        {
+            baseArguments.push_back(argument->rawValue);
+        }
+    }
+
+    if(!configDirty)
+    {
+        if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(baseArguments, "\n"))
+        {
+            configDirty = true;
+        }
     }
 
     if(!configDirty)
@@ -730,12 +741,12 @@ void MsvcEmitter::run(cli::Context cliContext)
         configDirty = !configCommands.empty();
     }
 
+    cliContext.extractArguments(arguments);
+    
     if(!configDirty)
     {
         return;
     }
-
-    cliContext.extractArguments(arguments);
 
     struct ProfileEntry
     {
@@ -748,11 +759,11 @@ void MsvcEmitter::run(cli::Context cliContext)
     std::vector<StringId> profileNames;
     std::set<std::string> projectNames;
     std::vector<ProfileEntry> profiles;
+
     for(auto& profile : cli::Profile::list())
     {
         std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
-        confArgs.insert(confArgs.end(), cliContext.allArguments.begin(), cliContext.allArguments.end());
-        confArgs.erase(std::remove(confArgs.begin(), confArgs.end(), "msvc"), confArgs.end());
+        confArgs.insert(confArgs.end(), baseArguments.begin(), baseArguments.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
 
         Environment env = BuildConfigurator::configureEnvironment(configureContext);
@@ -794,7 +805,7 @@ void MsvcEmitter::run(cli::Context cliContext)
         profiles.push_back({profile.name, std::move(env.projects)});
     }
 
-    BuildConfigurator::updateConfigDatabase(configDatabase, args);
+    BuildConfigurator::updateConfigDatabase(configDatabase, baseArguments);
     
     std::vector<ProjectMatrixEntry> projectMatrix;
     for(auto& projectName : projectNames)

@@ -48,6 +48,7 @@ void Configure::ProfileArgument::extract(std::vector<std::string>& inputValues)
         {
             if(profile.name == profileName)
             {
+                rawValue = *it;
                 inputValues.insert(inputValues.end(), profile.arguments.begin(), profile.arguments.end());
                 return;
             }
