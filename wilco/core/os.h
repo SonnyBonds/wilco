@@ -20,6 +20,6 @@ inline OperatingSystem OperatingSystem::current()
 #elif defined(__linux__)
     return Linux;
 #else
-#error "Can't determine what Operating System we're compiling on
+#error "Can't determine what Operating System we're compiling on"
 #endif
 }
