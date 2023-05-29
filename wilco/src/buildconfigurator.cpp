@@ -28,20 +28,6 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
     std::filesystem::create_directories(dataDir);
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), dataDir);
 
-    auto& commands = project.commands;
-    if(project.type == Command && commands.empty())
-    {
-        throw std::runtime_error("Command project '" + project.name + "' has no commands.");
-    }
-
-    {
-        std::filesystem::path output = project.output;
-        if(output.has_parent_path())
-        {
-            std::filesystem::create_directories(output.parent_path());
-        }
-    }
-
     const ToolchainProvider* toolchain = project.toolchain;
     if(!toolchain)
     {
@@ -50,26 +36,19 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
 
     auto toolchainOutputs = toolchain->process(project, {}, dataDir);
 
-    collectedCommands.reserve(collectedCommands.size() + commands.size() + 1);
-    for(auto& command : commands)
+    if(project.type == Command && project.commands.empty())
     {
-        CommandEntry adjustedCommand = command;
+        throw std::runtime_error("Command project '" + project.name + "' has no commands.");
+    }
 
-        std::filesystem::path cwd = command.workingDirectory;
-        if(cwd.empty())
-        {
-            cwd = ".";
-        }
-        std::string cwdStr = cwd.string();
-        if(!command.command.empty())
-        {
-            adjustedCommand.command = "cd \"" + cwdStr + "\" && " + command.command;
-        }
-        else if(!command.outputs.empty())
+    collectedCommands.reserve(collectedCommands.size() + project.commands.size() + 1);
+    for(auto& command : project.commands)
+    {
+        if(command.command.empty() && !command.outputs.empty())
         {
             throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has outputs but no actual command to produce them.");
         }
-        collectedCommands.push_back(std::move(adjustedCommand));
+        collectedCommands.push_back(command);
     }
 
     CommandEntry phonyProjectCommand;
@@ -149,7 +128,7 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
 
     if(!configDirty)
     {
-        auto configCommands = filterCommands(cliContext.startPath, configDatabase, dataPath, {});
+        auto configCommands = filterCommands(configDatabase, cliContext.startPath, {});
         configDirty = !configCommands.empty();
     }
 

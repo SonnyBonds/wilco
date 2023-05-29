@@ -169,6 +169,11 @@ struct ListPropertyValue
     {
         _value.clear();
     }
+
+    const std::vector<ValueType>& vector() const
+    {
+        return _value;
+    }
     
 private:
     struct IndexedValueEquals

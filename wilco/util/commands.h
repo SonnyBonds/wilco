@@ -131,4 +131,6 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, b
     return commandEntry;
 }
 
+bool runCommands(std::vector<CommandEntry> commands, std::string databaseName);
+
 }

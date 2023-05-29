@@ -737,7 +737,7 @@ void MsvcEmitter::run(cli::Context cliContext)
 
     if(!configDirty)
     {
-        auto configCommands = filterCommands(cliContext.startPath, configDatabase, *targetPath, {});
+        auto configCommands = filterCommands(configDatabase, cliContext.startPath, {});
         configDirty = !configCommands.empty();
     }
 

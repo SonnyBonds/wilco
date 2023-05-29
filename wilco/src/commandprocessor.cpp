@@ -1,4 +1,5 @@
 #include "commandprocessor.h"
+#include "core/action.h"
 #include "util/hash.h"
 #include "util/string.h"
 #include "util/interrupt.h"
@@ -142,7 +143,12 @@ static process::ProcessResult runCommand(const CommandEntry& command)
         }
     }
 
-    process::ProcessResult result = process::run(command.command + " 2>&1");
+    // TODO: The cd "." isn't necessariy if workingDirectory is empty, but for some reason
+    // the command doesn't run properly without it on Windows. Need to figure out why.
+    std::string cwdString = command.workingDirectory.empty() ? "." : command.workingDirectory.string();
+    std::string commandString = "cd \"" + cwdString + "\" && " + command.command + " 2>&1";
+
+    process::ProcessResult result = process::run(commandString);
 
     if(!command.rspFile.empty())
     {
@@ -363,7 +369,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
     return completed;
 }
 
-std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath, Database& database, const std::filesystem::path& dataPath, std::vector<StringId> targets)
+std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::path invocationPath, std::vector<StringId> targets)
 {
     bool allIncluded = targets.empty();
 
@@ -515,4 +521,21 @@ std::vector<PendingCommand> filterCommands(std::filesystem::path invocationPath,
         }), filteredCommands.end());
 
     return filteredCommands;
+}
+
+bool commands::runCommands(std::vector<CommandEntry> commands, std::string databaseName) {
+    auto databasePath = *targetPath / ("." + databaseName + "_db");
+    Database database;
+    database.load(databasePath);
+    database.setCommands(std::move(commands));
+    auto filteredCommands = filterCommands(database);
+    if(filteredCommands.empty())
+    {
+        return false;
+    }
+    
+    size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+    size_t completedCommands = runCommands(filteredCommands, database, maxConcurrentCommands, false);
+    database.save(databasePath);
+    return true;
 }

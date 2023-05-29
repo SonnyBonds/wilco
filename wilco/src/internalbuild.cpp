@@ -55,7 +55,7 @@ void DirectBuilder::run(cli::Context cliContext)
     
     BuildConfigurator configurator(cliContext);
 
-    auto filteredCommands = filterCommands(cliContext.startPath, configurator.database, configurator.dataPath, targets.values);
+    auto filteredCommands = filterCommands(configurator.database, cliContext.startPath, targets.values);
 
     if(filteredCommands.empty())
     {
@@ -132,7 +132,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         database.setCommands(std::move(commands));
     }
 
-    auto filteredCommands = filterCommands(cliContext.startPath, database, outputPath, {});
+    auto filteredCommands = filterCommands(database, cliContext.startPath, {});
 
     // If nothing is to be done...
     if(filteredCommands.empty())

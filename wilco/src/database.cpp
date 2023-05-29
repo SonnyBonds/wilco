@@ -176,6 +176,7 @@ static DepFile readDepFile(std::string_view data, size_t& pos)
 Signature computeCommandSignature(const CommandEntry& command)
 {
     hash::Md5 hasher;
+    hasher.digest(command.workingDirectory.string());
     hasher.digest(command.command);
     hasher.digest(command.rspContents);
     for(auto& input : command.inputs)
