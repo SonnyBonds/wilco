@@ -644,54 +644,79 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
             {"xmlns", "http://schemas.microsoft.com/developer/msbuild/2003"}
         });
 
-        std::set<std::filesystem::path> existingFilters;
+        struct GroupItem
         {
+            std::filesystem::path file;
+            std::string filter;
+        };
+
+        std::map<std::string, std::vector<GroupItem>> groups;
+
+        {
+            std::set<std::filesystem::path> existingFilters;
+
+            // TODO: Ideally the filters should be configurable, but try to just do something that makes sense for now,
+            // and starting with ".." is probably not what's expected.
+            auto cleanRelativePath = [](std::filesystem::path& path)
+            {
+                std::filesystem::path rel;
+                auto it = path.begin();
+                while (it != path.end() && *it == "..")
+                {
+                    rel = ".." / rel;
+                    it++;
+                }
+                if (rel.empty())
+                {
+                    return;
+                }
+
+                path = path.lexically_proximate(rel);
+            };
+
             auto tag = filtersXml.tag("ItemGroup");
 
             for (auto& input : projectEntry.configs.front().project->files) // TODO: Not just pick files from the first config, but do something clever
             {
                 auto filterPath = input.path.lexically_normal();
-                while (filterPath.has_parent_path() && filterPath.has_relative_path())
+                cleanRelativePath(filterPath);
+
+                bool first = true;
+                std::string filter;
+
+                auto parentPath = filterPath;
+                while (parentPath.has_parent_path() && parentPath.has_relative_path())
                 {
-                    filterPath = filterPath.parent_path();
-                    if (!existingFilters.insert(filterPath).second)
+                    parentPath = parentPath.parent_path();
+                    if (!existingFilters.insert(parentPath).second)
                     {
                         continue;
                     }
-                    auto filterPathStr = filterPath.string();
+                    auto filterPathStr = parentPath.string();
                     auto tag = filtersXml.tag("Filter", { {"Include", filterPathStr} });
                     filtersXml.shortTag("UniqueIdentifier", {}, uuidStr(uuid::generateV3(filterNamespaceUuid, filterPathStr)));
                 }
-            }
-        }
 
-        {
-            auto tag = filtersXml.tag("ItemGroup");
-            for (auto& input : projectEntry.configs.front().project->files) // TODO: Not just pick files from the first config, but do something clever
-            {
-                auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-                if (language != lang::C && language != lang::Cpp)
-                {
-                    continue;
-                }
-
-                auto tag = filtersXml.tag("ClCompile", { {"Include", (pathOffset / input.path).string()} });
-                filtersXml.shortTag("Filter", {}, input.path.lexically_normal().parent_path().string());
-            }
-        }
-
-        {
-            auto tag = filtersXml.tag("ItemGroup");
-            for (auto& input : projectEntry.configs.front().project->files) // TODO: Not just pick files from the first config, but do something clever
-            {
                 auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
                 if (language == lang::C || language == lang::Cpp)
                 {
-                    continue;
+                    groups["ClCompile"].push_back({ input.path, filterPath.parent_path().string() });
                 }
+                else // TODO: More group types, although I'm not sure what difference it makes
+                {
+                    groups["None"].push_back({ input.path, filterPath.parent_path().string() });
+                }
+            }
+        }
 
-                auto tag = filtersXml.tag("None", { {"Include", (pathOffset / input.path).string()} });
-                filtersXml.shortTag("Filter", {}, input.path.lexically_normal().parent_path().string());
+        for(auto& group : groups)
+        {
+            auto tag = filtersXml.tag("ItemGroup");
+
+            for(auto& item : group.second)
+            {
+                auto tag = filtersXml.tag(group.first, { {"Include", (pathOffset / item.file).string()} });
+                filtersXml.shortTag("Filter", {}, item.filter);
             }
         }
     }
