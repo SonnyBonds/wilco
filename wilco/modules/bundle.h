@@ -41,7 +41,7 @@ struct BundleEntry
 template<>
 struct std::hash<BundleEntry>
 {
-    std::size_t operator()(BundleEntry const& entry) const
+    std::size_t operator()(const BundleEntry& entry) const
     {
         std::size_t h = std::filesystem::hash_value(entry.source);
         h = h ^ (std::filesystem::hash_value(entry.target) << 1);

@@ -153,7 +153,7 @@ namespace
     };
 }
 
-static void collectDependencyReferences(const Project& project, std::vector<ProjectReference>& result, StringId config)
+static void collectDependencyReferences(const Project& project, std::vector<ProjectReference>& result, std::string config)
 {
     auto existingProject = std::find_if(result.begin(), result.end(), [&project](const ProjectReference& ref) { return ref.project == &project; });
     if(existingProject != result.end())
@@ -169,7 +169,7 @@ static void collectDependencyReferences(const Project& project, std::vector<Proj
     }
 }
 
-static std::vector<ProjectReference> collectDependencyReferences(const Project& project, StringId config)
+static std::vector<ProjectReference> collectDependencyReferences(const Project& project, std::string config)
 {
     std::vector<ProjectReference> result;
 
@@ -186,9 +186,9 @@ namespace
 
 struct ProjectConfig
 {
-    StringId name;
+    std::string name;
     Project* project = nullptr;
-    std::unordered_set<StringId> ignorePch;
+    std::unordered_set<std::string> ignorePch;
 };
 
 struct ProjectMatrixEntry
@@ -225,8 +225,8 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
             auto tag = xml.tag("ItemGroup", {{"Label", "ProjectConfigurations"}});
             for(auto& config : projectEntry.configs)
             {
-                auto tag = xml.tag("ProjectConfiguration", {{"Include", std::string(config.name.cstr()) + "|" + platformStr}});
-                xml.shortTag("Configuration", {}, config.name.cstr());
+                auto tag = xml.tag("ProjectConfiguration", {{"Include", std::string(config.name.c_str()) + "|" + platformStr}});
+                xml.shortTag("Configuration", {}, config.name.c_str());
                 xml.shortTag("Platform", {}, platformStr);
             }
         }
@@ -244,7 +244,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         for(auto& config : projectEntry.configs)
         {
             auto tag = xml.tag("PropertyGroup", {
-                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"}, 
+                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"}, 
                 {"Label", "Configuration"}
             });
 
@@ -263,7 +263,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         for(auto& config : projectEntry.configs)
         {
             auto tag = xml.tag("ImportGroup", {
-                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"}, 
+                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"}, 
                 {"Label", "PropertySheets"}
             });
 
@@ -279,13 +279,13 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         for(auto& config : projectEntry.configs)
         {
             auto tag = xml.tag("PropertyGroup", {
-                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"}, 
+                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"}, 
                 {"Label", "PropertySheets"}
             });
 
             auto outputPath = std::filesystem::absolute(config.project->output);
             xml.shortTag("OutDir", {}, outputPath.parent_path().string() + "\\");
-            xml.shortTag("IntDir", {}, (projectDir / std::filesystem::path("obj") / std::string(config.name.cstr()) / config.project->name).string() + "\\");
+            xml.shortTag("IntDir", {}, (projectDir / std::filesystem::path("obj") / std::string(config.name.c_str()) / config.project->name).string() + "\\");
             xml.shortTag("TargetName", {}, outputPath.stem().string());
             xml.shortTag("TargetExt", {}, outputPath.extension().string());
         }
@@ -293,7 +293,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
         for(auto& config : projectEntry.configs)
         {
             auto tag = xml.tag("ItemDefinitionGroup", {
-                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"}, 
+                {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"}, 
                 {"Label", "PropertySheets"}
             });
 
@@ -456,11 +456,11 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     const auto& msvcExt = config.project->ext<extensions::Msvc>();
                     if (!msvcExt.pch.source.empty() && msvcExt.pch.source == input.path)
                     {
-                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "Create");
+                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"} }, "Create");
                     }
-                    else if(config.ignorePch.find(StringId(input.path.string())) != config.ignorePch.end())
+                    else if(config.ignorePch.find(input.path.string()) != config.ignorePch.end())
                     {
-                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} }, "NotUsing");
+                        xml.shortTag("PrecompiledHeader", { {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"} }, "NotUsing");
                     }
                 }
             }
@@ -484,7 +484,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no outputs.");
                 }
 
-                auto targetName = "Command" + std::to_string(index) + "_" + config.name.cstr();
+                auto targetName = "Command" + std::to_string(index) + "_" + config.name.c_str();
 
                 std::string inputsString;
                 std::string outputsString;
@@ -545,7 +545,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                 }
 
                 {
-                    auto tag = xml.tag("Target", { {"Name", targetName}, {"Inputs", inputsString}, {"Outputs", outputsString}, {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.cstr()) + "|" + platformStr + "'"} });
+                    auto tag = xml.tag("Target", { {"Name", targetName}, {"Inputs", inputsString}, {"Outputs", outputsString}, {"Condition", "'$(Configuration)|$(Platform)'=='" + std::string(config.name.c_str()) + "|" + platformStr + "'"} });
 
                     xml.shortTag("WriteLinesToFile", { 
                         { "File", "$(TLogLocation)" + targetName + ".read.1u.tlog" }, 
@@ -780,19 +780,19 @@ void MsvcEmitter::run(cli::Context cliContext)
 
     struct ProfileEntry
     {
-        StringId name;
+        std::string name;
         std::vector<std::unique_ptr<Project>> projects;
     };
 
     std::filesystem::create_directories(*targetPath);
 
-    std::vector<StringId> profileNames;
+    std::vector<std::string> profileNames;
     std::set<std::string> projectNames;
     std::vector<ProfileEntry> profiles;
 
     for(auto& profile : cli::Profile::list())
     {
-        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
+        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.c_str() };
         confArgs.insert(confArgs.end(), baseArguments.begin(), baseArguments.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
 
@@ -864,7 +864,7 @@ void MsvcEmitter::run(cli::Context cliContext)
             configEntry.ignorePch.reserve(msvcExt.pch.ignoredFiles.size());
             for (auto& file : msvcExt.pch.ignoredFiles)
             {
-                configEntry.ignorePch.insert(StringId(file.lexically_normal().string()));
+                configEntry.ignorePch.insert(file.lexically_normal().string());
             }
 
             projectEntry.configs.push_back(std::move(configEntry));
@@ -900,7 +900,7 @@ void MsvcEmitter::run(cli::Context cliContext)
     solutionStream << "\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n";
     for(auto& profile : profiles)
     {
-        auto cfgStr = std::string(profile.name.cstr()) + "|" + platformStr;
+        auto cfgStr = std::string(profile.name.c_str()) + "|" + platformStr;
         solutionStream << "\t\t" << cfgStr << " = " << cfgStr << "\n";
     }
     solutionStream << "\tEndGlobalSection\n";
@@ -910,7 +910,7 @@ void MsvcEmitter::run(cli::Context cliContext)
     {
         for(auto& project : profile.projects)
         {
-            auto cfgStr = std::string(profile.name.cstr()) + "|" + platformStr;
+            auto cfgStr = std::string(profile.name.c_str()) + "|" + platformStr;
             auto uuidStr = calcProjectUuid(project->name);
             solutionStream << "\t\t" << uuidStr << "." << cfgStr << ".ActiveCfg = " << cfgStr << "\n";
             solutionStream << "\t\t" << uuidStr << "." << cfgStr << ".Build.0 = " << cfgStr << "\n";

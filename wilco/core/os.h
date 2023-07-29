@@ -1,9 +1,25 @@
 #pragma once
 
-#include "core/stringid.h"
+#include <string>
 
-struct OperatingSystem : public StringId {
+struct OperatingSystem {
+    std::string id;
+
     static inline OperatingSystem current();
+
+    bool operator ==(const OperatingSystem& other) const { return id == other.id; }
+    bool operator !=(const OperatingSystem& other) const { return id != other.id; }
+    bool operator <(const OperatingSystem& other) const { return id < other.id; }
+    operator const std::string&() const { return id; }
+};
+
+template<>
+struct std::hash<OperatingSystem>
+{
+    std::size_t operator()(const OperatingSystem& os) const
+    {
+        return std::hash<std::string>{}(os.id);
+    }
 };
 
 inline OperatingSystem Windows{"Windows"};

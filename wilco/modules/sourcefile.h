@@ -1,8 +1,7 @@
 #pragma once
 
 #include <filesystem>
-
-#include "core/stringid.h"
+#include <string>
 #include "modules/language.h"
 
 struct SourceFile
@@ -30,7 +29,7 @@ struct SourceFile
 template<>
 struct std::hash<SourceFile>
 {
-    std::size_t operator()(SourceFile const& sourceFile) const
+    std::size_t operator()(const SourceFile& sourceFile) const
     {
         return std::filesystem::hash_value(sourceFile.path);
     }

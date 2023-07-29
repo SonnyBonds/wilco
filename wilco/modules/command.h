@@ -56,7 +56,7 @@ struct CommandEntry
 template<>
 struct std::hash<CommandEntry>
 {
-    std::size_t operator()(CommandEntry const& command) const
+    std::size_t operator()(const CommandEntry& command) const
     {
         std::size_t h = std::hash<std::string>{}(command.command);
         for(auto& output : command.outputs)

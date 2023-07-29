@@ -13,7 +13,7 @@ static constexpr Signature EMPTY_SIGNATURE = {};
 template<>
 struct std::hash<Signature>
 {
-    std::size_t operator()(Signature const& signature) const
+    std::size_t operator()(const Signature& signature) const
     {
         // Just use the first N bytes as hash
         std::size_t val;

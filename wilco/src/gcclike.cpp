@@ -46,12 +46,14 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, s
     {
         flags += " -I\"" + (pathOffset / path).string() + "\"";
     }
-    if(project.platform == StringId("x64"))
+    
+    // TODO: Platform support
+    //if(project.platform == "x64")
     {
         flags += " -m64 -arch x86_64";
     }
 
-    std::unordered_map<Feature, std::string, std::hash<StringId>> featureMap = {
+    std::unordered_map<Feature, std::string> featureMap = {
         { feature::Optimize, " -O2"},
         { feature::OptimizeSize, " -Os"},
         { feature::DebugSymbols, " -g"},
@@ -260,7 +262,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         pchInputs.push_back(inputObjCpp);
     }
 
-    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerFlags;
+    std::unordered_map<Language, std::string, std::hash<std::string>> commonCompilerFlags;
     auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
         auto it = commonCompilerFlags.find(language);
         if(it != commonCompilerFlags.end())

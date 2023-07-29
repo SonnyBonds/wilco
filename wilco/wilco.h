@@ -3,7 +3,6 @@
 #include "core/environment.h"
 #include "core/project.h"
 #include "core/property.h"
-#include "core/stringid.h"
 
 #include "actions/clean.h"
 #include "actions/direct.h"

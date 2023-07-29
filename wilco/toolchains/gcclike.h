@@ -14,9 +14,9 @@ namespace extensions
 {
     struct Gcc
     {
-        ListPropertyValue<StringId> compilerFlags;
-        ListPropertyValue<StringId> linkerFlags;
-        ListPropertyValue<StringId> archiverFlags;
+        ListPropertyValue<std::string> compilerFlags;
+        ListPropertyValue<std::string> linkerFlags;
+        ListPropertyValue<std::string> archiverFlags;
     
         struct Pch
         {

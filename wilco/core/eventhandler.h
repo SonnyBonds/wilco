@@ -4,7 +4,6 @@
 
 #include "core/project.h"
 #include "core/os.h"
-#include "core/stringid.h"
 
 struct EventHandler;
 struct Environment;
@@ -22,6 +21,6 @@ struct EventHandler
     EventHandler(const EventHandler& other) = delete;
     EventHandler& operator=(const EventHandler& other) = delete;
 
-    virtual void postResolve(Environment& env, const Project& project, ProjectSettings& resolvedSettings, std::optional<ProjectType> type, StringId configName, OperatingSystem targetOS)
+    virtual void postResolve(Environment& env, const Project& project, ProjectSettings& resolvedSettings, std::optional<ProjectType> type, std::string configName, OperatingSystem targetOS)
     { }
 };

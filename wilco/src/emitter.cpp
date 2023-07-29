@@ -20,7 +20,7 @@ const std::vector<Action*>& Actions::list()
     return getActions();
 }
 
-Action::Action(StringId name, std::string description)
+Action::Action(std::string name, std::string description)
     : name(name)
     , description(std::move(description))
 {

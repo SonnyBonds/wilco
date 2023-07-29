@@ -1,6 +1,22 @@
 #pragma once
 
-struct Feature : public StringId {};
+struct Feature {
+    std::string id;
+
+    bool operator ==(const Feature& other) const { return id == other.id; }
+    bool operator !=(const Feature& other) const { return id != other.id; }
+    bool operator <(const Feature& other) const { return id < other.id; }
+    operator const std::string&() const { return id; }
+};
+
+template<>
+struct std::hash<Feature>
+{
+    std::size_t operator()(const Feature& feature) const
+    {
+        return std::hash<std::string>{}(feature.id);
+    }
+};
 
 namespace feature
 {

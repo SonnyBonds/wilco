@@ -1,6 +1,5 @@
 #include "core/environment.h"
 #include "core/os.h"
-#include "core/stringid.h"
 #include "actions/direct.h"
 #include "util/commands.h"
 #include "util/cli.h"
@@ -10,6 +9,7 @@
 
 #include <sstream>
 #include <chrono>
+#include <string>
 
 void printUsage(cli::Context& cliContext)
 {

@@ -9,7 +9,6 @@
 
 #include "core/os.h"
 #include "core/property.h"
-#include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/feature.h"
 #include "modules/toolchain.h"
@@ -49,7 +48,6 @@ inline std::string outputExtension(ProjectType type, OperatingSystem os = Operat
 struct ProjectSettings
 {
     ListPropertyValue<CommandEntry> commands;
-    StringId platform;
     ListPropertyValue<std::filesystem::path> includePaths;
     ListPropertyValue<std::filesystem::path> libPaths;
     ListPropertyValue<SourceFile> files;
@@ -94,7 +92,6 @@ struct ProjectSettings
     void import(const ProjectSettings& other)
     {
         commands += other.commands;
-        if(!other.platform.empty()) platform = other.platform;
         includePaths += other.includePaths;
         libPaths += other.libPaths;
         files += other.files;

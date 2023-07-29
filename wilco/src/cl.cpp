@@ -227,8 +227,8 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         pchOutputStr = str::quote(pchOutput.string());
     }
 
-    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerArgs;
-    std::unordered_map<Language, std::string, std::hash<StringId>> commonCompilerCommand;
+    std::unordered_map<Language, std::string> commonCompilerArgs;
+    std::unordered_map<Language, std::string> commonCompilerCommand;
     auto getCommonCompilerArgs = [&](Language language) -> const std::string& {
         auto it = commonCompilerArgs.find(language);
         if(it != commonCompilerArgs.end())
@@ -262,11 +262,11 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
     auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, pathOffset);
 
-    std::unordered_set<StringId> ignorePch;
+    std::unordered_set<std::string> ignorePch;
     ignorePch.reserve(msvcExt.pch.ignoredFiles.size());
     for (auto& file : msvcExt.pch.ignoredFiles)
     {
-        ignorePch.insert(StringId(file.lexically_normal().string()));
+        ignorePch.insert(file.lexically_normal().string());
     }
 
     std::vector<std::filesystem::path> linkerInputs;
@@ -299,7 +299,7 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
                 command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.filename().string());
                 command.outputs.push_back(pchOutput);
             }
-            else if(ignorePch.find(StringId(input.path.lexically_normal().string())) != ignorePch.end())
+            else if(ignorePch.find(input.path.lexically_normal().string()) != ignorePch.end())
             {
                 command.rspContents += " /Y-";
             }

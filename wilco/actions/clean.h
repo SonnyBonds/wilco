@@ -16,7 +16,7 @@ private:
 
         virtual void reset() override;
 
-        std::vector<StringId> values;
+        std::vector<std::string> values;
     };
 
 public:

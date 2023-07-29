@@ -5,7 +5,6 @@
 
 #include "core/environment.h"
 #include "core/project.h"
-#include "core/stringid.h"
 #include "util/cli.h"
 
 extern cli::PathArgument targetPath;
@@ -31,12 +30,12 @@ struct ActionInstance
 
 struct Action
 {
-    const StringId name;
+    const std::string name;
     const std::string description;
     std::vector<cli::Argument*> arguments;
     std::vector<std::string> generatorCliArguments;
 
-    Action(StringId name, std::string description);
+    Action(std::string name, std::string description);
 
     Action(const Action& other) = delete;
     Action& operator=(const Action& other) = delete;

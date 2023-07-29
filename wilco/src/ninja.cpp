@@ -96,7 +96,7 @@ static std::string_view depFileFormatStr(const CommandEntry& command)
     }
 }
 
-static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, StringId profileName, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, std::string profileName, bool generator)
 {
     std::filesystem::path dataDir = project.dataDir;
     if(dataDir.empty())
@@ -303,7 +303,7 @@ void NinjaEmitter::run(cli::Context cliContext)
         // config dependencies.
         Environment::configurationDependencies = baseConfigDependencies;
         
-        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.cstr() };
+        std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.c_str() };
         confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
 
@@ -312,7 +312,7 @@ void NinjaEmitter::run(cli::Context cliContext)
         std::filesystem::path profileTargetPath = *targetPath;
         if(!profile.name.empty())
         {
-            profileTargetPath = profileTargetPath / profile.name.cstr();
+            profileTargetPath = profileTargetPath / profile.name.c_str();
         }
         std::filesystem::create_directories(profileTargetPath);
 

@@ -369,7 +369,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
     return completed;
 }
 
-std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::path invocationPath, std::vector<StringId> targets)
+std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::path invocationPath, std::vector<std::string> targets)
 {
     bool allIncluded = targets.empty();
 
@@ -388,15 +388,15 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
 
     struct ExpandedTarget
     {
-        StringId target;
-        StringId expanded;
+        std::string target;
+        std::string expanded;
     };
 
     std::vector<ExpandedTarget> expandedTargets;
     expandedTargets.reserve(targets.size());
     for(auto& target : targets)
     {
-        expandedTargets.push_back({target, (invocationPath / target.cstr()).lexically_normal().string()});
+        expandedTargets.push_back({target, (invocationPath / target.c_str()).lexically_normal().string()});
     }
 
     std::vector<size_t> stack;
@@ -418,14 +418,14 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
         bool found = false;
         for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
         {
-            if(target.target == StringId(commands[commandIndex].description))
+            if(target.target == commands[commandIndex].description)
             {
                 markIncluded(commandIndex);
                 found = true;
             }
             for(auto& input : commands[commandIndex].inputs)
             {
-                if(target.expanded == StringId(input.string()))
+                if(target.expanded == input.string())
                 {
                     markIncluded(commandIndex);
                     found = true;
@@ -434,7 +434,7 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
             }
             for(auto& output : commands[commandIndex].outputs)
             {
-                if(target.expanded == StringId(output.string()))
+                if(target.expanded == output.string())
                 {
                     markIncluded(commandIndex);
                     found = true;
@@ -448,7 +448,7 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
         }
         if(!found)
         {
-            throw std::runtime_error("The specified target could not be found:\n  " + std::string(target.target) + " (" + target.expanded.cstr() + ")");
+            throw std::runtime_error("The specified target could not be found:\n  " + std::string(target.target) + " (" + target.expanded.c_str() + ")");
         }
     }
     

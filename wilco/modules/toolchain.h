@@ -35,8 +35,8 @@ struct ProjectSettings;
 
 struct ToolchainProvider
 {
-    StringId name;
-    ToolchainProvider(StringId name) 
+    std::string name;
+    ToolchainProvider(std::string name) 
         : name(name) 
     {
         Toolchains::install(this);

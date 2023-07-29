@@ -4,14 +4,13 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <string>
 #include <type_traits>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
 #include "core/os.h"
-#include "core/stringid.h"
-
 
 template<typename ValueType>
 struct ListPropertyValue
@@ -199,11 +198,7 @@ private:
 
         size_t operator()(int i) const
         {
-            if constexpr (std::is_base_of_v<StringId, ValueType>)
-            {
-                return std::hash<StringId>{}(_values[i]);                
-            }
-            else if constexpr (std::is_same_v<std::filesystem::path, ValueType>)
+            if constexpr (std::is_same_v<std::filesystem::path, ValueType>)
             {
                 return std::filesystem::hash_value(_values[i]);
             }

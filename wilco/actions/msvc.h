@@ -9,7 +9,6 @@
 
 #include "core/action.h"
 #include "core/project.h"
-#include "core/stringid.h"
 #include "modules/command.h"
 #include "modules/toolchain.h"
 #include "toolchains/detected.h"

@@ -2,8 +2,8 @@
 
 #include "database.h"
 #include "core/environment.h"
-#include "core/stringid.h"
 
+#include <string>
 #include <optional>
 #include <filesystem>
 

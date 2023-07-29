@@ -1,6 +1,6 @@
 #include "modules/language.h"
 
-Language Language::getByExtension(StringId extension)
+Language Language::getByExtension(const std::string& extension)
 {
     auto it = getExtensionMap().find(extension);
     if(it != getExtensionMap().end())
@@ -13,12 +13,12 @@ Language Language::getByExtension(StringId extension)
 
 Language Language::getByPath(const std::filesystem::path& path)
 {
-    return getByExtension(StringId(path.extension().string()));
+    return getByExtension(path.extension().string());
 }
 
-std::unordered_map<StringId, Language>& Language::getExtensionMap()
+std::unordered_map<std::string, Language>& Language::getExtensionMap()
 {
-    static std::unordered_map<StringId, Language> extensionMap = {
+    static std::unordered_map<std::string, Language> extensionMap = {
         { ".c", lang::C },
         { ".cpp", lang::Cpp },
         { ".cxx", lang::Cpp },

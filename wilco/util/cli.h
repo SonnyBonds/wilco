@@ -24,7 +24,7 @@ struct argument_error : public std::runtime_error
 
 struct Profile
 {
-    Profile(StringId name, std::vector<std::string> arguments)
+    Profile(std::string name, std::vector<std::string> arguments)
         : name(name), arguments(arguments)
     {
         list().push_back(*this);
@@ -36,7 +36,7 @@ struct Profile
         return profiles;
     }
 
-    StringId name;
+    std::string name;
     std::vector<std::string> arguments;  
 };
 
@@ -173,11 +173,11 @@ struct StringArgument : public Argument
 
     explicit operator bool() const { return value.has_value(); }
 
-    StringId operator*() { return *value; }
+    std::string operator*() { return *value; }
 
     std::string name;
-    std::optional<StringId> value;
-    std::optional<StringId> defaultValue;
+    std::optional<std::string> value;
+    std::optional<std::string> defaultValue;
 };
 
 struct PathArgument : public Argument
@@ -295,7 +295,7 @@ struct Context
     const std::string invocation;
     const std::vector<std::string> allArguments;
     std::vector<std::string> unusedArguments;
-    StringId action;
+    std::string action;
 };
 
 }

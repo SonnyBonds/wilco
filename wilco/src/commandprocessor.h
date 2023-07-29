@@ -15,7 +15,7 @@ struct PendingCommand
 
 bool updatePathSignature(SignaturePair& signaturePair, const std::filesystem::path& path);
 size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& database, size_t maxConcurrentCommands, bool verbose);
-std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::path invocationPath = {}, std::vector<StringId> targets = {});
+std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::path invocationPath = {}, std::vector<std::string> targets = {});
 
 // TODO: Need to clean up namespaces and code structure in general
 namespace commands
