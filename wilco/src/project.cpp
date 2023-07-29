@@ -1,7 +1,6 @@
 #include <assert.h>
 
 #include "core/project.h"
-#include "core/eventhandler.h"
 
 Project::Project(std::string name, ProjectType type)
     : name(name)

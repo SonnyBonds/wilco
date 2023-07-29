@@ -1,4 +1,3 @@
-#include "core/eventhandler.h"
 #include "core/environment.h"
 #include "core/project.h"
 #include "modules/bundle.h"
