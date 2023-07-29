@@ -48,10 +48,10 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, s
     }
     
     // TODO: Platform support
-    //if(project.platform == "x64")
+    /*if(project.platform == "x64")
     {
         flags += " -m64 -arch x86_64";
-    }
+    }*/
 
     std::unordered_map<Feature, std::string> featureMap = {
         { feature::Optimize, " -O2"},
