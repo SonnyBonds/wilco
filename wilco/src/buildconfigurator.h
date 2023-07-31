@@ -16,6 +16,7 @@ public:
     ~BuildConfigurator();
 
     static void collectCommands(Environment& env, std::vector<CommandEntry>& collectedCommands, const std::filesystem::path& projectDir, Project& project);
+    static std::optional<std::vector<std::string>> getPreviousConfigDatabaseArguments(const Database& database);
     static void updateConfigDatabase(Database& database, const std::vector<std::string>& args);
     static Environment configureEnvironment(cli::Context& cliContext);
 

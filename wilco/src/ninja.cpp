@@ -270,9 +270,12 @@ void NinjaEmitter::run(cli::Context cliContext)
 
     std::vector<std::string> args;
     args = cliContext.allArguments;
-    if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
     {
-        configDirty = true;
+        auto previousArgs = BuildConfigurator::getPreviousConfigDatabaseArguments(configDatabase);
+        if(!previousArgs || args != *previousArgs)
+        {
+            configDirty = true;
+        }
     }
 
     if(!configDirty)

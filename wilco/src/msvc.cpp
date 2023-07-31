@@ -754,7 +754,8 @@ void MsvcEmitter::run(cli::Context cliContext)
 
     if(!configDirty)
     {
-        if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(baseArguments, "\n"))
+        auto previousArgs = BuildConfigurator::getPreviousConfigDatabaseArguments(configDatabase);
+        if(!previousArgs || baseArguments != *previousArgs)
         {
             configDirty = true;
         }

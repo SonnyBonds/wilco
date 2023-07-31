@@ -106,11 +106,12 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
     bool configDirty = !configDatabase.load(_configDatabasePath);
 
     std::vector<std::string> args;
+    auto previousArgs = getPreviousConfigDatabaseArguments(configDatabase);
     if(updateExisting)
     {
-        if(!configDatabase.getCommands().empty())
+        if(previousArgs)
         {
-            args = str::splitAll(configDatabase.getCommands()[0].command, '\n');
+            args = *previousArgs;
         }
         else
         {
@@ -120,7 +121,7 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
     else
     {
         args = cliContext.allArguments;
-        if(configDatabase.getCommands().empty() || configDatabase.getCommands()[0].command != str::join(args, "\n"))
+        if(!previousArgs || args != *previousArgs)
         {
             configDirty = true;
         }
@@ -186,13 +187,35 @@ BuildConfigurator::~BuildConfigurator()
     }
 }
 
+std::optional<std::vector<std::string>> BuildConfigurator::getPreviousConfigDatabaseArguments(const Database& database)
+{
+    if(database.getCommands().empty())
+    {
+        return {};
+    }
+
+    auto args = str::splitAll(database.getCommands()[0].command, '\n');
+    if(args.empty() || args[0] != "wilco")
+    {
+        return {};
+    }
+
+    args.erase(args.begin());
+    return args;
+}
+
 void BuildConfigurator::updateConfigDatabase(Database& database, const std::vector<std::string>& args)
 {
     // This command is never meant to be executed as an actual shell command, but uses the same
     // mechanics for dependency checking.
     CommandEntry configCommand;
     configCommand.description = "Configure";
-    configCommand.command = str::join(args, "\n");
+    // The "wilco" bogus command is needed because empty commands get filtered out
+    configCommand.command = "wilco";
+    if(!args.empty())
+    {
+        configCommand.command += "\n" + str::join(args, "\n");
+    }
     configCommand.inputs.reserve(Environment::configurationDependencies.size());
     for(auto& input : Environment::configurationDependencies)
     {
