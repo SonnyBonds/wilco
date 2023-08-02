@@ -73,29 +73,41 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
     auto absCwd = std::filesystem::absolute(std::filesystem::current_path());
     bool first = true;
     stream << "[\n";
-    for(auto& command : database.getCommands())
+
+    auto writeCommands = [&](const std::vector<CommandEntry>& commands)
     {
-        if(command.inputs.empty())
+        for(auto& command : commands)
         {
-            continue;
-        }
+            if(command.inputs.empty())
+            {
+                continue;
+            }
 
-        std::filesystem::path cwd = absCwd / command.workingDirectory;
+            std::filesystem::path cwd = absCwd / command.workingDirectory;
 
-        if(!first)
-        {
-            stream << ",\n";
+            if(!first)
+            {
+                stream << ",\n";
+            }
+            first = false;
+            stream << "  {\n";
+            stream << "    \"directory\": " << cwd << ",\n";
+            // Assuming first input is the main input
+            stream << "    \"file\": " << command.inputs.front() << ",\n";
+            // TODO: Technically the @[rspfile]-part of the command should be replaced by rspContents,
+            // but for now let's just slap it at the end of the command.
+            stream << "    \"command\": " << str::quote(command.command + " " + command.rspContents) << "\n";
+            stream << "  }";
         }
-        first = false;
-        stream << "  {\n";
-        stream << "    \"directory\": " << cwd << ",\n";
-        // Assuming first input is the main input
-        stream << "    \"file\": " << command.inputs.front() << ",\n";
-        // TODO: Technically the @[rspfile]-part of the command should be replaced by rspContents,
-        // but for now let's just slap it at the end of the command.
-        stream << "    \"command\": " << str::quote(command.command + " " + command.rspContents) << "\n";
-        stream << "  }";
-    }
+    };
+
+    writeCommands(database.getCommands());
+
+    // TODO: Get these commands some nicer way maybe
+    Database selfBuildDatabase;
+    selfBuildDatabase.load(DirectBuilder::getSelfBuildDatabasePath());
+    writeCommands(selfBuildDatabase.getCommands());
+
     stream << "\n]";
 }
 

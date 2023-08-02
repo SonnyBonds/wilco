@@ -48,4 +48,6 @@ public:
     static void buildSelf(cli::Context cliContext);
 
     virtual void run(cli::Context cliContext) override;
+
+    static std::filesystem::path getSelfBuildDatabasePath();
 };

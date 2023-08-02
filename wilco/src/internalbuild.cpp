@@ -87,7 +87,6 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         }
     }
 
-
     auto outputPath = *targetPath / ".generator";
     std::string ext;
     if(OperatingSystem::current() == Windows)
@@ -220,6 +219,14 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
 
     auto result = process::run(buildCommandLine, true);
     std::exit(result.exitCode);
+}
+
+// TODO: This is needed for the compile_commands.json but should probably be
+// done some nicer way.
+std::filesystem::path DirectBuilder::getSelfBuildDatabasePath()
+{
+    auto outputPath = *targetPath / ".generator";
+    return outputPath / ".build_db";
 }
 
 
