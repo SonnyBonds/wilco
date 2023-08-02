@@ -91,7 +91,9 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
         stream << "    \"directory\": " << cwd << ",\n";
         // Assuming first input is the main input
         stream << "    \"file\": " << command.inputs.front() << ",\n";
-        stream << "    \"command\": " << str::quote(command.command) << "\n";
+        // TODO: Technically the @[rspfile]-part of the command should be replaced by rspContents,
+        // but for now let's just slap it at the end of the command.
+        stream << "    \"command\": " << str::quote(command.command + " " + command.rspContents) << "\n";
         stream << "  }";
     }
     stream << "\n]";
