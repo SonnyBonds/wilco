@@ -4,14 +4,16 @@
 static void emitProjects(cli::Context& cliContext)
 {
     BuildConfigurator configurator(cliContext);
-    
-    throw std::runtime_error("Project listing is currently broken.");
-#if TODO
-    for(auto& project : configurator.environment.projects)
+
+    for(auto& command : configurator.database.getCommands())
     {
-        std::cout << project->name << "\n";
-    }
-#endif
+        // TODO: This is a hack right now. Phony commands are emitted as a way
+        // of building specific projects, and the project name is in the description.
+        if(command.command.empty())
+        {
+            std::cout << command.description << "\n";
+        }
+    }    
 }
 
 static void emitProfiles(cli::Context& cliContext)
