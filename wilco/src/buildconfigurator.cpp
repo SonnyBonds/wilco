@@ -173,7 +173,7 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
         generateCompileCommandsJson(compileCommandsStream, database);
         env.writeFile(*targetPath / "compile_commands.json", compileCommandsStream.str());
 
-        updateConfigDatabase(configDatabase, args);
+        updateConfigDatabase(env.configurationDependencies, configDatabase, args);
 
         std::cout << "Done.\n";
     }
@@ -218,7 +218,7 @@ std::optional<std::vector<std::string>> BuildConfigurator::getPreviousConfigData
     return args;
 }
 
-void BuildConfigurator::updateConfigDatabase(Database& database, const std::vector<std::string>& args)
+void BuildConfigurator::updateConfigDatabase(std::set<std::filesystem::path> configDependencies, Database& database, const std::vector<std::string>& args)
 {
     // This command is never meant to be executed as an actual shell command, but uses the same
     // mechanics for dependency checking.
@@ -230,10 +230,10 @@ void BuildConfigurator::updateConfigDatabase(Database& database, const std::vect
     {
         configCommand.command += "\n" + str::join(args, "\n");
     }
-    configCommand.inputs.reserve(Environment::configurationDependencies.size());
-    for(auto& input : Environment::configurationDependencies)
+    configCommand.inputs.reserve(configDependencies.size());
+    for(auto& input : configDependencies)
     {
-        configCommand.inputs.push_back(input);
+        configCommand.inputs.push_back(std::move(input));
     }
     database.setCommands({configCommand});
     database.getCommandSignatures()[0] = computeCommandSignature(database.getCommands()[0]);

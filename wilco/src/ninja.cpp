@@ -298,14 +298,10 @@ void NinjaEmitter::run(cli::Context cliContext)
         profiles.push_back(cli::Profile{ "", {} });
     }
 
-    auto baseConfigDependencies = Environment::configurationDependencies;
+    std::set<std::filesystem::path> configDependencies;
+
     for(auto& profile : profiles)
     {
-        // Since this is global state we need to reset it before each config run
-        // because the ninja files are separate and shouldn't get eachother's
-        // config dependencies.
-        Environment::configurationDependencies = baseConfigDependencies;
-        
         std::vector<std::string> confArgs = { std::string("--profile=") + profile.name.c_str() };
         confArgs.insert(confArgs.end(), cliContext.unusedArguments.begin(), cliContext.unusedArguments.end());
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, confArgs);
@@ -346,9 +342,11 @@ void NinjaEmitter::run(cli::Context cliContext)
         generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, cliContext.startPath, {}, "Check build config." };
         auto outputName = emitProject(env, profileTargetPath, generatorProject, "", true);
         ninja.subninja(outputName);
+
+        configDependencies.insert(env.configurationDependencies.begin(), env.configurationDependencies.end());
     }
 
-    BuildConfigurator::updateConfigDatabase(configDatabase, args);
+    BuildConfigurator::updateConfigDatabase(configDependencies, configDatabase, args);
 
     configDatabase.save(configDatabasePath);
 }

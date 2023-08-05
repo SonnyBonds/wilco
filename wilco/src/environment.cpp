@@ -2,8 +2,6 @@
 #include "util/process.h"
 #include "fileutil.h"
 
-std::set<std::filesystem::path> Environment::configurationDependencies;
-
 Environment::Environment(cli::Context& cliContext)
     : cliContext(cliContext)
 {

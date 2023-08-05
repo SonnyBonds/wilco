@@ -790,6 +790,7 @@ void MsvcEmitter::run(cli::Context cliContext)
     std::vector<std::string> profileNames;
     std::set<std::string> projectNames;
     std::vector<ProfileEntry> profiles;
+    std::set<std::filesystem::path> configDependencies;
 
     for(auto& profile : cli::Profile::list())
     {
@@ -834,9 +835,11 @@ void MsvcEmitter::run(cli::Context cliContext)
         }
 
         profiles.push_back({profile.name, std::move(env.projects)});
+
+        configDependencies.insert(env.configurationDependencies.begin(), env.configurationDependencies.end());
     }
 
-    BuildConfigurator::updateConfigDatabase(configDatabase, baseArguments);
+    BuildConfigurator::updateConfigDatabase(configDependencies, configDatabase, baseArguments);
     
     std::vector<ProjectMatrixEntry> projectMatrix;
     for(auto& projectName : projectNames)

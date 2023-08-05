@@ -18,12 +18,12 @@ struct Environment
 
     std::vector<std::filesystem::path> listFiles(const std::filesystem::path& path, bool recurse = true);
 
-    static void addConfigurationDependency(std::filesystem::path path);
+    void addConfigurationDependency(std::filesystem::path path);
 
     Project& createProject(std::string name, ProjectType type);
 
     cli::Context& cliContext;
-    static std::set<std::filesystem::path> configurationDependencies;
+    std::set<std::filesystem::path> configurationDependencies;
     std::vector<std::unique_ptr<Project>> projects;
 };
 
