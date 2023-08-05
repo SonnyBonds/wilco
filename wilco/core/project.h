@@ -45,39 +45,79 @@ inline std::string outputExtension(ProjectType type, OperatingSystem os = Operat
     return {};
 }
 
+/**
+    Properties describing a Project.
+*/
 struct ProjectSettings
 {
+    /** List of commands to execute when building this project.
+        The toolchain will translate files into commands, but this
+        can be used either for additional commands or in non-toolchain
+        based command projects.
+    */
     ListPropertyValue<CommandEntry> commands;
+    /** List of include search paths. */
     ListPropertyValue<std::filesystem::path> includePaths;
+    /** List of library search paths. */
     ListPropertyValue<std::filesystem::path> libPaths;
+    /** List of source files to compile.
+        These files are processed by the toolchain if applicable,
+        or added to the project of project generator actions like msvc.*/
     ListPropertyValue<SourceFile> files;
+    /** List of libraries to link with, resolved as a path to a file. */
     ListPropertyValue<std::filesystem::path> libs;
+    /** List of libraries to link with, resolved using library search paths. */
     ListPropertyValue<std::filesystem::path> systemLibs;
+    /** List of preprocessor defines to define when compiling. 
+        Typically an option like ENABLE_FEATURE_ABC or a value
+        like VERSION_STRING="1.2.3". */
     ListPropertyValue<std::string> defines;
+    /** List of features to enable. */
     ListPropertyValue<Feature> features;
+    /** List of macOS frameworks to link. */
     ListPropertyValue<std::string> frameworks;
+    /** Path to directory to use for intermediate files.
+        TODO: This is not properly functional. */
     std::filesystem::path dataDir;
+    /** List of projects that this project are dependent on.
+        Typically command dependencies are resolved on a file level,
+        but for some build actions (e.g. msvc) this can be used for explicit
+        project dependency information. */
     ListPropertyValue<const Project*> dependencies;
+    /** Toolchain to use to build source files.
+        If left set to nullptr the default toolchain will be used. */
     const ToolchainProvider* toolchain = nullptr;
 
+    /** Combines a number of path partials into a full path.
+        The full path is [dir][prefix][name][suffix][extension].
+        This makes it possible to have sensible defaults for the output.
+    */
     struct Output
     {
+        /** Base directory of the output path. */
         std::filesystem::path dir;
+        /** Prefix to add to the start of the output filename. */
         std::string prefix;
+        /** Stem of the output file name. */
         std::string name;
+        /** Suffix to add to the end of the output filename. */
         std::string suffix;
+        /** Extension of the output filename, including dot. */
         std::string extension;
 
+        /** Returns the full combined result of the path partials. */
         std::filesystem::path fullPath() const
         {
             return dir / (prefix + name + suffix + extension);
         }
 
+        /** Returns the full combined result of the path partials. */
         operator std::filesystem::path() const
         {
             return fullPath();
         }
 
+        /** Assigns a full path to the output, separating it into the appropriate partials. */
         Output& operator =(std::filesystem::path path)
         {
             dir = path.parent_path();
@@ -87,8 +127,12 @@ struct ProjectSettings
             extension = path.extension().string();
             return *this;
         }
-    } output;
+    };
 
+    /** Path for the resulting output of this project, e.g. the output library or executable. */
+    Output output;
+
+    /** Imports another ProjectSettings, adding any properties set in the other ProjectSettings onto this. */
     void import(const ProjectSettings& other)
     {
         commands += other.commands;
@@ -113,6 +157,7 @@ struct ProjectSettings
         importExtensions(other);
     }
     
+    /** Fetches the extension of type ExtensionType in this ProjectSettings, adding it if it does not already exist. */
     template<typename ExtensionType>
     ExtensionType& ext()
     {
@@ -129,6 +174,7 @@ struct ProjectSettings
         return extensionEntry->extensionData;
     }
 
+    /** Checks if an extension of type ExtensionType is present in this ProjectSettings. */
     template<typename ExtensionType>
     bool hasExt() const
     {
@@ -177,10 +223,26 @@ private:
     std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
 };
 
+/**
+    The main node in a build configuration, containing information on how to build a "Project".
+    A Project is typically 1:1 to a build output, e.g. an executable or a library. It can however
+    also be just a set of commands performing some build task.
+
+    @see [ProjectSettings](/ProjectSettings)
+*/
 struct Project : public ProjectSettings
 {
+    /** The name of this project.
+        The name will be used for things like specifying what to build, informational printouts and
+        as the default stem of the output file name.
+    */
     const std::string name;
+    
+    /** The type of this project, specifying what the expected output of the project is. */
     const ProjectType type;
+
+    /** Properties to be imported by other projects importing this project.
+        This typically contains libraries to link, include paths to set, etc. */
     ProjectSettings exports;
 
     Project(std::string name, ProjectType type);
@@ -188,5 +250,7 @@ struct Project : public ProjectSettings
     ~Project();
 
     using ProjectSettings::import;
+    /** Imports another Project, adding any properties set in the other Project's exports onto this.
+        Optionally also adds the exported properties to the exports section of this Project. */
     void import(const Project& other, bool reexport = true);
 };
