@@ -24,6 +24,7 @@ namespace
     };
 }
 
+// Computes a signature for a file. Currently bases it on write time stamp only, but could use other info as well.
 Signature computeFileSignature(std::filesystem::path path)
 {
     std::error_code ec;
@@ -36,24 +37,33 @@ Signature computeFileSignature(std::filesystem::path path)
     return hash::md5(reinterpret_cast<const char*>(&time), sizeof(time));    
 }
 
+// Computes a signature for a directory based on th directory file listing
 Signature computeDirectorySignature(std::filesystem::path path)
 {
-    std::error_code ec;
     if(!std::filesystem::is_directory(path))
     {
         return {};
     }
 
     hash::Md5 hasher;
-    for(auto entry : std::filesystem::directory_iterator(path))
+    std::error_code ec;
+    for(auto entry : std::filesystem::directory_iterator(path, ec))
     {
         hasher.digest(entry.path().native());
     }
+    if(ec)
+    {
+        return {};
+    }
+
     return hasher.finalize();
 }
 
+// Update the signature pair for a path if needed, returning true if it has changed
+// The path may be a file or a directory
 bool updatePathSignature(SignaturePair& signaturePair, const std::filesystem::path& path)
 {
+    // First compute the signature for the file or directory entry itself.
     auto signature = computeFileSignature(path);
     if(signature == EMPTY_SIGNATURE)
     {
@@ -65,15 +75,19 @@ bool updatePathSignature(SignaturePair& signaturePair, const std::filesystem::pa
         return true;
     }
 
+    // If the first signature is correct, things have not changed even if this is a directory,
+    // and we don't have to do the full file listing.
     if(signature == signaturePair.first)
     {
         return false;
     }
 
+    // If the signature was new we update it and continue
     signaturePair.first = signature;
 
+    // Second, try computing a directory signature.
     signature = computeDirectorySignature(path);
-    std::error_code ec;
+    // If this actually was a directory, and the signature was the same, we're done as well.
     if(signature != EMPTY_SIGNATURE && signaturePair.second == signature)
     {
         return false;
@@ -82,6 +96,9 @@ bool updatePathSignature(SignaturePair& signaturePair, const std::filesystem::pa
 #if LOG_DIRTY_REASON
     std::cout << "dirty: " << path << " has been touched.\n";
 #endif
+    // If it _wasn't_ a directory, or the directory signature was wrong, the path was dirty.
+    // We'll update the second signature even if it wasn't a directory, in case the path has
+    // changed from a directory to a file.
     signaturePair.second = signature;
     return true;
 }
@@ -96,6 +113,31 @@ void checkInputSignatures(std::vector<Signature>& commandSignatures, std::vector
             for(auto& commandId : fileDependency->dependentCommands)
             {
                 commandSignatures[commandId] = {};
+            }
+        }
+    }
+}
+
+// This currently doesn't actually check the _signatures_ of the outputs, just the existence
+void checkOutputSignatures(std::vector<Signature>& commandSignatures, const std::vector<CommandEntry>& commands, int beginIndex, int endIndex)
+{
+    for(int i = beginIndex; i != endIndex; ++i)
+    {
+        if(commandSignatures[i] == EMPTY_SIGNATURE)
+        {
+            continue;
+        }
+        for(auto& output : commands[i].outputs)
+        {
+            std::error_code ec;
+            bool exists = std::filesystem::exists(output, ec);
+            if(ec || !exists)
+            {
+#if LOG_DIRTY_REASON
+                std::cout << "dirty: Output " << output << " missing for " << command.description << std::endl;
+#endif
+                commandSignatures[i] = {};
+                break;
             }
         }
     }
@@ -452,7 +494,7 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
         }
     }
     
-    //std::cout << fileDependencies.size() << " file dependencies.\n";
+    // Split all file dependencies in N buckets and do an input signature check on them in parallel
     {
         size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
         std::vector<std::future<void>> futures;
@@ -477,7 +519,30 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
         }
     }
 
-    bool commandLinesChanged = false;
+    // Split all commands in N buckets and do an output signature check on them in parallel
+    {
+        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+        std::vector<std::future<void>> futures;
+        size_t numEntries = commands.size();
+        for(size_t i = 0; i < maxConcurrentCommands; ++i)
+        {
+            int start = i * numEntries / maxConcurrentCommands;
+            int end = (i+1) * numEntries / maxConcurrentCommands;
+            futures.push_back(std::async(std::launch::async, [
+                start, 
+                end, 
+                &commandSignatures,
+                &commands]()
+            {
+                checkOutputSignatures(commandSignatures, commands, start, end);
+            }));
+        }
+        for(auto& future : futures)
+        {
+            future.wait();
+        }
+    }
+
     for(uint32_t commandIndex = 0; commandIndex < commands.size(); ++commandIndex)
     {
         // TODO: More descriptive names for the different concepts
