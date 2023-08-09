@@ -235,6 +235,8 @@ void BuildConfigurator::updateConfigDatabase(std::set<std::filesystem::path> con
     {
         configCommand.inputs.push_back(std::move(input));
     }
+    configCommand.inputs.push_back(process::findCurrentModulePath());
+
     database.setCommands({configCommand});
     database.getCommandSignatures()[0] = computeCommandSignature(database.getCommands()[0]);
 
