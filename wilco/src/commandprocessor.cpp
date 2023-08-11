@@ -134,7 +134,7 @@ void checkOutputSignatures(std::vector<Signature>& commandSignatures, const std:
             if(ec || !exists)
             {
 #if LOG_DIRTY_REASON
-                std::cout << "dirty: Output " << output << " missing for " << command.description << std::endl;
+                std::cout << "dirty: Output " << output << " missing for " << commands[i].description << std::endl;
 #endif
                 commandSignatures[i] = {};
                 break;
@@ -277,7 +277,7 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                                 auto it = newInputSignatures.find(path);
                                 if(it == newInputSignatures.end())
                                 {
-                                    updatePathSignature(newInputSignatures[path], path);
+                                    updatePathSignature(newInputSignatures[path], std::filesystem::path(path).lexically_normal());
                                 }
 
                                 return false;
