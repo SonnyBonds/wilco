@@ -554,7 +554,8 @@ void Database::rebuildFileDependencies()
             auto depContents = readFile(command.depFile);
             depFileSignature = hash::md5(depContents);
             // parseDependencyData is destructive, so do the hash first
-            parseDependencyData(depContents, [&outputs, &depCommands, index](std::string_view path) {
+            parseDependencyData(depContents, [&outputs, &depCommands, index](std::string_view pathStr) {
+                auto path = std::filesystem::path(pathStr).lexically_normal();
                 if(outputs.find(path) == outputs.end())
                 {
                     depCommands[path].push_back(index);
