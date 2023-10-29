@@ -84,6 +84,7 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, std::f
             flags += " /Yu" + str::quote(msvc.pch.header.filename().string());
         }
 
+        // TODO: Maybe not hardcode this path
         std::filesystem::path pdbPath = pathOffset / project.output;
         pdbPath.replace_extension(".pdb");
         flags += " /Fd" + str::quote(pdbPath.string());
@@ -278,6 +279,21 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         ignorePch.insert(file.lexically_normal().string());
     }
 
+    std::optional<std::filesystem::path> pdbPath;
+ 
+    // TODO: Better logic for this
+    for(auto& feature : project.features)
+    {
+        if(feature == feature::DebugSymbols)
+        {
+            // TODO: Maybe not hardcode this path
+            auto computedPdbPath = pathOffset / project.output;
+            computedPdbPath.replace_extension(".pdb");
+            pdbPath = computedPdbPath;
+            break;
+        }
+    }
+
     std::vector<std::filesystem::path> linkerInputs;
     for(auto& input : project.files)
     {
@@ -298,6 +314,12 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
 
         command.inputs = { input.path };
         command.outputs = { output };
+
+        if(pdbPath)
+        {
+            command.outputs.push_back(*pdbPath);
+        }
+
         if(language != lang::Rc)
         {
             command.command = getCommonCompilerCommand(language);
