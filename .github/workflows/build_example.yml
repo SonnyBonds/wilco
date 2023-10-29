@@ -4,9 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build_linux:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
     - name: bootstrap
@@ -15,3 +13,15 @@ jobs:
       run: example/wilco build
     - name: run
       run: example/bin/Hello
+
+  build_windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: bootstrap
+      run: wilco\bootstrap.bat example\wilco.cpp
+    - name: build
+      run: example\wilco build
+    - name: run
+      run: example\bin\Hello
+    
