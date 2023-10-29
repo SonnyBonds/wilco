@@ -95,6 +95,23 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
     return commandEntry;
 }
 
+inline CommandEntry copyRelative(std::filesystem::path from, std::filesystem::path relativeBase, std::filesystem::path targetBase, std::optional<std::string> filenameOverride = {})
+{
+    auto relativeFrom = std::filesystem::relative(from, relativeBase);
+    if(relativeFrom.empty() || !relativeFrom.is_relative() || (*relativeFrom.begin() == ".."))
+    {
+        throw std::runtime_error("Failed to find a proper relative subpath from '" + relativeBase.string() + "' to '" + from.string() + "'.");
+    }
+
+    auto relativeTo = relativeFrom;
+    if(filenameOverride)
+    {
+        relativeTo.replace_filename(*filenameOverride);
+    }
+
+    return commands::copy(from, targetBase / relativeTo);
+}
+
 inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, bool touchTarget = false)
 {
     CommandEntry commandEntry;
