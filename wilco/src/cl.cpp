@@ -165,9 +165,19 @@ std::string ClToolchainProvider::getCommonLinkerFlags(Project& project, std::fil
         break;
     }
 
-    for (auto& flag : project.ext<extensions::Msvc>().linkerFlags)
+    if(project.type == StaticLib)
     {
-        flags += " " + std::string(flag);
+        for (auto& flag : project.ext<extensions::Msvc>().archiverFlags)
+        {
+            flags += " " + std::string(flag);
+        }
+    }
+    else
+    {
+        for (auto& flag : project.ext<extensions::Msvc>().linkerFlags)
+        {
+            flags += " " + std::string(flag);
+        }
     }
 
     return flags;
