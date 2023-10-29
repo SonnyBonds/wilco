@@ -197,6 +197,13 @@ struct ProjectSettings
         import(other);
     }
     
+    ProjectSettings operator+(const ProjectSettings& other)
+    {
+        ProjectSettings result = *this;
+        result.import(other);
+        return result;
+    }
+    
 private:
     void importExtensions(const ProjectSettings& other);
 
