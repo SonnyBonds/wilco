@@ -52,13 +52,14 @@ inline CommandEntry mkdir(std::filesystem::path dir)
 {
     CommandEntry commandEntry;
 
-    auto dirStr = dir.make_preferred().string();
     if(OperatingSystem::current() == Windows)
     {
+        auto dirStr = str::quote(dir.make_preferred().string(), '"', "\"");
         commandEntry.command = "(if not exist " + dirStr + " mkdir " + dirStr + ")";
     }
     else
     {
+        auto dirStr = str::quote(dir.make_preferred().string());
         commandEntry.command = "mkdir -p " + dirStr + "";
     }
     commandEntry.description += "Creating directory '" + dir.string() + "'";
