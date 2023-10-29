@@ -206,10 +206,14 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         auto input = buildPch;
         auto inputStr = (pathOffset / input).string();
 
-        auto output = dataDir / std::filesystem::path("pch") / (input.string() + ".pch");
+        auto pchPath = input.relative_path().string();
+        str::replaceAllInPlace(pchPath, ":", "_");
+        str::replaceAllInPlace(pchPath, "..", "__");
+
+        auto output = dataDir / std::filesystem::path("pch") / (pchPath + ".pch");
         auto outputStr = (pathOffset / output).string();
 
-        auto outputObjC = dataDir / std::filesystem::path("pch") / (input.string() + ".pchmm");
+        auto outputObjC = dataDir / std::filesystem::path("pch") / (pchPath + ".pchmm");
         auto outputObjCStr = (pathOffset / outputObjC).string();
 
         {
@@ -225,6 +229,8 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             project.commands += std::move(command);
         }
 
+        // TODO: This should be dependent on if it's needed rather than what OS we're on
+        if(OperatingSystem::current() == MacOS)
         {
             CommandEntry command;
             command.command = str::quote(getCompiler(project, pathOffset, lang::ObjectiveCpp)) + 
@@ -244,15 +250,23 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
     std::vector<std::filesystem::path> pchInputs;
     if(!importPch.empty())
     {
-        auto input = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pch");
+        auto pchPath = importPch.relative_path().string();
+        str::replaceAllInPlace(pchPath, ":", "_");
+        str::replaceAllInPlace(pchPath, "..", "__");
+
+        auto input = dataDir / std::filesystem::path("pch") / (pchPath + ".pch");
         auto inputStr = (pathOffset / input).string();
         cppPchFlags += " -Xclang -include-pch -Xclang " + inputStr;
         pchInputs.push_back(input);
 
-        auto inputObjCpp = dataDir / std::filesystem::path("pch") / (importPch.relative_path().string() + ".pchmm");
-        auto inputObjCppStr = (pathOffset / inputObjCpp).string();
-        objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
-        pchInputs.push_back(inputObjCpp);
+        // TODO: This should be dependent on if it's needed rather than what OS we're on
+        if(OperatingSystem::current() == MacOS)
+        {
+            auto inputObjCpp = dataDir / std::filesystem::path("pch") / (pchPath + ".pchmm");
+            auto inputObjCppStr = (pathOffset / inputObjCpp).string();
+            objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
+            pchInputs.push_back(inputObjCpp);
+        }
     }
 
     std::unordered_map<Language, std::string, std::hash<std::string>> commonCompilerFlags;
@@ -266,20 +280,17 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         auto flags = str::quote(getCompiler(project, pathOffset, language)) +
                         getCommonCompilerFlags(project, pathOffset, language, false);
         
-        // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
-        if(language == lang::Cpp)
-        {
-            flags += cppPchFlags;
-        }
-        else if(language == lang::ObjectiveCpp)
-        {
-            flags += objCppPchFlags;
-        }
-
         return commonCompilerFlags[language] = flags;
     };
 
     auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, pathOffset);
+
+    std::unordered_set<std::string> ignorePch;
+    ignorePch.reserve(gccExt.pch.ignoredFiles.size());
+    for (auto& file : gccExt.pch.ignoredFiles)
+    {
+        ignorePch.insert(file.lexically_normal().string());
+    }
 
     std::vector<std::filesystem::path> linkerInputs;
     for(auto& input : project.files)
@@ -300,6 +311,19 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         CommandEntry command;
         command.command = getCommonCompilerCommand(language) + 
                             getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
+
+        if(ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
+        {
+            // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
+            if(language == lang::Cpp)
+            {
+                command.command += cppPchFlags;
+            }
+            else if(language == lang::ObjectiveCpp)
+            {
+                command.command += objCppPchFlags;
+            }
+        }
         command.inputs = { input.path };
         command.inputs.insert(command.inputs.end(), pchInputs.begin(), pchInputs.end());
         command.outputs = { output };
