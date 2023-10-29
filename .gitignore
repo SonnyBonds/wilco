@@ -5,9 +5,10 @@
 *.pdb
 *.ilk
 *.prev
+*.exe
 bin
 wilco
 wilco.exe
 !wilco/
-buildfiles
+buildfiles*
 _detected_toolchains.h
