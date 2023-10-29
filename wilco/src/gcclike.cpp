@@ -214,7 +214,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, pathOffset, lang::Cpp) + 
+            command.command = str::quote(getCompiler(project, pathOffset, lang::Cpp)) + 
                                 getCommonCompilerFlags(project, pathOffset, lang::Cpp, true) + 
                                 getCompilerFlags(project, pathOffset, lang::Cpp, inputStr, outputStr);
             command.inputs = { input };
@@ -227,7 +227,7 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
 
         {
             CommandEntry command;
-            command.command = getCompiler(project, pathOffset, lang::ObjectiveCpp) + 
+            command.command = str::quote(getCompiler(project, pathOffset, lang::ObjectiveCpp)) + 
                                 getCommonCompilerFlags(project, pathOffset, lang::ObjectiveCpp, true) + 
                                 getCompilerFlags(project, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
             command.inputs = { input };
