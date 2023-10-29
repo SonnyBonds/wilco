@@ -143,11 +143,13 @@ function Find-Clang {
 
     $where = "on path"
     $COMPILER = (Get-Command "clang++.exe" -ErrorAction silentlycontinue).Source
+    $RESOURCE_COMPILER = (Get-Command "llvm-rc.exe" -ErrorAction silentlycontinue).Source
     $LINKER = $COMPILER
     $ARCHIVER = (Get-Command "llvm-ar.exe" -ErrorAction silentlycontinue).Source
     if(!$COMPILER -or !$LINKER -or !$ARCHIVER)
     {
         $COMPILER = "$env:ProgramFiles/LLVM/bin/clang++.exe"
+        $RESOURCE_COMPILER = "$env:ProgramFiles/LLVM/bin/llvm-rc.exe"
         $LINKER = $COMPILER
         $ARCHIVER = "$env:ProgramFiles/LLVM/bin/llvm-ar.exe"
         $where = "in $env:ProgramFiles"
@@ -164,6 +166,7 @@ function Find-Clang {
     $define_flags = ($params.Keys | ForEach-Object { "-D" + $PSItem + '=\"' + $params[$PSItem] + '\"' })
 
     $COMPILER = $COMPILER -replace "\\", "/"
+    $RESOURCE_COMPILER = $RESOURCE_COMPILER -replace "\\", "/"
     $LINKER = $LINKER -replace "\\", "/"
     $ARCHIVER = $ARCHIVER -replace "\\", "/"
 
@@ -172,7 +175,7 @@ function Find-Clang {
         
         Command = "$COMPILER"
         Args = (,"-g", "-static", "-std=c++17") + $include_flags + $define_flags + ($params["INPUT_CPP"], ($params["WILCO_DIR"] + "/src/*.cpp"), "-o", $params["OUTPUT"])
-        Declaration = "inline GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`",  `"$LINKER`",  `"$ARCHIVER`");`n"
+        Declaration = "inline GccLikeToolchainProvider ${Id}(`"$Id`", `"$COMPILER`", `"$RESOURCE_COMPILER`", `"$LINKER`", `"$ARCHIVER`");`n"
     }
 
     if(-not $script:selected_toolchain)

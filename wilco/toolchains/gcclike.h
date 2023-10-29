@@ -41,10 +41,11 @@ namespace extensions
 struct GccLikeToolchainProvider : public ToolchainProvider
 {
     std::string compiler;
+    std::string resourceCompiler;
     std::string linker;
     std::string archiver;
 
-    GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver);
+    GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver);
 
     std::string getCompiler(Project& project, std::filesystem::path pathOffset, Language language) const;
     std::string getCommonCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, bool pch) const;

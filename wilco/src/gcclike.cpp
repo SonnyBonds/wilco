@@ -1,8 +1,9 @@
 #include "toolchains/gcclike.h"
 
-GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string compiler, std::string linker, std::string archiver)
+GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver)
     : ToolchainProvider(name) 
     , compiler(compiler)
+    , resourceCompiler(resourceCompiler)
     , linker(linker)
     , archiver(archiver)
 {
@@ -10,12 +11,37 @@ GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string
 
 std::string GccLikeToolchainProvider::getCompiler(Project& project, std::filesystem::path pathOffset, Language language) const
 {
-    return compiler;
+    if(language == lang::Cpp || language == lang::C || language == lang::ObjectiveC || language == lang::ObjectiveCpp)
+    {
+        return compiler;
+    }
+    else if (language == lang::Rc && !resourceCompiler.empty())
+    {
+        return resourceCompiler;
+    }
+    else
+    {
+        throw std::runtime_error("Toolchain does not support language '" + std::string(language) + "'.");
+    }
 }
 
 std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, bool pch) const
 {
     std::string flags;
+
+    for(auto& define : project.defines)
+    {
+        flags += " -D" + str::quote(define);
+    }
+    for(auto& path : project.includePaths)
+    {
+        flags += " -I\"" + (pathOffset / path).string() + "\"";
+    }
+
+    if(language == lang::Rc)
+    {
+        return flags;
+    }
 
     if(language == lang::C)
     {
@@ -38,15 +64,6 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, s
         throw std::runtime_error("Toolchain does not support language '" + std::string(language) + "'.");
     }
 
-    for(auto& define : project.defines)
-    {
-        flags += " -D" + str::quote(define);
-    }
-    for(auto& path : project.includePaths)
-    {
-        flags += " -I\"" + (pathOffset / path).string() + "\"";
-    }
-    
     std::unordered_map<Feature, std::string> featureMap = {
         { feature::Optimize, " -O3"},
         { feature::DebugSymbols, " -g"},
@@ -85,7 +102,14 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, s
 
 std::string GccLikeToolchainProvider::getCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const
 {
-    return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
+    if(language == lang::Rc)
+    {
+        return " -fo" + str::quote(output) + " " + str::quote(input);
+    }
+    else
+    {
+        return " -MMD -MF " + output + ".d " + " -c -o " + output + " " + input;
+    }
 }
 
 std::string GccLikeToolchainProvider::getLinker(Project& project, std::filesystem::path pathOffset) const
@@ -305,30 +329,42 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         auto objPath = input.path.relative_path().string();
         str::replaceAllInPlace(objPath, ":", "_");
         str::replaceAllInPlace(objPath, "..", "__");
-        auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + ".o");
+        auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + (language == lang::Rc ? ".res" : ".o"));
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = getCommonCompilerCommand(language) + 
-                            getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
-
-        if(ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
+        // TODO: These rsp & escaping rules needs something less hardcoded probably.
+        if(language != lang::Rc)
         {
-            // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
-            if(language == lang::Cpp)
+            command.command = getCommonCompilerCommand(language);
+            command.rspContents = getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
+
+            if(ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
             {
-                command.command += cppPchFlags;
+                // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
+                if(language == lang::Cpp)
+                {
+                    command.rspContents += cppPchFlags;
+                }
+                else if(language == lang::ObjectiveCpp)
+                {
+                    command.rspContents += objCppPchFlags;
+                }
             }
-            else if(language == lang::ObjectiveCpp)
-            {
-                command.command += objCppPchFlags;
-            }
+
+            str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
+            command.rspFile = output.string() + ".rsp";
+            command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
+            command.depFile = output.string() + ".d";
+        }
+        else
+        {
+            command.command = getCommonCompilerCommand(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
         }
         command.inputs = { input.path };
         command.inputs.insert(command.inputs.end(), pchInputs.begin(), pchInputs.end());
         command.outputs = { output };
         command.workingDirectory = workingDir;
-        command.depFile = output.string() + ".d";
         command.description = "Compiling " + project.name + ": " + input.path.string();
         project.commands += std::move(command);
 
@@ -370,7 +406,20 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         auto outputStr = (pathOffset / output).string();
 
         CommandEntry command;
-        command.command = linkerCommand + getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
+        command.command = linkerCommand;
+        // TODO: ar on macOS doesn't support rsp files. This should not be hardcoded,
+        // the capabilities of the toolchain should be queried one way or another.
+        if(OperatingSystem::current() != MacOS)
+        {
+            command.rspContents = getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
+            str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
+            command.rspFile = output.string() + ".rsp";
+            command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
+        }
+        else
+        {
+            command.command += getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
+        }
         command.inputs = std::move(linkerInputs);
         command.outputs = { output };
         command.workingDirectory = workingDir;

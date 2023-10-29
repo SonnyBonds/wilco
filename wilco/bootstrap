@@ -110,7 +110,7 @@ try_gcc()
         selected_toolchain_desc="$2"
     fi
     local desc="`printf "  %-20s - %s\n" "$1" "$2 $selected"`"
-    toolchain_contents=$toolchain_contents`printf 'inline GccLikeToolchainProvider %s_toolchain("%s", "%s", "%s", "%s");' "$1" "$1" "$3" "$4" "$5"`"\n"
+    toolchain_contents=$toolchain_contents`printf 'inline GccLikeToolchainProvider %s_toolchain("%s", "%s", "", "%s", "%s");' "$1" "$1" "$3" "$4" "$5"`"\n"
     toolchain_list="$toolchain_list$desc\n"
 }
 
