@@ -19,6 +19,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#if __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 #endif
 
 namespace process
@@ -38,16 +42,30 @@ std::filesystem::path findCurrentModulePath()
 	return moduleFileName;
 }
 
-#else
+#elif __APPLE__
 
 // TODO: A more portable way of doing this?
-
-static std::filesystem::path currentModulePath = [](){
-    return std::filesystem::absolute(program_invocation_name);
-}();
-
 std::filesystem::path findCurrentModulePath()
 {
+    static std::filesystem::path currentModulePath = [](){
+        uint32_t maxSize = PATH_MAX;
+        char buf[PATH_MAX] = {};
+        _NSGetExecutablePath(buf, &maxSize);
+        return std::filesystem::absolute(std::filesystem::path(buf));
+    }();
+
+    return currentModulePath;
+}
+
+#else 
+
+// TODO: A more portable way of doing this?
+std::filesystem::path findCurrentModulePath()
+{
+    static std::filesystem::path currentModulePath = [](){
+        return std::filesystem::absolute(program_invocation_name);
+    }();
+
     return currentModulePath;
 }
 
