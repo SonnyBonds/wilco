@@ -162,16 +162,20 @@ static process::ProcessResult runCommand(const CommandEntry& command)
     if(!command.rspFile.empty())
     {
         // TODO: Error handling
-        FILE* file = nullptr;
 #if _WIN32
+        FILE* file = nullptr;
         auto err = fopen_s(&file, command.rspFile.string().c_str(), "wbN");
-#else
-        auto err = fopen_s(&file, command.rspFile.string().c_str(), "wbe");
-#endif
         if(err)
         {
             throw std::system_error(err, std::generic_category(), "Failed to open rsp file \"" + command.rspFile.string() + "\" for writing");
         }
+#else
+        FILE* file = fopen(command.rspFile.string().c_str(), "wbe");
+        if(!file)
+        {
+            throw std::system_error(errno, std::generic_category(), "Failed to open rsp file \"" + command.rspFile.string() + "\" for writing");
+        }
+#endif
         
         auto writeResult = fwrite(command.rspContents.data(), 1, command.rspContents.size(), file);
         if(writeResult < command.rspContents.size())

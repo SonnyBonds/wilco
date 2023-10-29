@@ -8,12 +8,20 @@ inline std::string readFile(std::filesystem::path path)
     // Turns out C-style file reading for various reasons
     // is a lot faster than std::fstream on MSVC's CRT. 
 #if 1
+#if _WIN32
     FILE* file = nullptr;
     auto err = fopen_s(&file, path.string().c_str(), "rb");
     if(err)
     {
         throw std::system_error(err, std::generic_category(), "Failed to open file \"" + path.string() + "\" for reading");
     }
+#else
+    FILE* file = fopen(path.string().c_str(), "rb");
+    if(!file)
+    {
+        throw std::system_error(errno, std::generic_category(), "Failed to open file \"" + path.string() + "\" for reading");
+    }
+#endif
     fseek(file, 0, SEEK_END);
     auto size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -80,12 +88,20 @@ inline bool writeFile(std::filesystem::path path, const std::string& data, bool 
         std::filesystem::create_directories(path.parent_path());
     }
 #if 1
+#if _WIN32
     FILE* file = nullptr;
     auto err = fopen_s(&file, path.string().c_str(), "wb");
-    if (err || !file)
+    if (err)
+    {
+        throw std::system_error(err, std::generic_category(), "Failed to open file \"" + path.string() + "\" for writing.");
+    }
+#else
+    FILE* file = fopen(path.string().c_str(), "wb");
+    if (!file)
     {
         throw std::system_error(errno, std::generic_category(), "Failed to open file \"" + path.string() + "\" for writing.");
     }
+#endif
     // fwrite (on msvc at least) returns zero elements written if the element size is zero
     if(data.size() > 0)
     {
