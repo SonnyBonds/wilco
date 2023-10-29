@@ -1,22 +1,9 @@
 #pragma once
 
-struct Feature {
-    std::string id;
+#include "core/typedid.h"
 
-    bool operator ==(const Feature& other) const { return id == other.id; }
-    bool operator !=(const Feature& other) const { return id != other.id; }
-    bool operator <(const Feature& other) const { return id < other.id; }
-    operator const std::string&() const { return id; }
-};
-
-template<>
-struct std::hash<Feature>
-{
-    std::size_t operator()(const Feature& feature) const
-    {
-        return std::hash<std::string>{}(feature.id);
-    }
-};
+struct Feature : public TypedId<Feature> {};
+template<> struct std::hash<Feature> : public Feature::Hash {};
 
 namespace feature
 {

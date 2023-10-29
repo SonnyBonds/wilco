@@ -1,26 +1,13 @@
 #pragma once
 
-#include <string>
+#include <core/typedid.h>
 
-struct OperatingSystem {
-    std::string id;
-
+struct OperatingSystem : public TypedId<OperatingSystem> {
     static inline OperatingSystem current();
-
-    bool operator ==(const OperatingSystem& other) const { return id == other.id; }
-    bool operator !=(const OperatingSystem& other) const { return id != other.id; }
-    bool operator <(const OperatingSystem& other) const { return id < other.id; }
-    operator const std::string&() const { return id; }
 };
 
 template<>
-struct std::hash<OperatingSystem>
-{
-    std::size_t operator()(const OperatingSystem& os) const
-    {
-        return std::hash<std::string>{}(os.id);
-    }
-};
+struct std::hash<OperatingSystem> : public OperatingSystem::Hash { };
 
 inline OperatingSystem Windows{"Windows"};
 inline OperatingSystem MacOS{"MacOS"};
