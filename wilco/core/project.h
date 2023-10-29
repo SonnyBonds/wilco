@@ -45,6 +45,56 @@ inline std::string outputExtension(ProjectType type, OperatingSystem os = Operat
     return {};
 }
 
+/** Combines a number of path partials into a full path.
+    The full path is [dir][prefix][name][suffix][extension].
+    This makes it possible to have sensible defaults for the output.
+*/
+struct PathBuilder
+{
+    /** Base directory of the output path. */
+    std::filesystem::path dir;
+    /** Prefix to add to the start of the output filename. */
+    std::string prefix;
+    /** Stem of the output file name. */
+    std::string name;
+    /** Suffix to add to the end of the output filename. */
+    std::string suffix;
+    /** Extension of the output filename, including dot. */
+    std::string extension;
+
+    /** Returns the full combined result of the path partials. */
+    std::filesystem::path fullPath() const
+    {
+        return dir / (prefix + name + suffix + extension);
+    }
+
+    /** Returns the full combined result of the path partials. */
+    operator std::filesystem::path() const
+    {
+        return fullPath();
+    }
+
+    /** Assigns a full path to the output, separating it into the appropriate partials. */
+    PathBuilder& operator =(std::filesystem::path path)
+    {
+        dir = path.parent_path();
+        prefix = "";
+        name = path.stem().string();
+        suffix = "";
+        extension = path.extension().string();
+        return *this;
+    }
+
+    void import(const PathBuilder& other)
+    {
+        if(!other.dir.empty()) dir = other.dir;
+        if(!other.prefix.empty()) prefix = other.prefix;
+        if(!other.name.empty()) name = other.name;
+        if(!other.suffix.empty()) suffix = other.suffix;
+        if(!other.extension.empty()) extension = other.extension;
+    }
+};
+
 /**
     Properties describing a Project.
 */
@@ -88,49 +138,8 @@ struct ProjectSettings
         If left set to nullptr the default toolchain will be used. */
     const ToolchainProvider* toolchain = nullptr;
 
-    /** Combines a number of path partials into a full path.
-        The full path is [dir][prefix][name][suffix][extension].
-        This makes it possible to have sensible defaults for the output.
-    */
-    struct Output
-    {
-        /** Base directory of the output path. */
-        std::filesystem::path dir;
-        /** Prefix to add to the start of the output filename. */
-        std::string prefix;
-        /** Stem of the output file name. */
-        std::string name;
-        /** Suffix to add to the end of the output filename. */
-        std::string suffix;
-        /** Extension of the output filename, including dot. */
-        std::string extension;
-
-        /** Returns the full combined result of the path partials. */
-        std::filesystem::path fullPath() const
-        {
-            return dir / (prefix + name + suffix + extension);
-        }
-
-        /** Returns the full combined result of the path partials. */
-        operator std::filesystem::path() const
-        {
-            return fullPath();
-        }
-
-        /** Assigns a full path to the output, separating it into the appropriate partials. */
-        Output& operator =(std::filesystem::path path)
-        {
-            dir = path.parent_path();
-            prefix = "";
-            name = path.stem().string();
-            suffix = "";
-            extension = path.extension().string();
-            return *this;
-        }
-    };
-
     /** Path for the resulting output of this project, e.g. the output library or executable. */
-    Output output;
+    PathBuilder output;
 
     /** Imports another ProjectSettings, adding any properties set in the other ProjectSettings onto this. */
     void import(const ProjectSettings& other)
@@ -148,11 +157,7 @@ struct ProjectSettings
         if(other.toolchain) toolchain = other.toolchain;
         dependencies += other.dependencies;
 
-        if(!other.output.dir.empty()) output.dir = other.output.dir;
-        if(!other.output.prefix.empty()) output.prefix = other.output.prefix;
-        if(!other.output.name.empty()) output.name = other.output.name;
-        if(!other.output.suffix.empty()) output.suffix = other.output.suffix;
-        if(!other.output.extension.empty()) output.extension = other.output.extension;
+        output.import(other.output);
         
         importExtensions(other);
     }
