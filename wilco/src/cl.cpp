@@ -55,15 +55,14 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, std::f
             { feature::Cpp20, " /std:c++20"},
             { feature::Cpp23, " /std:c++23"},
             { feature::Optimize, " /O2"},
-            { feature::OptimizeSize, " /Os"},
             { feature::DebugSymbols, " /Zi"},
             { feature::WarningsAsErrors, " /WX"},
             { feature::FastMath, " /fp:fast"},
             { feature::Exceptions, " /EHsc"},
-            { feature::msvc::StaticRuntime, " /MT"},
-            { feature::msvc::StaticDebugRuntime, " /MTd"},
-            { feature::msvc::SharedRuntime, " /MD"},
-            { feature::msvc::SharedDebugRuntime, " /MDd"},
+            { feature::windows::StaticRuntime, " /MT"},
+            { feature::windows::StaticDebugRuntime, " /MTd"},
+            { feature::windows::SharedRuntime, " /MD"},
+            { feature::windows::SharedDebugRuntime, " /MDd"},
         };
         for(auto& feature : project.features)
         {

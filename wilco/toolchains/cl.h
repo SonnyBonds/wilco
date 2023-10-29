@@ -10,14 +10,6 @@
 #include "modules/toolchain.h"
 #include "util/string.h"
 
-namespace feature::msvc
-{
-    inline Feature StaticRuntime{ "StaticRuntime" };
-    inline Feature StaticDebugRuntime{ "StaticDebugRuntime" };
-    inline Feature SharedRuntime{ "SharedRuntime" };
-    inline Feature SharedDebugRuntime{ "SharedDebugRuntime" };
-}
-
 namespace extensions
 {
     struct Msvc

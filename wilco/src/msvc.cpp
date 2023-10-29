@@ -336,10 +336,10 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     { feature::Cpp17, "<LanguageStandard>stdcpp17</LanguageStandard>"},
                     { feature::Cpp20, "<LanguageStandard>stdcpp20</LanguageStandard>"},
                     { feature::Cpp23, "<LanguageStandard>stdcpp23</LanguageStandard>"},
-                    { feature::msvc::StaticRuntime, "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>"},
-                    { feature::msvc::StaticDebugRuntime, "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>"},
-                    { feature::msvc::SharedRuntime, "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>"},
-                    { feature::msvc::SharedDebugRuntime, "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>"},
+                    { feature::windows::StaticRuntime, "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>"},
+                    { feature::windows::StaticDebugRuntime, "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>"},
+                    { feature::windows::SharedRuntime, "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>"},
+                    { feature::windows::SharedDebugRuntime, "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>"},
                 };
 
                 for(auto& feature : config.project->features)

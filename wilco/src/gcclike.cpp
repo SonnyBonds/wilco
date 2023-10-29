@@ -47,15 +47,8 @@ std::string GccLikeToolchainProvider::getCommonCompilerFlags(Project& project, s
         flags += " -I\"" + (pathOffset / path).string() + "\"";
     }
     
-    // TODO: Platform support
-    /*if(project.platform == "x64")
-    {
-        flags += " -m64 -arch x86_64";
-    }*/
-
     std::unordered_map<Feature, std::string> featureMap = {
-        { feature::Optimize, " -O2"},
-        { feature::OptimizeSize, " -Os"},
+        { feature::Optimize, " -O3"},
         { feature::DebugSymbols, " -g"},
         { feature::WarningsAsErrors, " -Werror"},
         { feature::FastMath, " -ffast-math"},
@@ -143,7 +136,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, std
         if(project.type == SharedLib)
         {
             const auto& features = project.features;
-            if(std::find(features.begin(), features.end(), feature::MacOSBundle) != features.end())
+            if(std::find(features.begin(), features.end(), feature::macos::Bundle) != features.end())
             {
                 flags += " -bundle";
             }

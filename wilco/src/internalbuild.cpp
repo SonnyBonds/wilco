@@ -107,7 +107,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         feature::DebugSymbols, 
         feature::Exceptions, 
         feature::Optimize,
-        feature::msvc::SharedRuntime
+        feature::windows::SharedRuntime
     };
     project.ext<extensions::Gcc>().compilerFlags += "-static";
     project.ext<extensions::Gcc>().linkerFlags += "-static";
