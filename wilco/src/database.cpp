@@ -202,6 +202,11 @@ bool Database::load(std::filesystem::path path)
         _commandSignatures.clear();
         _fileDependencies.clear();
 
+        if(!std::filesystem::exists(path.string() + ".commands"))
+        {
+            return false;
+        }
+
         // TODO: Memory map the inputs?
         _commandData = readFile(path.string() + ".commands");
         if(_commandData.size() == 0)
