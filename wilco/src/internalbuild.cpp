@@ -87,7 +87,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         }
     }
 
-    auto outputPath = *targetPath / ".generator";
+    auto outputPath = *wilcoFilesPath / ".generator";
     std::string ext;
     if(OperatingSystem::current() == Windows)
     {
@@ -225,7 +225,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
 // done some nicer way.
 std::filesystem::path DirectBuilder::getSelfBuildDatabasePath()
 {
-    auto outputPath = *targetPath / ".generator";
+    auto outputPath = *wilcoFilesPath / ".generator";
     return outputPath / ".build_db";
 }
 

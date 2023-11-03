@@ -10,5 +10,6 @@ bin
 wilco
 wilco.exe
 !wilco/
+.wilcofiles
 buildfiles*
 _detected_toolchains.h

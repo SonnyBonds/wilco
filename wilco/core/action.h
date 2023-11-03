@@ -7,6 +7,7 @@
 #include "core/project.h"
 #include "util/cli.h"
 
+extern cli::PathArgument wilcoFilesPath;
 extern cli::PathArgument targetPath;
 extern cli::BoolArgument noRebuild;
 

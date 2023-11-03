@@ -593,8 +593,7 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
     return filteredCommands;
 }
 
-bool commands::runCommands(std::vector<CommandEntry> commands, std::string databaseName) {
-    auto databasePath = *targetPath / ("." + databaseName + "_db");
+bool commands::runCommands(std::vector<CommandEntry> commands, std::filesystem::path databasePath) {
     Database database;
     database.load(databasePath);
     database.setCommands(std::move(commands));

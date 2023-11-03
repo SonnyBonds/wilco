@@ -20,5 +20,5 @@ std::vector<PendingCommand> filterCommands(Database& database, std::filesystem::
 // TODO: Need to clean up namespaces and code structure in general
 namespace commands
 {
-    bool runCommands(std::vector<CommandEntry> commands, std::string databaseName);
+    bool runCommands(std::vector<CommandEntry> commands, std::filesystem::path databasePath);
 }
