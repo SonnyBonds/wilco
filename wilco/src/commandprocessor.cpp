@@ -279,10 +279,11 @@ size_t runCommands(std::vector<PendingCommand>& filteredCommands, Database& data
                         if(depFileSignature != depFileSignatures[command->command])
                         {
                             parseDependencyData(depFileContents, [&newInputSignatures](std::string_view path){
-                                auto it = newInputSignatures.find(path);
+                                auto absPath = std::filesystem::absolute(path).lexically_normal();
+                                auto it = newInputSignatures.find(absPath);
                                 if(it == newInputSignatures.end())
                                 {
-                                    updatePathSignature(newInputSignatures[path], std::filesystem::path(path).lexically_normal());
+                                    updatePathSignature(newInputSignatures[absPath], absPath);
                                 }
 
                                 return false;
