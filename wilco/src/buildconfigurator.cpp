@@ -111,26 +111,29 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
     stream << "\n]";
 }
 
-BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExisting)
+BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool useExisting)
     : cliContext(std::move(cliContext))
 {
     dataPath = *targetPath;
 
     _configDatabasePath = dataPath / ".config_db";
-    bool configDirty = !configDatabase.load(_configDatabasePath);
+    bool hasDatabase = configDatabase.load(_configDatabasePath);
+    if(useExisting && !hasDatabase)
+    {
+        throw std::runtime_error("No configuration found in " + str::quote(dataPath.string()) + ". Run \"wilco configure\" first.");
+    }
+
+    bool configDirty = !hasDatabase;
 
     std::vector<std::string> args;
     auto previousArgs = getPreviousConfigDatabaseArguments(configDatabase);
-    if(updateExisting)
+    if(useExisting)
     {
-        if(previousArgs)
+        if(!previousArgs)
         {
-            args = *previousArgs;
+            throw std::runtime_error("Configuration in " + str::quote(dataPath.string()) + " seems corrupted. Run \"wilco configure\".");
         }
-        else
-        {
-            configDirty = true;
-        }
+        args = *previousArgs;
     }
     else
     {
@@ -157,7 +160,7 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
 
     if(configDirty)
     {
-        std::cout << "Reconfiguring " << (*targetPath).string() << "..." << std::endl;
+        std::cout << (hasDatabase ? "Reconfiguring " : "Configuring ") << (*targetPath).string() << "..." << std::endl;
 
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, args);
         Environment env = configureEnvironment(configureContext);
@@ -179,7 +182,7 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool updateExistin
     }
     else
     {
-        if(!updateExisting)
+        if(!useExisting)
         {
             std::cout << "Configuration in " << (*targetPath).string() << " is up to date\n";
         }

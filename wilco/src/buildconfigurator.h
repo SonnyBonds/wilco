@@ -12,7 +12,7 @@ struct Project;
 class BuildConfigurator
 {
 public:
-    BuildConfigurator(cli::Context cliContext, bool updateExisting = true);
+    BuildConfigurator(cli::Context cliContext, bool useExisting = true);
     ~BuildConfigurator();
 
     static void collectCommands(Environment& env, std::vector<CommandEntry>& collectedCommands, const std::filesystem::path& projectDir, Project& project);

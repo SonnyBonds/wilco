@@ -7,6 +7,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 - Clone the repository.
 - `wilco/bootstrap example/wilco.cpp`
+- `example/wilco configure`
 - `example/wilco build`
 - `example/bin/Hello`
 - Revel.
