@@ -51,6 +51,8 @@ DirectBuilder::DirectBuilder()
 
 void DirectBuilder::run(cli::Context cliContext)
 {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     cliContext.extractArguments(arguments);
     
     BuildConfigurator configurator(cliContext);
@@ -70,6 +72,20 @@ void DirectBuilder::run(cli::Context cliContext)
         std::cout << "\n" << std::to_string(completedCommands) << " of " << filteredCommands.size() << " targets rebuilt.\n" << std::flush;
 
         // TODO: Error exit code on failure
+    }
+
+    if(displayTime)
+    {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+        if(msDuration > 1000)
+        {
+            std::cout << "--- " << (msDuration*0.001f) << "s ---" << std::endl;
+        }
+        else
+        {
+            std::cout << "--- " << msDuration << "ms ---" << std::endl;
+        }    
     }
 }
 

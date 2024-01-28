@@ -44,8 +44,6 @@ void printUsage(cli::Context& cliContext)
 }
 
 int defaultMain(int argc, const char** argv) {
-    auto startTime = std::chrono::high_resolution_clock::now();
-
     interrupt::installHandlers();
     
     cli::Context cliContext(
@@ -97,20 +95,6 @@ int defaultMain(int argc, const char** argv) {
         std::cerr << "ERROR: " << e.what() << '\n';
         return -1;
     }
-
-    // TODO: Add an option to output build time?
-#if 0
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-    if(msDuration > 1000)
-    {
-        std::cout << "--- " << (msDuration*0.001f) << "s ---" << std::endl;
-    }
-    else
-    {
-        std::cout << "--- " << msDuration << "ms ---" << std::endl;
-    }
-#endif
 
     return 0;
 }

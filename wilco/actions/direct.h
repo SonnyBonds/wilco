@@ -41,6 +41,7 @@ public:
     static ActionInstance<DirectBuilder> instance;
 
     cli::BoolArgument verbose{arguments, "verbose", "Display full command line of commands as they are executed."};
+    cli::BoolArgument displayTime{arguments, "display-time", "Display total build time after finishing a build."};
     TargetArgument targets{arguments};
 
     DirectBuilder();
