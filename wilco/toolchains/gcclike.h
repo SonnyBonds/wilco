@@ -48,10 +48,10 @@ struct GccLikeToolchainProvider : public ToolchainProvider
     GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver);
 
     std::string getCompiler(Project& project, std::filesystem::path pathOffset, Language language) const;
-    std::string getCommonCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, bool pch) const;
-    std::string getCompilerFlags(Project& project, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
+    std::string getCommonCompilerFlags(Project& project, Architecture arch, std::filesystem::path pathOffset, Language language, bool pch) const;
+    std::string getCompilerFlags(Project& project, Architecture arch, std::filesystem::path pathOffset, Language language, const std::string& input, const std::string& output) const;
     std::string getLinker(Project& project, std::filesystem::path pathOffset) const;
-    std::string getCommonLinkerFlags(Project& project, std::filesystem::path pathOffset) const;
-    std::string getLinkerFlags(Project& project, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
+    std::string getCommonLinkerFlags(Project& project, Architecture arch, std::filesystem::path pathOffset) const;
+    std::string getLinkerFlags(Project& project, Architecture arch, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
     std::vector<std::filesystem::path> process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
 };

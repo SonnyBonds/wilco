@@ -218,6 +218,21 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         return {};
     }
 
+    std::set<Architecture> archs = project.architectures;
+    if(archs.empty())
+    {
+        archs = { Architecture::current() };
+    }
+
+    else if(archs.size() > 1)
+    {
+        throw std::runtime_error("Project '" + project.name + "' has multiple architectures which is not supported by the current toolchain.");
+    }
+    else if(archs.find(Architecture::current()) == archs.end())
+    {
+        throw std::runtime_error("Project '" + project.name + "' has an architecture that is not supported by the current toolchain.");
+    }
+
     const auto& msvcExt = project.ext<extensions::Msvc>();
 
     std::filesystem::path pchOutput;

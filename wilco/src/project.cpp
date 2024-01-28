@@ -13,7 +13,7 @@ Project::Project(std::string name, ProjectType type)
 Project::~Project()
 { }
 
-void ProjectSettings::importExtensions(const ProjectSettings& other)
+void BuildSettings::importExtensions(const BuildSettings& other)
 {
     for(auto& extension : other._extensions)
     {

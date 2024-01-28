@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "core/arch.h"
 #include "core/os.h"
 #include "core/property.h"
 #include "modules/command.h"
@@ -95,25 +96,12 @@ struct PathBuilder
     }
 };
 
-/**
-    Properties describing a Project.
-*/
-struct ProjectSettings
+struct BuildSettings
 {
-    /** List of commands to execute when building this project.
-        The toolchain will translate files into commands, but this
-        can be used either for additional commands or in non-toolchain
-        based command projects.
-    */
-    ListPropertyValue<CommandEntry> commands;
     /** List of include search paths. */
     ListPropertyValue<std::filesystem::path> includePaths;
     /** List of library search paths. */
     ListPropertyValue<std::filesystem::path> libPaths;
-    /** List of source files to compile.
-        These files are processed by the toolchain if applicable,
-        or added to the project of project generator actions like msvc.*/
-    ListPropertyValue<SourceFile> files;
     /** List of libraries to link with, resolved as a path to a file. */
     ListPropertyValue<std::filesystem::path> libs;
     /** List of libraries to link with, resolved using library search paths. */
@@ -126,42 +114,22 @@ struct ProjectSettings
     ListPropertyValue<Feature> features;
     /** List of macOS frameworks to link. */
     ListPropertyValue<std::string> frameworks;
-    /** Path to directory to use for intermediate files.
-        TODO: This is not properly functional. */
-    std::filesystem::path dataDir;
-    /** List of projects that this project are dependent on.
-        Typically command dependencies are resolved on a file level,
-        but for some build actions (e.g. msvc) this can be used for explicit
-        project dependency information. */
-    ListPropertyValue<const Project*> dependencies;
-    /** Toolchain to use to build source files.
-        If left set to nullptr the default toolchain will be used. */
-    const ToolchainProvider* toolchain = nullptr;
 
-    /** Path for the resulting output of this project, e.g. the output library or executable. */
-    PathBuilder output;
-
-    /** Imports another ProjectSettings, adding any properties set in the other ProjectSettings onto this. */
-    void import(const ProjectSettings& other)
+    /** Imports another BuildSettings, adding any properties set in the other BuildSettings onto this. */
+    void import(const BuildSettings& other)
     {
-        commands += other.commands;
         includePaths += other.includePaths;
         libPaths += other.libPaths;
-        files += other.files;
         libs += other.libs;
         systemLibs += other.systemLibs;
         defines += other.defines;
         features += other.features;
         frameworks += other.frameworks;
-        if(!other.dataDir.empty()) dataDir = other.dataDir;
-        if(other.toolchain) toolchain = other.toolchain;
-        dependencies += other.dependencies;
-
-        output.import(other.output);
         
         importExtensions(other);
     }
-    
+
+
     /** Fetches the extension of type ExtensionType in this ProjectSettings, adding it if it does not already exist. */
     template<typename ExtensionType>
     ExtensionType& ext()
@@ -189,23 +157,8 @@ struct ProjectSettings
         return _extensions.find(key) != _extensions.end();
     }
 
-    ProjectSettings()
-    { }
-
-    ProjectSettings(const ProjectSettings& other)
-    {
-        import(other);
-    }
-    
-    ProjectSettings operator+(const ProjectSettings& other)
-    {
-        ProjectSettings result = *this;
-        result.import(other);
-        return result;
-    }
-    
 private:
-    void importExtensions(const ProjectSettings& other);
+    void importExtensions(const BuildSettings& other);
 
     struct ExtensionEntry
     {
@@ -233,6 +186,84 @@ private:
     };
     
     std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
+};
+
+/**
+    Properties describing a Project.
+*/
+struct ProjectSettings : public BuildSettings
+{
+    /** List of commands to execute when building this project.
+        The toolchain will translate files into commands, but this
+        can be used either for additional commands or in non-toolchain
+        based command projects.
+    */
+    ListPropertyValue<CommandEntry> commands;
+
+    /** List of source files to compile.
+        These files are processed by the toolchain if applicable,
+        or added to the project of project generator actions like msvc.*/
+    ListPropertyValue<SourceFile> files;
+    /** Path to directory to use for intermediate files.
+        TODO: This is not properly functional. */
+    std::filesystem::path dataDir;
+    /** List of projects that this project are dependent on.
+        Typically command dependencies are resolved on a file level,
+        but for some build actions (e.g. msvc) this can be used for explicit
+        project dependency information. */
+    ListPropertyValue<const Project*> dependencies;
+    /** Toolchain to use to build source files.
+        If left set to nullptr the default toolchain will be used. */
+    const ToolchainProvider* toolchain = nullptr;
+
+    /** Target architectures to build for.
+        Some toolchains may support multiple architectures in the same build (e.g. universal binary on macOS)
+        while others only support one.
+        If no architecture is set, the current architecture of the building system is used.
+    */
+    std::set<Architecture> architectures;
+
+    /** Additional per-architecture build settings
+    */
+    std::map<Architecture, BuildSettings> archSettings;
+
+    /** Path for the resulting output of this project, e.g. the output library or executable. */
+    PathBuilder output;
+
+    /** Imports another ProjectSettings, adding any properties set in the other ProjectSettings onto this. */
+    void import(const ProjectSettings& other)
+    {
+        BuildSettings::import(other);
+
+        commands += other.commands;
+        files += other.files;
+        if(!other.dataDir.empty()) dataDir = other.dataDir;
+        if(other.toolchain) toolchain = other.toolchain;
+        dependencies += other.dependencies;
+        architectures.insert(other.architectures.begin(), other.architectures.end());
+        
+        for(auto& it : other.archSettings)
+        {
+            archSettings[it.first].import(it.second);
+        }
+
+        output.import(other.output);
+    }
+    
+    ProjectSettings()
+    { }
+
+    ProjectSettings(const ProjectSettings& other)
+    {
+        import(other);
+    }
+    
+    ProjectSettings operator+(const ProjectSettings& other)
+    {
+        ProjectSettings result = *this;
+        result.import(other);
+        return result;
+    }
 };
 
 /**
