@@ -15,11 +15,18 @@ void printUsage(cli::Context& cliContext)
 {
     std::cout << "Usage: " + cliContext.invocation + " [action] [options]\n\n";
 
+    auto argumentSorter = [](const cli::Argument* a, const cli::Argument* b)
+    {
+        return a->example < b->example;
+    };
+
     std::cout << "\nAvailable actions:\n";
     for(auto action : Actions::list())
     {
         std::cout << "\n" << action->name << ": " << action->description << "\n";
-        for(auto argument : action->arguments)
+        auto arguments = action->arguments;
+        sort(arguments.begin(), arguments.end(), argumentSorter);
+        for(auto argument : arguments)
         {
             std::cout << "  " << str::padRightToSize(argument->example, 30) + "  " + argument->description + "\n";
         }
@@ -27,7 +34,9 @@ void printUsage(cli::Context& cliContext)
     std::cout << "\n";
 
     bool first = true;
-    for(auto argument : cli::Argument::globalList())
+    auto arguments = cli::Argument::globalList();
+    sort(arguments.begin(), arguments.end(), argumentSorter);
+    for(auto argument : arguments)
     {
         if(first)
         {
