@@ -9,6 +9,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: bootstrap
       run: wilco/bootstrap example/wilco.cpp
+    - name: configure
+      run: example/wilco configure
     - name: build
       run: example/wilco build
     - name: run
@@ -20,6 +22,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: bootstrap
       run: wilco\bootstrap.bat example\wilco.cpp
+    - name: configure
+      run: example\wilco configure
     - name: build
       run: example\wilco build
     - name: run
