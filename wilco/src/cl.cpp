@@ -79,11 +79,6 @@ std::string ClToolchainProvider::getCommonCompilerFlags(Project& project, std::f
             flags += " " + std::string(flag);
         }
 
-        if(!msvc.pch.header.empty())
-        {
-            flags += " /Yu" + str::quote(msvc.pch.header.filename().string());
-        }
-
         // TODO: Maybe not hardcode this path
         std::filesystem::path pdbPath = pathOffset / project.output;
         pdbPath.replace_extension(".pdb");
@@ -330,13 +325,17 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
                 command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.filename().string());
                 command.outputs.push_back(pchOutput);
             }
-            else if(ignorePch.find(input.path.lexically_normal().string()) != ignorePch.end())
+            else if(!msvcExt.pch.header.empty() && ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
             {
-                command.rspContents += " /Y-";
-            }
-            else if(!pchOutput.empty())
-            {
-                command.inputs.push_back(pchOutput);
+                command.rspContents += " /Yu" + str::quote(msvcExt.pch.header.filename().string());
+                if(msvcExt.pch.forceInclude.value_or(false))
+                {
+                    command.rspContents += " /FI" + str::quote(msvcExt.pch.header.filename().string());
+                }
+                if(!pchOutput.empty())
+                {
+                    command.inputs.push_back(pchOutput);
+                }
             }
             command.depFile = { output.string() + ".d", DepFile::Format::MSVC };
         }

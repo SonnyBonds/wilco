@@ -24,6 +24,7 @@ namespace extensions
             std::filesystem::path header;
             std::filesystem::path source;
             ListPropertyValue<std::filesystem::path> ignoredFiles;
+            std::optional<bool> forceInclude;
         } pch;
 
         virtual void import(const Msvc& other)
@@ -36,6 +37,7 @@ namespace extensions
             if(!pch.header.empty()) pch.header = other.pch.header;
             if(!pch.source.empty()) pch.source = other.pch.source;
             pch.ignoredFiles += other.pch.ignoredFiles;
+            if(other.pch.forceInclude) pch.forceInclude = other.pch.forceInclude;
         }
     };
 }
