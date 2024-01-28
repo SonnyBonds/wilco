@@ -481,7 +481,8 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                 }
                 if(command.outputs.empty())
                 {
-                    throw std::runtime_error(std::string("Command '") + command.description + "' in project '" + config.project->name + "' has no outputs.");
+                    std::cout << "Warning: Skipping command '" << command.description << "' in project '" + config.project->name + "' because it has no outputs." << std::endl;
+                    continue;
                 }
 
                 auto targetName = "Command" + std::to_string(index) + "_" + config.name.c_str();
