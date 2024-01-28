@@ -330,6 +330,7 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     xml.shortTag("PrecompiledHeaderFile", {}, pchHeader.filename().string());
                 }
 
+                // TODO: Convert more features to project options
                 std::map<Feature, std::string> featureMap = {
                     { feature::Cpp11, "<LanguageStandard>stdcpp11</LanguageStandard>"},
                     { feature::Cpp14, "<LanguageStandard>stdcpp14</LanguageStandard>"},
@@ -351,15 +352,36 @@ static std::string emitProject(std::ostream& solutionStream, const std::filesyst
                     }
                 }
 
+                // TODO: Convert more flags to project options
+                std::map<std::string, std::string> flagMap = {
+                    { "/W0", "<WarningLevel>TurnOffAllWarnings</WarningLevel>" },
+                    { "/W1", "<WarningLevel>Level1</WarningLevel>" },
+                    { "/W2", "<WarningLevel>Level2</WarningLevel>" },
+                    { "/W3", "<WarningLevel>Level3</WarningLevel>" },
+                    { "/W4", "<WarningLevel>Level4</WarningLevel>" },
+                    { "/Wall", "<WarningLevel>EnableAllWarnings</WarningLevel>" },
+                    { "/WX", "<TreatWarningAsError>true</TreatWarningAsError>" },
+                    { "/WX-", "<TreatWarningAsError>false</TreatWarningAsError>" },
+                    { "/fp:fast", "<FloatingPointModel>Fast</FloatingPointModel>" },
+                    { "/fp:strict", "<FloatingPointModel>Strict</FloatingPointModel>" },
+                    { "/fp:precise", "<FloatingPointModel>Precise</FloatingPointModel>" },
+                };
+
                 std::string extraFlags;
                 for (auto& flag : config.project->ext<extensions::Msvc>().compilerFlags)
                 {
-                    extraFlags += std::string(flag) + " ";
+                    auto it = flagMap.find(flag);
+                    if(it != flagMap.end())
+                    {
+                        xml.stream << str::padLeft(it->second, xml.indent) << "\n";
+                    }
+                    else
+                    {
+                        extraFlags += std::string(flag) + " ";
+                    }
                 }
                 xml.shortTag("AdditionalOptions", {}, extraFlags + "%(AdditionalOptions)");
                 xml.shortTag("CompileAs", {}, "CompileAsCpp");
-
-                // TODO: Convert more features to project option
             }
 
             {
