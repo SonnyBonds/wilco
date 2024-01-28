@@ -9,6 +9,11 @@
 #include "modules/feature.h"
 #include "util/commands.h"
 
+namespace macos
+{
+
+#if TODO
+
 struct VerbatimPlistValue
 {
     std::string valueString;
@@ -16,77 +21,29 @@ struct VerbatimPlistValue
 
 using PlistValue = std::variant<std::string, bool, int, VerbatimPlistValue>;
 
-struct BundleEntry
-{
-    std::filesystem::path source;
-    std::filesystem::path target;
-
-    bool operator <(const BundleEntry& other) const
-    {
-        {
-            int v = source.compare(other.source);
-            if(v != 0) return v < 0;
-        }
-
-        return target < other.target;
-    }
-
-    bool operator ==(const BundleEntry& other) const
-    {
-        return source == other.source &&
-               target == other.target;
-    }
-};
-
-template<>
-struct std::hash<BundleEntry>
-{
-    std::size_t operator()(const BundleEntry& entry) const
-    {
-        std::size_t h = std::filesystem::hash_value(entry.source);
-        h = h ^ (std::filesystem::hash_value(entry.target) << 1);
-        return h;
-    }
-};
-
-namespace extensions
-{
-    struct MacOSBundle
-    {
-        bool create = false;
-        std::string extension;
-        std::map<std::string, PlistValue> plistEntries;
-        ListPropertyValue<BundleEntry> contents;
-
-        void import(const MacOSBundle& other)
-        {
-            create = other.create;
-            extension = other.extension;
-            for(auto& entry : other.plistEntries)
-            {
-                plistEntries.insert(entry);
-            }
-            contents += other.contents;
-        }
-    };
-}
-
-#if TODO
-inline OptionCollection bundleResources(const std::filesystem::path& path, const std::filesystem::path& subPath = {})
-{
-    OptionCollection result;
-
-    if(!std::filesystem::exists(path))
-    {
-        return result;
-    }
-
-    for(auto entry : std::filesystem::recursive_directory_iterator(path))
-    {            
-        if(!entry.is_regular_file()) continue;
-        result[BundleContents] += BundleEntry{ entry.path(), "Contents/Resources/" / subPath / std::filesystem::relative(entry, path) };
-    }
-
-    return result;
-}
 #endif
+
+struct BundleBuilder
+{
+    struct Item
+    {
+        std::filesystem::path source;
+        std::filesystem::path target;
+    };
+
+    PathBuilder output;
+    std::filesystem::path plistFile;
+    std::vector<Item> items;
+
+    void addBinary(const Project& sourceProject, std::optional<std::string_view> filenameOverride = {});
+    void addBinary(std::filesystem::path binaryPath, std::optional<std::string_view> filenameOverride = {});
+    void addResource(std::filesystem::path resourcePath, std::optional<std::string_view> filenameOverride = {});
+    void addResource(std::filesystem::path resourcePath, std::filesystem::path targetPath, std::optional<std::string_view> filenameOverride = {});
+    void addResources(Environment& env, std::filesystem::path resourceRoot);
+    void addResources(Environment& env, std::filesystem::path resourceRoot, std::filesystem::path targetPath);
+    void addGeneric(std::filesystem::path sourcePath, std::filesystem::path targetPath, std::optional<std::string_view> filenameOverride = {});
+
+    CommandEntry generateCommand();
+};
+
+}

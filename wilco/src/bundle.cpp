@@ -2,6 +2,98 @@
 #include "core/project.h"
 #include "modules/bundle.h"
 
+namespace macos
+{
+
+void BundleBuilder::addBinary(const Project& sourceProject, std::optional<std::string_view> filenameOverride)
+{
+    addBinary(sourceProject.output.fullPath(), filenameOverride);
+}
+
+void BundleBuilder::addBinary(std::filesystem::path binaryPath, std::optional<std::string_view> filenameOverride)
+{
+    if(filenameOverride)
+    {
+        items.push_back({binaryPath, std::filesystem::path("Contents/MacOS") / *filenameOverride});
+    }
+    else
+    {
+        items.push_back({binaryPath, std::filesystem::path("Contents/MacOS") / binaryPath.filename().string()});
+    }
+}
+
+void BundleBuilder::addResource(std::filesystem::path resourcePath, std::optional<std::string_view> filenameOverride)
+{
+    if(filenameOverride)
+    {
+        items.push_back({resourcePath, std::filesystem::path("Contents/Resources") / *filenameOverride});
+    }
+    else
+    {
+        items.push_back({resourcePath, std::filesystem::path("Contents/Resources") / resourcePath.filename()});
+    }
+}
+
+void BundleBuilder::addResource(std::filesystem::path resourcePath, std::filesystem::path targetPath, std::optional<std::string_view> filenameOverride)
+{
+    if(filenameOverride)
+    {
+        items.push_back({resourcePath, std::filesystem::path("Contents/Resources") / targetPath / *filenameOverride});
+    }
+    else
+    {
+        items.push_back({resourcePath, std::filesystem::path("Contents/Resources") / targetPath / resourcePath.filename()});
+    }
+}
+
+void BundleBuilder::addResources(Environment& env, std::filesystem::path resourceRoot)
+{
+    for(auto& resource : env.listFiles(resourceRoot))
+    {
+        items.push_back({resource, std::filesystem::path("Contents/Resources") / std::filesystem::proximate(resource, resourceRoot)});
+    }
+}
+
+void BundleBuilder::addResources(Environment& env, std::filesystem::path resourceRoot, std::filesystem::path targetPath)
+{
+    for(auto& resource : env.listFiles(resourceRoot))
+    {
+        items.push_back({resource, std::filesystem::path("Contents/Resources") / targetPath / std::filesystem::proximate(resource, resourceRoot)});
+    }
+}
+
+void BundleBuilder::addGeneric(std::filesystem::path sourcePath, std::filesystem::path targetPath, std::optional<std::string_view> filenameOverride)
+{
+    if(filenameOverride)
+    {
+        items.push_back({sourcePath, targetPath / *filenameOverride});
+    }
+    else
+    {
+        items.push_back({sourcePath, targetPath / sourcePath.filename()});
+    }
+}
+
+
+CommandEntry BundleBuilder::generateCommand()
+{
+    std::vector<CommandEntry> result;
+
+    auto outputPath = output.fullPath();
+    for(auto& item : items)
+    {
+        result.push_back(commands::copy(item.source, outputPath / item.target));
+    }
+
+    result.push_back(commands::copy(plistFile, outputPath / "Contents/Info.plist"));
+
+    auto command = commands::chain(result, "Creating bundle " + outputPath.string());
+    command.outputs.push_back(output.fullPath());
+    return command;
+}
+
+}
+
 #if TODO
 
 static std::string generatePlist(const extensions::MacOSBundle& bundleSettings)
