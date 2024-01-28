@@ -9,6 +9,35 @@
 namespace commands
 {
 
+// TODO: Do flags better
+
+namespace flags
+{
+
+namespace copy
+{
+
+enum Flags
+{
+    removeDestination = 1,
+    touchDestination = 2,
+};
+
+}
+
+namespace move
+{
+
+enum Flags
+{
+    removeDestination = 1,
+    touchDestination = 2,
+};
+
+}
+
+}
+
 inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDescription = {})
 {
     if(commands.empty())
@@ -48,14 +77,58 @@ inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string
     return result;
 }
 
+inline CommandEntry ifExists(std::filesystem::path path, CommandEntry commandEntry)
+{
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "(if exist " + str::quote(path.make_preferred().string(), '"', "\"") + " " + commandEntry.command + ")";
+    }
+    else
+    {
+        commandEntry.command = "if test -e " + str::quote(path.make_preferred().string()) + "; then " + commandEntry.command + "; fi";
+    }
+    return commandEntry;
+}
+
+inline CommandEntry ifNotExists(std::filesystem::path path, CommandEntry commandEntry)
+{
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "(if not exist " + str::quote(path.make_preferred().string(), '"', "\"") + " " + commandEntry.command + ")";
+    }
+    else
+    {
+        commandEntry.command = "if ! test -e " + str::quote(path.make_preferred().string()) + "; then " + commandEntry.command + "; fi";
+    }
+    return commandEntry;
+}
+
+inline CommandEntry remove(std::filesystem::path path)
+{
+    CommandEntry commandEntry;
+    commandEntry.inputs = { path };
+
+    if(OperatingSystem::current() == Windows)
+    {
+        commandEntry.command = "del /Q " + str::quote(path.make_preferred().string(), '"', "\"");
+    }
+    else
+    {
+        commandEntry.command = "rm -rf " + str::quote(path.make_preferred().string()) + "";
+    }
+    
+    commandEntry.description += "Removing '" + path.string() + "'";
+    return commandEntry;
+}
+
 inline CommandEntry mkdir(std::filesystem::path dir)
 {
     CommandEntry commandEntry;
 
     if(OperatingSystem::current() == Windows)
     {
-        auto dirStr = str::quote(dir.make_preferred().string(), '"', "\"");
-        commandEntry.command = "(if not exist " + dirStr + " mkdir " + dirStr + ")";
+        commandEntry.command = "mkdir " + str::quote(dir.make_preferred().string(), '"', "\"");
+        commandEntry = ifNotExists(dir, commandEntry);
     }
     else
     {
@@ -66,7 +139,26 @@ inline CommandEntry mkdir(std::filesystem::path dir)
     return commandEntry;
 }
 
-inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
+inline CommandEntry touch(std::filesystem::path path)
+{
+    CommandEntry commandEntry;
+    commandEntry.outputs = { path };
+
+    if(OperatingSystem::current() == Windows)
+    {
+        auto toStr = str::quote(path.make_preferred().string(), '"', "\"");
+        commandEntry.command += "type NUL >> " + toStr + " && copy /Y /b " + toStr + " +,, " + toStr;
+    }
+    else
+    {
+        commandEntry.command += "touch " + str::quote(path.make_preferred().string());
+    }
+
+    commandEntry.description = "Touching '" + path.string();
+    return commandEntry;
+}
+
+inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to, flags::copy::Flags flags = {})
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -82,13 +174,23 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to)
     {
         auto fromStr = str::quote(from.make_preferred().string());
         auto toStr = str::quote(to.make_preferred().string());
-        commandEntry.command = "cp " + fromStr + " " + toStr + "";
+        commandEntry.command = "cp -R " + fromStr + " " + toStr + "";
+    }
+
+    if(flags & flags::copy::touchDestination)
+    {
+        commandEntry = chain({commandEntry, touch(to)});
     }
 
     auto toParent = to.parent_path();
     if(!toParent.empty())
     {
         commandEntry = chain({mkdir(toParent), commandEntry});
+    }
+
+    if(flags & flags::copy::removeDestination)
+    {
+        commandEntry = chain({ifExists(to, ::commands::remove(to)), commandEntry});
     }
 
     commandEntry.description = "Copying '" + from.string() + "' -> '" + to.string() + "'";
@@ -112,7 +214,7 @@ inline CommandEntry copyRelative(std::filesystem::path from, std::filesystem::pa
     return commands::copy(from, targetBase / relativeTo);
 }
 
-inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, bool touchTarget = false)
+inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, flags::move::Flags flags = {})
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -122,27 +224,29 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, b
     {
         auto fromStr = str::quote(from.make_preferred().string(), '"', "\"");
         auto toStr = str::quote(to.make_preferred().string(), '"', "\"");
-        commandEntry.command = "move " + fromStr + " " + toStr;
-        if(touchTarget)
-        {
-            commandEntry.command += " && copy /b " + toStr + " +,,";
-        }
+        commandEntry.command = "move /Y " + fromStr + " " + toStr;
     }
     else
     {
         auto fromStr = str::quote(from.make_preferred().string());
         auto toStr = str::quote(to.make_preferred().string());
         commandEntry.command = "mv " + fromStr + " " + toStr;
-        if(touchTarget)
-        {
-            commandEntry.command += " && touch " + toStr;
-        }
+    }
+
+    if(flags & flags::move::touchDestination)
+    {
+        commandEntry = chain({commandEntry, touch(to)});
     }
 
     auto toParent = to.parent_path();
     if(!toParent.empty())
     {
         commandEntry = chain({mkdir(toParent), commandEntry});
+    }
+
+    if(flags & flags::move::removeDestination)
+    {
+        commandEntry = chain({ifExists(to, ::commands::remove(to)), commandEntry});
     }
 
     commandEntry.description = "Moving '" + from.string() + "' -> '" + to.string() + "'";
