@@ -800,12 +800,12 @@ void MsvcEmitter::run(cli::Context cliContext)
 
         Environment env = BuildConfigurator::configureEnvironment(configureContext);
 
-        auto& generatorProject = env.createProject("_generator", Command);
+        auto& wilcoProject = env.createProject("_wilco", Command);
         {
             auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
-            generatorProject.includePaths += buildHDir;
-            generatorProject.features += feature::Cpp17;
-            generatorProject.files += configureContext.configurationFile;
+            wilcoProject.includePaths += buildHDir;
+            wilcoProject.features += feature::Cpp17;
+            wilcoProject.files += configureContext.configurationFile;
             
             std::string argumentString;
             for(auto& arg : cliContext.allArguments)
@@ -816,7 +816,7 @@ void MsvcEmitter::run(cli::Context cliContext)
             // Input/output is set to dummy values to trigger a run every build.
             // The VS up-to-date check does not support folders, and will trigger
             // always anyway
-            generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { "__dummy__input__" }, { "__dummy__output__" }, cliContext.startPath, {}, "Check build config." };
+            wilcoProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, { "__dummy__input__" }, { "__dummy__output__" }, cliContext.startPath, {}, "Check build config." };
         }
 
         for(auto& project : env.projects)
@@ -826,9 +826,9 @@ void MsvcEmitter::run(cli::Context cliContext)
                 throw std::runtime_error("Trying to emit project with no name.");
             }
 
-            if(project.get() != &generatorProject)
+            if(project.get() != &wilcoProject)
             {
-                project->dependencies += &generatorProject;
+                project->dependencies += &wilcoProject;
             }
 
             projectNames.insert(project->name);

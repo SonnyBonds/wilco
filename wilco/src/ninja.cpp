@@ -96,7 +96,7 @@ static std::string_view depFileFormatStr(const CommandEntry& command)
     }
 }
 
-static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, std::string profileName, bool generator)
+static std::string emitProject(Environment& env, const std::filesystem::path& projectDir, Project& project, std::string profileName, bool wilco)
 {
     std::filesystem::path dataDir = project.dataDir;
     if(dataDir.empty())
@@ -148,7 +148,7 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         prologue += "cmd /c ";
     }
     prologue += "cd \"$cwd\" && ";
-    if(generator)
+    if(wilco)
     {
         ninja.rule("command", prologue + "$cmd", {
             {"depfile", "$command_depfile"}, 
@@ -171,7 +171,7 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         });
     }
 
-    std::vector<std::string> generatorDep = { "_generator" };
+    std::vector<std::string> wilcoDep = { "_wilco" };
     std::vector<std::string> emptyDeps = { };
  
     for(auto& command : commands)
@@ -194,7 +194,7 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         outputStrs.reserve(command.outputs.size());
         for(auto& path : command.outputs)
         {
-            if(generator && path.extension() == ".ninja")
+            if(wilco && path.extension() == ".ninja")
             {
                 outputStrs.push_back(path.string());
             }
@@ -237,14 +237,14 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         }
 
         std::vector<std::string> confDeps;
-        if(generator)
+        if(wilco)
         {
             for(auto& dep : env.configurationDependencies)
             {
                 confDeps.push_back((pathOffset / dep).string());
             }            
         }
-        ninja.build(outputStrs, "command", inputStrs, confDeps, generator ? emptyDeps : generatorDep, variables);
+        ninja.build(outputStrs, "command", inputStrs, confDeps, wilco ? emptyDeps : wilcoDep, variables);
     }
 
     if(!projectOutputs.empty())
@@ -331,7 +331,7 @@ void NinjaEmitter::run(cli::Context cliContext)
 
         outputs.push_back("build.ninja");
 
-        auto& generatorProject = env.createProject("_generator", Command);
+        auto& wilcoProject = env.createProject("_wilco", Command);
 
         std::string argumentString;
         for(auto& arg : cliContext.allArguments)
@@ -339,8 +339,8 @@ void NinjaEmitter::run(cli::Context cliContext)
             argumentString += " " + str::quote(arg);
         }
         
-        generatorProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, cliContext.startPath, {}, "Check build config." };
-        auto outputName = emitProject(env, profileTargetPath, generatorProject, "", true);
+        wilcoProject.commands += CommandEntry{ str::quote(process::findCurrentModulePath().string()) + argumentString, {}, outputs, cliContext.startPath, {}, "Check build config." };
+        auto outputName = emitProject(env, profileTargetPath, wilcoProject, "", true);
         ninja.subninja(outputName);
 
         configDependencies.insert(env.configurationDependencies.begin(), env.configurationDependencies.end());

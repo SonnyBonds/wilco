@@ -103,7 +103,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         }
     }
 
-    auto outputPath = *wilcoFilesPath / ".generator";
+    auto outputPath = *wilcoFilesPath / ".tmp";
     std::string ext;
     if(OperatingSystem::current() == Windows)
     {
@@ -117,7 +117,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
     
     auto buildHDir = std::filesystem::absolute(__FILE__).parent_path().parent_path();
 
-    Project& project = env.createProject("Generator", Executable);
+    Project& project = env.createProject("Wilco", Executable);
     project.features += { 
         feature::Cpp17, 
         feature::DebugSymbols, 
@@ -162,7 +162,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
     }
 
     // Something has changed, so we rebuild
-    std::cout << "\nRebuilding generator." << std::flush;
+    std::cout << "\nRebuilding Wilco." << std::flush;
 
     // ...but first we need to move ourselves out of the way.
     std::filesystem::rename(buildOutput, tempPath);
@@ -241,7 +241,7 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
 // done some nicer way.
 std::filesystem::path DirectBuilder::getSelfBuildDatabasePath()
 {
-    auto outputPath = *wilcoFilesPath / ".generator";
+    auto outputPath = *wilcoFilesPath / ".tmp";
     return outputPath / ".build_db";
 }
 
