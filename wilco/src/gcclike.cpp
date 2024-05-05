@@ -1,5 +1,7 @@
 #include "toolchains/gcclike.h"
 #include "core/arch.h"
+#include "core/project.h"
+#include "util/commands.h"
 
 GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver)
     : ToolchainProvider(name) 
@@ -168,7 +170,7 @@ std::string GccLikeToolchainProvider::getCommonLinkerFlags(Project& project, Arc
 
     if(project.type == StaticLib)
     {
-        flags += " -rcs";
+        flags += " qc";
     }
 
     bool sawBundleFeature = false;
@@ -528,6 +530,11 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             command.outputs = { output };
             command.workingDirectory = workingDir;
             command.description = "Linking " + project.name + archMessage + ": " + output.string();
+            // ar just adds stuff to existing files, so we need to clean it ourselves first.
+            if(project.type == StaticLib)
+            {
+                command = commands::chain({commands::remove(output), command}, command.description);
+            }
             project.commands += std::move(command);
         }
     }
