@@ -52,10 +52,19 @@ inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string
         if(result.workingDirectory != command.workingDirectory)
         {
             throw std::invalid_argument("Can't chain commands with different working directories.");
-        }        
+		}
 
-        result.command += " && " + command.command;
-        result.inputs.insert(result.inputs.end(), command.inputs.begin(), command.inputs.end());
+		if (!command.rspFile.empty())
+		{
+			if (!result.rspFile.empty())
+			{
+				throw std::invalid_argument("Can't chain multiple commands using RSP files.");
+			}
+			result.rspFile = command.rspFile;
+			result.rspContents = command.rspContents;
+		}
+		result.command += " && " + command.command;
+		result.inputs.insert(result.inputs.end(), command.inputs.begin(), command.inputs.end());
         result.outputs.insert(result.outputs.end(), command.outputs.begin(), command.outputs.end());
 
         if(newDescription.empty())
