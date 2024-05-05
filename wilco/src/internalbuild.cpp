@@ -6,6 +6,7 @@
 #include "buildconfigurator.h"
 #include <iostream>
 #include <chrono>
+#include <stdexcept>
 #include "util/hash.h"
 #include "util/interrupt.h"
 #include "commandprocessor.h"
@@ -52,41 +53,60 @@ DirectBuilder::DirectBuilder()
 void DirectBuilder::run(cli::Context cliContext)
 {
     auto startTime = std::chrono::high_resolution_clock::now();
+	auto outputBuildTime = [&startTime] {
+		auto endTime = std::chrono::high_resolution_clock::now();
+		auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+		if (msDuration > 1000)
+		{
+			std::cout << "--- " << (msDuration * 0.001f) << "s ---" << std::endl;
+		}
+		else
+		{
+			std::cout << "--- " << msDuration << "ms ---" << std::endl;
+		}
+	};
+	try
+	{
+		cliContext.extractArguments(arguments);
 
-    cliContext.extractArguments(arguments);
-    
-    BuildConfigurator configurator(cliContext);
+		BuildConfigurator configurator(cliContext);
 
-    auto filteredCommands = filterCommands(configurator.database, cliContext.startPath, targets.values);
+		auto filteredCommands = filterCommands(configurator.database, cliContext.startPath, targets.values);
 
-    if(filteredCommands.empty())
-    {
-        std::cout << "Nothing to do. (Everything up to date.)\n" << std::flush;
-    }
-    else
-    {
-        size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
-        std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
-        size_t completedCommands = runCommands(filteredCommands, configurator.database, maxConcurrentCommands, verbose.value);
+		if (filteredCommands.empty())
+		{
+			std::cout << "Nothing to do. (Everything up to date.)\n"
+					  << std::flush;
+		}
+		else
+		{
+			size_t maxConcurrentCommands = std::max((size_t)1, (size_t)std::thread::hardware_concurrency());
+			std::cout << "Building using " << maxConcurrentCommands << " concurrent tasks.";
+			size_t completedCommands = runCommands(filteredCommands, configurator.database, maxConcurrentCommands, verbose.value);
 
-        std::cout << "\n" << std::to_string(completedCommands) << " of " << filteredCommands.size() << " targets rebuilt.\n" << std::flush;
+			std::cout << "\n"
+					  << std::to_string(completedCommands) << " of " << filteredCommands.size() << " targets rebuilt.\n"
+					  << std::flush;
 
-        // TODO: Error exit code on failure
-    }
-
-    if(displayTime)
-    {
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto msDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-        if(msDuration > 1000)
-        {
-            std::cout << "--- " << (msDuration*0.001f) << "s ---" << std::endl;
-        }
-        else
-        {
-            std::cout << "--- " << msDuration << "ms ---" << std::endl;
-        }    
-    }
+			if (completedCommands < filteredCommands.size())
+			{
+				throw std::runtime_error("Some targets were not properly rebuilt.");
+			}
+		}
+	}
+	catch (...)
+	{
+		if (displayTime)
+		{
+			outputBuildTime();
+		}
+		throw;
+	}
+	
+    if (displayTime)
+	{
+		outputBuildTime();
+	}
 }
 
 void DirectBuilder::buildSelf(cli::Context cliContext)
@@ -125,8 +145,6 @@ void DirectBuilder::buildSelf(cli::Context cliContext)
         feature::Optimize,
         feature::windows::SharedRuntime
     };
-    project.ext<extensions::Gcc>().compilerFlags += "-static";
-    project.ext<extensions::Gcc>().linkerFlags += "-static";
     project.includePaths += buildHDir;
     project.output = buildOutput;
     project.files += cliContext.configurationFile;
