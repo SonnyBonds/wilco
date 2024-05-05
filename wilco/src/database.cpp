@@ -260,7 +260,7 @@ bool Database::load(std::filesystem::path path)
             _commands.push_back(std::move(command));
         }
     }
-    catch(std::exception& e)
+    catch(const std::exception& e)
     {
         std::cout << "Existing build database incompatible or corrupted. (" << e.what() << ")" << std::endl;
         _commandData.clear();
