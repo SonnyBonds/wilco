@@ -34,8 +34,8 @@ namespace extensions
             archiverFlags += other.archiverFlags;
             if(!other.solutionFolder.empty()) solutionFolder = other.solutionFolder;
 
-            if(!pch.header.empty()) pch.header = other.pch.header;
-            if(!pch.source.empty()) pch.source = other.pch.source;
+            if(!other.pch.header.empty()) pch.header = other.pch.header;
+            if(!other.pch.source.empty()) pch.source = other.pch.source;
             pch.ignoredFiles += other.pch.ignoredFiles;
             if(other.pch.forceInclude) pch.forceInclude = other.pch.forceInclude;
         }
