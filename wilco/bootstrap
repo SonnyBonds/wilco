@@ -134,7 +134,7 @@ fi
 set -e
 echo "Bootstrapping using $selected_toolchain_desc"...
 #"$OUTPUT" "$@"
-echo "$toolchain_contents" > "$WILCO_DIR/toolchains/_detected_toolchains.h"
+printf "$toolchain_contents" > "$WILCO_DIR/toolchains/_detected_toolchains.h"
 $compile_command
 echo Done!
 echo Run \'"$OUTPUT"\' to build.
