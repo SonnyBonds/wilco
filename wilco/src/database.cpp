@@ -2,10 +2,11 @@
 #include "modules/command.h"
 #include "fileutil.h"
 
+#include <algorithm>
 #include <fstream>
-#include <string_view>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 
 #include "util/hash.h"
 #include "dependencyparser.h"
