@@ -31,8 +31,8 @@ namespace extensions
             linkerFlags += other.linkerFlags;
             archiverFlags += other.archiverFlags;
 
-            if(!pch.build.empty()) pch.build = other.pch.build;
-            if(!pch.use.empty()) pch.use = other.pch.use;
+            if(!other.pch.build.empty()) pch.build = other.pch.build;
+            if(!other.pch.use.empty()) pch.use = other.pch.use;
             pch.ignoredFiles += other.pch.ignoredFiles;
         }
     };
