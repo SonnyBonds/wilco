@@ -1,7 +1,9 @@
 # Wilco
-Wilco is a generator framework for writing build files for C++ in C++.
+Wilco is a system for writing build configuration for C++ in C++, including a fast parallel build runner.
 
-It is currently work in process and in a state of flux both in terms of interface and features. Currently mostly developed on Windows, but Mac & Linux support exists with less testing done.
+Wilco is functional and used in production, but not locked down in terms of interface and features. Supports building with clang, GCC and MSVC on Windows, macOS and Linux.
+
+In addition to building projects itself, Wilco can emit MSVC projects as well as Ninja files.
 
 # TL;DR - Let's run the example
 
@@ -16,7 +18,7 @@ It is currently work in process and in a state of flux both in terms of interfac
 
 With Wilco the C++ build environment itself is the only requirement for build configuration. Wilco can either perform a build itself or generate build files for a build system like Ninja or Visual Studio.
 
-Build configuration is created by code rather than declarative data. Wilco acts more as a framework for easily generating project dependency graphs and emitting them to an actual builder or build file generator. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
+Build configuration is created by code rather than declarative data. Wilco acts as a framework for easily generating project dependency graphs. The idea is that while the helper classes are designed to make it easy to write project definitions by hand, it also puts many options for discovering & parametrizing projects in the hands of the author of the build configuration.
 
 # Concepts
 ## Project
@@ -39,6 +41,7 @@ An *Action* takes the project structure constructed by the generator and does so
 
 ## Profiles
 A profile is a set of configuration arguments, defining common combinations of options.
+
 # Getting started
 
 A very simple generator file could look something like this:
@@ -123,9 +126,9 @@ application.files += env.listFiles("src");
 
 # Future
 
-This is so far mostly a proof of concept and many real life requirements for it to be properly useful are still missing. Some have been mentioned before, but a non-exhaustive list of things to work on is:
-* The internal builder is a decent build runner, but still has some missing features and edge cases that probably need addressing at some point.
-* Build environment discovery done by the bootstrapper works for simple environments, but can probably fairly easily be extended to be much more versatile.
-* Names of different concepts are a bit all over the place and may need some renaming.
-* More actions.
-* More common utilities.
+While stable and working in production for non-trivial use in at least one location, the functionality that exists is crafted around what has been needed for that particular use case. Other environments may have other needs that is currently not supported. 
+A non-exhaustive list of things to work on is:
+* Build environment discovery done by the bootstrapper works for simple environments, but should be extended to be much more versatile.
+* C++20 module support.
+* More examples and project templates.
+* Improve and clean up project structure.
