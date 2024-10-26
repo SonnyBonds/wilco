@@ -531,9 +531,11 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             command.workingDirectory = workingDir;
             command.description = "Linking " + project.name + archMessage + ": " + output.string();
             // ar just adds stuff to existing files, so we need to clean it ourselves first.
-            if(project.type == StaticLib)
+			if (project.type == StaticLib)
             {
-                command = commands::chain({commands::remove(output), command}, command.description);
+				auto removeCommand = commands::remove(pathOffset / output);
+				removeCommand.workingDirectory = workingDir;
+				command = commands::chain({removeCommand, command}, command.description);
             }
             project.commands += std::move(command);
         }
