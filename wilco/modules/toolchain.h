@@ -10,6 +10,20 @@
 
 struct ToolchainProvider;
 
+namespace extensions::internal
+{
+struct ToolchainOutputs
+{
+	ListPropertyValue<std::filesystem::path> objectFiles;
+	ListPropertyValue<std::filesystem::path> libraryFiles;
+
+	virtual void import(const ToolchainOutputs& other)
+	{
+		// These properties are used internally by toolchains and never imported
+	}
+};
+} // namespace extensions::internal
+
 struct Toolchains
 {
     static void install(ToolchainProvider* toolchain)
@@ -42,5 +56,5 @@ struct ToolchainProvider
         Toolchains::install(this);
     }
 
-    virtual std::vector<std::filesystem::path> process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const = 0;
+	virtual void process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const = 0;
 };

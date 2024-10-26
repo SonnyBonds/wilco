@@ -87,7 +87,7 @@ lib.property = ...;
 
 // Many properties are lists, and appending makes most sense.
 // += is overloaded to append individual items or {lists, of, items} to list properties
-lib.includePaths += "include";
+lib.includePaths += "lib/include";
 lib.includePaths += { "other_path", "third_path" };
 
 // "Features" are basically tags that are turned into appropriate compiler flags when compiling
@@ -97,11 +97,13 @@ lib.features += feature::DebugSymbols;
 lib.ext<extensions::Gcc>().compilerFlags += "-Wno-everything";
 
 // Projects have a set of exported properties that can be used by "consumers" of the project
-// For example, we want dependents to link with our static library output:
-lib.exports.libs += lib.output;
+// For example, we might want dependents to get the library's include path as well:
+lib.exports.includePaths += "lib/include";
 
 // A project that wants to use the library imports it. This applies all the
-// properties in its exports section.
+// properties in its exports section. It also adds a dependency link between
+// the projects so that output of the dependency is added to the linker input
+// of dependent projects.
 application.import(lib);
 
 // Bundles of project properties not attached to a project can also be created,

@@ -1,6 +1,7 @@
 #include "toolchains/gcclike.h"
 #include "core/arch.h"
 #include "core/project.h"
+#include "modules/toolchain.h"
 #include "util/commands.h"
 
 GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver)
@@ -281,7 +282,7 @@ std::string GccLikeToolchainProvider::getLinkerFlags(Project& project, Architect
     return flags;
 }
 
-std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
+void GccLikeToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {       
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
@@ -289,134 +290,135 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
         project.type != SharedLib &&
         project.type != StaticLib)
     {
-        return {};
-    }
+		return;
+	}
 
-    std::set<Architecture> archs = project.architectures;
-    if(archs.empty())
-    {
-        archs = { Architecture::current() };
-    }
+	std::set<Architecture> archs = project.architectures;
+	if (archs.empty())
+	{
+		archs = {Architecture::current()};
+	}
 
-    std::filesystem::path finalOutput = project.output;
-    if(finalOutput.empty())
-    {
-        throw std::runtime_error("Project '" + project.name + "' has no output set.");
-    }
+	std::filesystem::path finalOutput = project.output;
+	if (finalOutput.empty())
+	{
+		throw std::runtime_error("Project '" + project.name + "' has no output set.");
+	}
 
-    std::vector<std::filesystem::path> archOutputs;
+	std::vector<std::filesystem::path> archOutputs;
 
-    for(auto arch : archs)
-    {
-        auto archMessage = archs.size() > 1 ? " (" + arch.id + ")" : "";
-        const auto& gccExt = project.ext<extensions::Gcc>();
-        const auto& buildPch = gccExt.pch.build;
-        const auto& importPch = gccExt.pch.use;
+	for (auto arch : archs)
+	{
+		auto archMessage = archs.size() > 1 ? " (" + arch.id + ")" : "";
+		const auto& gccExt = project.ext<extensions::Gcc>();
+		const auto& buildPch = gccExt.pch.build;
+		const auto& importPch = gccExt.pch.use;
+		auto& toolchainOutputs = project.archSettings[arch].ext<extensions::internal::ToolchainOutputs>();
 
-        // TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
-        if(!buildPch.empty())
-        {
-            auto input = buildPch;
-            auto inputStr = (pathOffset / input).string();
+		// TODO: Do PCH management less hard coded, and only build PCHs for different languages if needed
+		if (!buildPch.empty())
+		{
+			auto input = buildPch;
+			auto inputStr = (pathOffset / input).string();
 
-            auto pchPath = input.relative_path().string();
-            str::replaceAllInPlace(pchPath, ":", "_");
-            str::replaceAllInPlace(pchPath, "..", "__");
+			auto pchPath = input.relative_path().string();
+			str::replaceAllInPlace(pchPath, ":", "_");
+			str::replaceAllInPlace(pchPath, "..", "__");
 
-            auto output = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pch");
-            auto outputStr = (pathOffset / output).string();
+			auto output = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pch");
+			auto outputStr = (pathOffset / output).string();
 
-            auto outputObjC = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pchmm");
-            auto outputObjCStr = (pathOffset / outputObjC).string();
+			auto outputObjC = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pchmm");
+			auto outputObjCStr = (pathOffset / outputObjC).string();
 
-            {
-                CommandEntry command;
-                command.command = str::quote(getCompiler(project, pathOffset, lang::Cpp)) + 
-                                    getCommonCompilerFlags(project, arch, pathOffset, lang::Cpp, true) + 
-                                    getCompilerFlags(project, arch, pathOffset, lang::Cpp, inputStr, outputStr);
-                command.inputs = { input };
-                command.outputs = { output };
-                command.workingDirectory = workingDir;
-                command.depFile = output.string() + ".d";
-                command.description = "Compiling " + project.name + " PCH" + archMessage + ": " + input.string();
-                project.commands += std::move(command);
-            }
+			{
+				CommandEntry command;
+				command.command = str::quote(getCompiler(project, pathOffset, lang::Cpp)) +
+				                  getCommonCompilerFlags(project, arch, pathOffset, lang::Cpp, true) +
+				                  getCompilerFlags(project, arch, pathOffset, lang::Cpp, inputStr, outputStr);
+				command.inputs = {input};
+				command.outputs = {output};
+				command.workingDirectory = workingDir;
+				command.depFile = output.string() + ".d";
+				command.description = "Compiling " + project.name + " PCH" + archMessage + ": " + input.string();
+				project.commands += std::move(command);
+			}
 
-            // TODO: This should be dependent on if it's needed rather than what OS we're on
-            if(OperatingSystem::current() == MacOS)
-            {
-                CommandEntry command;
-                command.command = str::quote(getCompiler(project, pathOffset, lang::ObjectiveCpp)) + 
-                                    getCommonCompilerFlags(project, arch, pathOffset, lang::ObjectiveCpp, true) + 
-                                    getCompilerFlags(project, arch, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
-                command.inputs = { input };
-                command.outputs = { outputObjC };
-                command.workingDirectory = workingDir;
-                command.depFile = outputObjC.string() + ".d";
-                command.description = "Compiling " + project.name + " PCH (Objective-C++)" + archMessage + ": " + input.string();
-                project.commands += std::move(command);
-            }
-        }
+			// TODO: This should be dependent on if it's needed rather than what OS we're on
+			if (OperatingSystem::current() == MacOS)
+			{
+				CommandEntry command;
+				command.command = str::quote(getCompiler(project, pathOffset, lang::ObjectiveCpp)) +
+				                  getCommonCompilerFlags(project, arch, pathOffset, lang::ObjectiveCpp, true) +
+				                  getCompilerFlags(project, arch, pathOffset, lang::ObjectiveCpp, inputStr, outputObjCStr);
+				command.inputs = {input};
+				command.outputs = {outputObjC};
+				command.workingDirectory = workingDir;
+				command.depFile = outputObjC.string() + ".d";
+				command.description = "Compiling " + project.name + " PCH (Objective-C++)" + archMessage + ": " + input.string();
+				project.commands += std::move(command);
+			}
+		}
 
-        std::string cppPchFlags;
-        std::string objCppPchFlags;
-        std::vector<std::filesystem::path> pchInputs;
-        if(!importPch.empty())
-        {
-            auto pchPath = importPch.relative_path().string();
-            str::replaceAllInPlace(pchPath, ":", "_");
-            str::replaceAllInPlace(pchPath, "..", "__");
+		std::string cppPchFlags;
+		std::string objCppPchFlags;
+		std::vector<std::filesystem::path> pchInputs;
+		if (!importPch.empty())
+		{
+			auto pchPath = importPch.relative_path().string();
+			str::replaceAllInPlace(pchPath, ":", "_");
+			str::replaceAllInPlace(pchPath, "..", "__");
 
-            auto input = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pch");
-            auto inputStr = (pathOffset / input).string();
-            cppPchFlags += " -Xclang -include-pch -Xclang " + inputStr;
-            pchInputs.push_back(input);
+			auto input = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pch");
+			auto inputStr = (pathOffset / input).string();
+			cppPchFlags += " -Xclang -include-pch -Xclang " + inputStr;
+			pchInputs.push_back(input);
 
-            // TODO: This should be dependent on if it's needed rather than what OS we're on
-            if(OperatingSystem::current() == MacOS)
-            {
-                auto inputObjCpp = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pchmm");
-                auto inputObjCppStr = (pathOffset / inputObjCpp).string();
-                objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
-                pchInputs.push_back(inputObjCpp);
-            }
-        }
+			// TODO: This should be dependent on if it's needed rather than what OS we're on
+			if (OperatingSystem::current() == MacOS)
+			{
+				auto inputObjCpp = dataDir / arch.id / std::filesystem::path("pch") / (pchPath + ".pchmm");
+				auto inputObjCppStr = (pathOffset / inputObjCpp).string();
+				objCppPchFlags += " -Xclang -include-pch -Xclang " + inputObjCppStr;
+				pchInputs.push_back(inputObjCpp);
+			}
+		}
 
-        std::unordered_map<Language, std::string, std::hash<std::string>> commonCompilerFlags;
-        auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
-            auto it = commonCompilerFlags.find(language);
-            if(it != commonCompilerFlags.end())
-            {
-                return it->second;
-            }
+		std::unordered_map<Language, std::string, std::hash<std::string>> commonCompilerFlags;
+		auto getCommonCompilerCommand = [&](Language language) -> const std::string& {
+			auto it = commonCompilerFlags.find(language);
+			if (it != commonCompilerFlags.end())
+			{
+				return it->second;
+			}
 
-            auto flags = str::quote(getCompiler(project, pathOffset, language)) +
-                            getCommonCompilerFlags(project, arch, pathOffset, language, false);
-            
-            return commonCompilerFlags[language] = flags;
-        };
+			auto flags = str::quote(getCompiler(project, pathOffset, language)) +
+			             getCommonCompilerFlags(project, arch, pathOffset, language, false);
 
-        auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, arch, pathOffset);
+			return commonCompilerFlags[language] = flags;
+		};
 
-        std::unordered_set<std::string> ignorePch;
-        ignorePch.reserve(gccExt.pch.ignoredFiles.size());
-        for (auto& file : gccExt.pch.ignoredFiles)
-        {
-            ignorePch.insert(file.lexically_normal().string());
-        }
+		auto linkerCommand = str::quote(getLinker(project, pathOffset)) + getCommonLinkerFlags(project, arch, pathOffset);
 
-        std::vector<std::filesystem::path> linkerInputs;
-        for(auto& input : project.files)
-        {
-            auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-            if(language == lang::None)
-            {
-                continue;
-            }
+		std::unordered_set<std::string> ignorePch;
+		ignorePch.reserve(gccExt.pch.ignoredFiles.size());
+		for (auto& file : gccExt.pch.ignoredFiles)
+		{
+			ignorePch.insert(file.lexically_normal().string());
+		}
 
-            auto inputStr = (pathOffset / input.path).string();
-            auto objPath = input.path.relative_path().string();
-            str::replaceAllInPlace(objPath, ":", "_");
+		std::vector<std::filesystem::path> linkerInputs;
+		for (auto& input : project.files)
+		{
+			auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
+			if (language == lang::None)
+			{
+				continue;
+			}
+
+			auto inputStr = (pathOffset / input.path).string();
+			auto objPath = input.path.relative_path().string();
+			str::replaceAllInPlace(objPath, ":", "_");
             str::replaceAllInPlace(objPath, "..", "__");
             auto output = dataDir / arch.id / std::filesystem::path("obj") / project.name / (objPath + (language == lang::Rc ? ".res" : ".o"));
             auto outputStr = (pathOffset / output).string();
@@ -457,107 +459,131 @@ std::vector<std::filesystem::path> GccLikeToolchainProvider::process(Project& pr
             command.description = "Compiling " + project.name + archMessage + ": " + input.path.string();
             project.commands += std::move(command);
 
-            linkerInputs.push_back(output);
-        }
+			toolchainOutputs.objectFiles += output;
+			linkerInputs.push_back(output);
+		}
 
-        if(!linker.empty())
-        {
-            if(project.type == Executable || project.type == SharedLib)
-            {
-                for(auto& path : project.libs)
-                {
-                    linkerInputs.push_back(path);
-                }
+		if (!linker.empty())
+		{
+			if (project.type == Executable || project.type == SharedLib)
+			{
+				for (auto& path : project.libs)
+				{
+					linkerInputs.push_back(path);
+				}
 
-                if(auto it = project.archSettings.find(arch); it != project.archSettings.end())
-                {
-                    for(auto& path : it->second.libs)
-                    {
-                        linkerInputs.push_back(path);
-                    }
-                }
-            }
-            
-            std::vector<std::string> linkerInputStrs;
-            linkerInputStrs.reserve(linkerInputs.size());
-            bool windows = OperatingSystem::current() == Windows;
-            for(auto& input : linkerInputs)
-            {
-                if(windows && input.extension().empty())
-                {
-                    linkerInputStrs.push_back((pathOffset / input).string() + ".");
-                }
-                else
-                {
-                    linkerInputStrs.push_back((pathOffset / input).string());
-                }
-            }
+				if (auto it = project.archSettings.find(arch); it != project.archSettings.end())
+				{
+					for (auto& path : it->second.libs)
+					{
+						linkerInputs.push_back(path);
+					}
+				}
 
-            std::filesystem::path output;
+				for (auto& dependency : project.dependencies)
+				{
+					const auto& dependencyOutputs = dependency->ext<extensions::internal::ToolchainOutputs>();
+					for (auto& lib : dependencyOutputs.libraryFiles)
+					{
+						linkerInputs.push_back(lib);
+					}
+					if (auto it = dependency->archSettings.find(arch); it != dependency->archSettings.end())
+					{
+						const auto& dependencyArchOutputs = it->second.ext<extensions::internal::ToolchainOutputs>();
+						for (auto& lib : dependencyArchOutputs.libraryFiles)
+						{
+							linkerInputs.push_back(lib);
+						}
+					}
+				}
+			}
 
-            if(archs.size() == 1)
-            {
-                output = finalOutput;
-            }
-            else
-            {
-                auto tmpPath = finalOutput.relative_path().string();
-                str::replaceAllInPlace(tmpPath, ":", "_");
-                str::replaceAllInPlace(tmpPath, "..", "__");
-                output = dataDir / arch.id / std::filesystem::path("link") / project.name / tmpPath;
-            }
+			std::vector<std::string> linkerInputStrs;
+			linkerInputStrs.reserve(linkerInputs.size());
+			bool windows = OperatingSystem::current() == Windows;
+			for (auto& input : linkerInputs)
+			{
+				if (windows && input.extension().empty())
+				{
+					linkerInputStrs.push_back((pathOffset / input).string() + ".");
+				}
+				else
+				{
+					linkerInputStrs.push_back((pathOffset / input).string());
+				}
+			}
 
-            std::string outputStr;
-            outputStr = (pathOffset / output).string();
-            archOutputs.push_back(output);
+			std::filesystem::path output;
 
-            CommandEntry command;
-            command.command = linkerCommand;
-            // TODO: ar on macOS doesn't support rsp files. This should not be hardcoded,
-            // the capabilities of the toolchain should be queried one way or another.
-            if(OperatingSystem::current() != MacOS)
-            {
-                command.rspContents = getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
-                str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
-                command.rspFile = output.string() + ".rsp";
-                command.command += " @" + str::quote((pathOffset / command.rspFile).string());
-            }
-            else
-            {
-                command.command += getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
-            }
-            command.inputs = std::move(linkerInputs);
-            command.outputs = { output };
-            command.workingDirectory = workingDir;
-            command.description = "Linking " + project.name + archMessage + ": " + output.string();
-            // ar just adds stuff to existing files, so we need to clean it ourselves first.
+			if (archs.size() == 1)
+			{
+				output = finalOutput;
+			}
+			else
+			{
+				auto tmpPath = finalOutput.relative_path().string();
+				str::replaceAllInPlace(tmpPath, ":", "_");
+				str::replaceAllInPlace(tmpPath, "..", "__");
+				output = dataDir / arch.id / std::filesystem::path("link") / project.name / tmpPath;
+			}
+
+			std::string outputStr;
+			outputStr = (pathOffset / output).string();
+			archOutputs.push_back(output);
+
+			if (archs.size() == 1)
+			{
+				toolchainOutputs.libraryFiles += output;
+			}
+
+			CommandEntry command;
+			command.command = linkerCommand;
+			// TODO: ar on macOS doesn't support rsp files. This should not be hardcoded,
+			// the capabilities of the toolchain should be queried one way or another.
+			if (OperatingSystem::current() != MacOS)
+			{
+				command.rspContents = getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
+				str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
+				command.rspFile = output.string() + ".rsp";
+				command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+			}
+			else
+			{
+				command.command += getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
+			}
+			command.inputs = std::move(linkerInputs);
+			command.outputs = {output};
+			command.workingDirectory = workingDir;
+			command.description = "Linking " + project.name + archMessage + ": " + output.string();
+			// ar just adds stuff to existing files, so we need to clean it ourselves first.
 			if (project.type == StaticLib)
-            {
+			{
 				auto removeCommand = commands::remove(pathOffset / output);
 				removeCommand.workingDirectory = workingDir;
 				command = commands::chain({removeCommand, command}, command.description);
-            }
-            project.commands += std::move(command);
-        }
-    }
+			}
+			project.commands += std::move(command);
+		}
+	}
 
-    if(archs.size() > 1)
-    {
-        // TODO: Make lipo part of the toolchain conf?
-        CommandEntry command;
-        command.inputs = archOutputs;
-        command.outputs = { finalOutput };
-        command.workingDirectory = workingDir;
-        command.command = "lipo -create";
-        for(auto input : command.inputs)
-        {
-            command.command += " " + str::quote((pathOffset / input).string());
-        }
-        command.command += " -output ";
-        command.command += " " + str::quote((pathOffset / finalOutput).string());
-        command.description = "Linking " + project.name + ": " + finalOutput.string();
-        project.commands += std::move(command);
-    }
+	if (archs.size() > 1)
+	{
+		auto& toolchainOutputs = project.ext<extensions::internal::ToolchainOutputs>();
+		toolchainOutputs.libraryFiles += finalOutput;
 
-    return { finalOutput };
+		// TODO: Make lipo part of the toolchain conf?
+		CommandEntry command;
+		command.inputs = archOutputs;
+		command.outputs = {finalOutput};
+		command.workingDirectory = workingDir;
+		command.command = "lipo -create";
+		for (auto input : command.inputs)
+		{
+			command.command += " " + str::quote((pathOffset / input).string());
+		}
+		command.command += " -output ";
+		command.command += " " + str::quote((pathOffset / finalOutput).string());
+		command.description = "Linking " + project.name + ": " + finalOutput.string();
+		project.commands += std::move(command);
+	}
 }

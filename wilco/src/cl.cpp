@@ -1,4 +1,5 @@
 #include "toolchains/cl.h"
+#include "core/arch.h"
 
 ClToolchainProvider::ClToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver, std::vector<std::filesystem::path> sysIncludePaths, std::vector<std::filesystem::path> sysLibPaths)
     : ToolchainProvider(name)
@@ -207,7 +208,7 @@ std::string ClToolchainProvider::getLinkerFlags(Project& project, std::filesyste
     return flags;
 }
 
-std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
+void ClToolchainProvider::process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const
 {
     std::filesystem::path pathOffset = std::filesystem::proximate(std::filesystem::current_path(), workingDir);
 
@@ -215,17 +216,17 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
        project.type != SharedLib &&
        project.type != StaticLib)
     {
-        return {};
-    }
+		return;
+	}
 
-    std::set<Architecture> archs = project.architectures;
-    if(archs.empty())
-    {
-        archs = { Architecture::current() };
-    }
+	std::set<Architecture> archs = project.architectures;
+	if (archs.empty())
+	{
+		archs = {Architecture::current()};
+	}
 
-    else if(archs.size() > 1)
-    {
+	else if (archs.size() > 1)
+	{
         throw std::runtime_error("Project '" + project.name + "' has multiple architectures which is not supported by the current toolchain.");
     }
     else if(archs.find(Architecture::current()) == archs.end())
@@ -304,76 +305,79 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         }
     }
 
-    std::vector<std::filesystem::path> linkerInputs;
-    for(auto& input : project.files)
-    {
-        auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
-        if(language == lang::None)
-        {
-            continue;
-        }
+	auto& toolchainOutputs = project.ext<extensions::internal::ToolchainOutputs>();
 
-        auto inputStr = (pathOffset / input.path).string();
-        auto objPath = input.path.relative_path().string();
-        str::replaceAllInPlace(objPath, ":", "_");
-        str::replaceAllInPlace(objPath, "..", "__");
-        auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + (language == lang::Rc ? ".res" : ".obj"));
-        auto outputStr = (pathOffset / output).string();
+	std::vector<std::filesystem::path> linkerInputs;
+	for (auto& input : project.files)
+	{
+		auto language = input.language != lang::Auto ? input.language : Language::getByPath(input.path);
+		if (language == lang::None)
+		{
+			continue;
+		}
 
-        CommandEntry command;
+		auto inputStr = (pathOffset / input.path).string();
+		auto objPath = input.path.relative_path().string();
+		str::replaceAllInPlace(objPath, ":", "_");
+		str::replaceAllInPlace(objPath, "..", "__");
+		auto output = dataDir / std::filesystem::path("obj") / project.name / (objPath + (language == lang::Rc ? ".res" : ".obj"));
+		auto outputStr = (pathOffset / output).string();
 
-        command.inputs = { input.path };
-        command.outputs = { output };
+		CommandEntry command;
 
-        if(pdbPath)
-        {
-            command.outputs.push_back(*pdbPath);
-        }
+		command.inputs = {input.path};
+		command.outputs = {output};
 
-        if(language != lang::Rc)
-        {
-            command.command = getCommonCompilerCommand(language);
-            command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
+		if (pdbPath)
+		{
+			command.outputs.push_back(*pdbPath);
+		}
 
-            if(!msvcExt.pch.header.empty() && msvcExt.pch.source == input.path)
-            {
-                command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.filename().string());
-                command.outputs.push_back(pchOutput);
-            }
-            else if(!msvcExt.pch.header.empty() && ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
-            {
-                command.rspContents += " /Yu" + str::quote(msvcExt.pch.header.filename().string());
-                if(msvcExt.pch.forceInclude.value_or(false))
-                {
-                    command.rspContents += " /FI" + str::quote(msvcExt.pch.header.filename().string());
-                }
-                if(!pchOutput.empty())
-                {
-                    command.inputs.push_back(pchOutput);
-                }
-            }
-            command.depFile = { output.string() + ".d", DepFile::Format::MSVC };
-        }
-        else
-        {
-            // There is rsp support in RC, but it requires different escaping somehow so just ignore that for now
-            command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
-        }
-        command.workingDirectory = workingDir;
-        if(!command.rspContents.empty())
-        {
-            command.rspFile = output.string() + ".rsp";
-            command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
-        }
-        command.description = "Compiling " + project.name + ": " + input.path.string();
-        project.commands += std::move(command);
+		if (language != lang::Rc)
+		{
+			command.command = getCommonCompilerCommand(language);
+			command.rspContents = getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
 
-        linkerInputs.push_back(output);
-    }
+			if (!msvcExt.pch.header.empty() && msvcExt.pch.source == input.path)
+			{
+				command.rspContents += " /Yc" + str::quote(msvcExt.pch.header.filename().string());
+				command.outputs.push_back(pchOutput);
+			}
+			else if (!msvcExt.pch.header.empty() && ignorePch.find(input.path.lexically_normal().string()) == ignorePch.end())
+			{
+				command.rspContents += " /Yu" + str::quote(msvcExt.pch.header.filename().string());
+				if (msvcExt.pch.forceInclude.value_or(false))
+				{
+					command.rspContents += " /FI" + str::quote(msvcExt.pch.header.filename().string());
+				}
+				if (!pchOutput.empty())
+				{
+					command.inputs.push_back(pchOutput);
+				}
+			}
+			command.depFile = {output.string() + ".d", DepFile::Format::MSVC};
+		}
+		else
+		{
+			// There is rsp support in RC, but it requires different escaping somehow so just ignore that for now
+			command.command = getCommonCompilerCommand(language) + getCommonCompilerArgs(language) + getCompilerFlags(project, pathOffset, language, inputStr, outputStr);
+		}
+		command.workingDirectory = workingDir;
+		if (!command.rspContents.empty())
+		{
+			command.rspFile = output.string() + ".rsp";
+			command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
+		}
+		command.description = "Compiling " + project.name + ": " + input.path.string();
+		project.commands += std::move(command);
 
-    std::vector<std::filesystem::path> outputs;
+		linkerInputs.push_back(output);
+		toolchainOutputs.objectFiles += output;
+	}
 
-    if(!linker.empty())
+	std::vector<std::filesystem::path> outputs;
+
+	if(!linker.empty())
     {
         if(project.type == Executable || project.type == SharedLib)
         {
@@ -381,9 +385,26 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
             {
                 linkerInputs.push_back(path);
             }
-        }
 
-        std::vector<std::string> linkerInputStrs;
+			for (auto& dependency : project.dependencies)
+			{
+				const auto& dependencyOutputs = dependency->ext<extensions::internal::ToolchainOutputs>();
+				for (auto& lib : dependencyOutputs.libraryFiles)
+				{
+					linkerInputs.push_back(lib);
+				}
+				if (auto it = dependency->archSettings.find(Architecture::current()); it != dependency->archSettings.end())
+				{
+					const auto& dependencyArchOutputs = it->second.ext<extensions::internal::ToolchainOutputs>();
+					for (auto& lib : dependencyArchOutputs.libraryFiles)
+					{
+						linkerInputs.push_back(lib);
+					}
+				}
+			}
+		}
+
+		std::vector<std::string> linkerInputStrs;
         linkerInputStrs.reserve(linkerInputs.size());
         bool windows = OperatingSystem::current() == Windows;
         for(auto& input : linkerInputs)
@@ -419,9 +440,8 @@ std::vector<std::filesystem::path> ClToolchainProvider::process(Project& project
         command.description = "Linking " + project.name + ": " + output.string();
         project.commands += std::move(command);
 
-        outputs.push_back(output);
-    }
-
-    return outputs;
+		toolchainOutputs.libraryFiles += output;
+		outputs.push_back(output);
+	}
 }
 
