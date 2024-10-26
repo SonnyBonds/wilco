@@ -147,7 +147,24 @@ struct BuildSettings
         return extensionEntry->extensionData;
     }
 
-    /** Checks if an extension of type ExtensionType is present in this ProjectSettings. */
+	/** Fetches the extension of type ExtensionType in this ProjectSettings, adding it if it does not already exist. */
+	template <typename ExtensionType>
+	const ExtensionType& ext() const
+	{
+		// TODO: Better key, maybe? hash_code doesn't have to be unique.
+		auto key = typeid(ExtensionType).hash_code();
+
+		auto it = _extensions.find(key);
+		if (it != _extensions.end())
+		{
+			return static_cast<ExtensionEntryImpl<ExtensionType>*>(it->second.get())->extensionData;
+		}
+		auto extensionEntry = new ExtensionEntryImpl<ExtensionType>();
+		_extensions.insert({key, std::unique_ptr<ExtensionEntry>(extensionEntry)});
+		return extensionEntry->extensionData;
+	}
+
+	/** Checks if an extension of type ExtensionType is present in this ProjectSettings. */
     template<typename ExtensionType>
     bool hasExt() const
     {
@@ -184,8 +201,8 @@ private:
 
         ExtensionType extensionData;
     };
-    
-    std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
+
+	mutable std::map<size_t, std::unique_ptr<ExtensionEntry>> _extensions;
 };
 
 /**

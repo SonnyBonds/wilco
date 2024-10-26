@@ -1,4 +1,5 @@
 #include "actions/ninja.h"
+#include "modules/toolchain.h"
 #include "util/process.h"
 #include "buildconfigurator.h"
 #include "database.h"
@@ -127,22 +128,23 @@ static std::string emitProject(Environment& env, const std::filesystem::path& pr
         throw std::runtime_error("Command project '" + project.name + "' has no commands.");
     }
 
-    std::vector<std::string> projectOutputs;
-
-    const ToolchainProvider* toolchain = project.toolchain;
-    if(!toolchain)
+	const ToolchainProvider* toolchain = project.toolchain;
+	if(!toolchain)
     {
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, projectDir, dataDir);
-    for(auto& output : toolchainOutputs)
-    {
-        projectOutputs.push_back((pathOffset / output).string());
-    }
+	toolchain->process(project, projectDir, dataDir);
 
-    std::string prologue;
-    // TODO: Current isn't necessarily the host system
+	std::vector<std::string> projectOutputs;
+	const auto& toolchainOutputs = project.ext<extensions::internal::ToolchainOutputs>();
+	for (auto& output : toolchainOutputs.libraryFiles)
+	{
+		projectOutputs.push_back((pathOffset / output).string());
+	}
+
+	std::string prologue;
+	// TODO: Current isn't necessarily the host system
     if(OperatingSystem::current() == Windows)
     {
         prologue += "cmd /c ";

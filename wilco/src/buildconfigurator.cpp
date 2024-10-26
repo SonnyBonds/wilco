@@ -1,14 +1,16 @@
 #include "buildconfigurator.h"
 #include "core/environment.h"
 #include "modules/toolchain.h"
-#include "util/commands.h"
 #include "actions/direct.h"
 #include "actions/configure.h"
 #include "fileutil.h"
-#include "dependencyparser.h"
 #include "commandprocessor.h"
+#include <algorithm>
+#include <memory>
 #include <sstream>
 #include <fstream>
+#include <stdexcept>
+#include <vector>
 
 #define DEBUG_LOG 0
 
@@ -34,37 +36,37 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
         toolchain = defaultToolchain;
     }
 
-    auto toolchainOutputs = toolchain->process(project, {}, dataDir);
+	toolchain->process(project, {}, dataDir);
 
-    if(project.type == Command && project.commands.empty())
-    {
-        throw std::runtime_error("Command project '" + project.name + "' has no commands.");
-    }
+	if (project.type == Command && project.commands.empty())
+	{
+		throw std::runtime_error("Command project '" + project.name + "' has no commands.");
+	}
 
-    collectedCommands.reserve(collectedCommands.size() + project.commands.size() + 1);
-    for(auto& command : project.commands)
-    {
-        if(command.command.empty() && !command.outputs.empty())
-        {
-            throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has outputs but no actual command to produce them.");
-        }
-        collectedCommands.push_back(command);
-    }
+	collectedCommands.reserve(collectedCommands.size() + project.commands.size() + 1);
+	for (auto& command : project.commands)
+	{
+		if (command.command.empty() && !command.outputs.empty())
+		{
+			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has outputs but no actual command to produce them.");
+		}
+		collectedCommands.push_back(command);
+	}
 
-    CommandEntry phonyProjectCommand;
-    std::set<std::filesystem::path> inputs;
-    std::set<std::filesystem::path> outputs;
-    for(auto& command : collectedCommands)
-    {
-        inputs.insert(command.inputs.begin(), command.inputs.end());
-        outputs.insert(command.outputs.begin(), command.outputs.end());
-    }
+	CommandEntry phonyProjectCommand;
+	std::set<std::filesystem::path> inputs;
+	std::set<std::filesystem::path> outputs;
+	for (auto& command : collectedCommands)
+	{
+		inputs.insert(command.inputs.begin(), command.inputs.end());
+		outputs.insert(command.outputs.begin(), command.outputs.end());
+	}
 
-    // List all outputs that haven't been consumed within the project (e.g. intermediate obj files)
-    // as inputs to a phony command that can be used for partial builds.
-    // We could list all outputs, but this makes the resulting command a bit cleaner.
-    std::set_difference(outputs.begin(), outputs.end(), inputs.begin(), inputs.end(), std::back_inserter(phonyProjectCommand.inputs));
-    phonyProjectCommand.description = project.name;
+	// List all outputs that haven't been consumed within the project (e.g. intermediate obj files)
+	// as inputs to a phony command that can be used for partial builds.
+	// We could list all outputs, but this makes the resulting command a bit cleaner.
+	std::set_difference(outputs.begin(), outputs.end(), inputs.begin(), inputs.end(), std::back_inserter(phonyProjectCommand.inputs));
+	phonyProjectCommand.description = project.name;
     collectedCommands.push_back(std::move(phonyProjectCommand));
 }
 
@@ -165,28 +167,28 @@ BuildConfigurator::BuildConfigurator(cli::Context cliContext, bool useExisting)
         cli::Context configureContext(cliContext.startPath, cliContext.invocation, args);
         Environment env = configureEnvironment(configureContext);
 
-        std::vector<CommandEntry> commands;
-        for(auto& project : env.projects)
-        {
-            collectCommands(env, commands, dataPath, *project);
-        }
-        database.setCommands(std::move(commands));
+		std::vector<CommandEntry> commands;
+		for (auto& project : env.projects)
+		{
+			collectCommands(env, commands, dataPath, *project);
+		}
+		database.setCommands(std::move(commands));
 
-        std::stringstream compileCommandsStream;
-        generateCompileCommandsJson(compileCommandsStream, database);
-        env.writeFile(*targetPath / "compile_commands.json", compileCommandsStream.str());
+		std::stringstream compileCommandsStream;
+		generateCompileCommandsJson(compileCommandsStream, database);
+		env.writeFile(*targetPath / "compile_commands.json", compileCommandsStream.str());
 
-        updateConfigDatabase(env.configurationDependencies, configDatabase, args);
+		updateConfigDatabase(env.configurationDependencies, configDatabase, args);
 
-        std::cout << "Done.\n";
-    }
-    else
-    {
-        if(!useExisting)
-        {
-            std::cout << "Configuration in " << (*targetPath).string() << " is up to date\n";
-        }
-    }
+		std::cout << "Done.\n";
+	}
+	else
+	{
+		if (!useExisting)
+		{
+			std::cout << "Configuration in " << (*targetPath).string() << " is up to date\n";
+		}
+	}
 }
 
 BuildConfigurator::~BuildConfigurator()
@@ -264,5 +266,65 @@ Environment BuildConfigurator::configureEnvironment(cli::Context &cliContext)
     Environment env(cliContext);
     std::filesystem::current_path(cliContext.configurationFile.parent_path());
     configure(env);
-    return env;
+
+	// Sort projects so that dependencies are before dependents.
+
+	struct ProjectSortProxy
+	{
+		size_t index;
+		size_t depth;
+	};
+
+	std::vector<ProjectSortProxy> proxies;
+	for (size_t i = 0; i < env.projects.size(); ++i)
+	{
+		proxies.push_back({i, 0});
+	}
+
+	auto findProjectIndex = [&](const Project* project) {
+		for (size_t i = 0; i < env.projects.size(); ++i)
+		{
+			if (env.projects[i].get() == project)
+			{
+				return i;
+			}
+		}
+
+		throw std::runtime_error("Broken dependency tree.");
+	};
+
+	std::vector<ProjectSortProxy> stack;
+	stack.reserve(env.projects.size());
+	for (size_t i = 0; i < env.projects.size(); ++i)
+	{
+		stack.push_back(proxies[i]);
+		while (!stack.empty())
+		{
+			auto entry = stack.back();
+			stack.pop_back();
+			for (auto& dependency : env.projects[entry.index]->dependencies)
+			{
+				auto dependencyIndex = findProjectIndex(dependency);
+				if (entry.depth + 1 > proxies[dependencyIndex].depth)
+				{
+					proxies[dependencyIndex].depth = entry.depth + 1;
+					stack.push_back(proxies[dependencyIndex]);
+				}
+			}
+		}
+	}
+
+	std::stable_sort(proxies.begin(), proxies.end(), [](const auto& a, const auto& b) {
+		return a.depth > b.depth;
+	});
+
+	std::vector<std::unique_ptr<Project>> sortedProjects;
+	for (auto& proxy : proxies)
+	{
+		sortedProjects.emplace_back(std::move(env.projects[proxy.index]));
+	}
+
+	swap(env.projects, sortedProjects);
+
+	return env;
 }

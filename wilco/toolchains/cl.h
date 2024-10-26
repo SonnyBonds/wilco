@@ -58,5 +58,5 @@ struct ClToolchainProvider : public ToolchainProvider
     std::string getLinker(Project& project, std::filesystem::path pathOffset) const;
     std::string getCommonLinkerFlags(Project& project, std::filesystem::path pathOffset) const;
     std::string getLinkerFlags(Project& project, std::filesystem::path pathOffset, const std::vector<std::string>& inputs, const std::string& output) const;
-    std::vector<std::filesystem::path> process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
+	void process(Project& project, const std::filesystem::path& workingDir, const std::filesystem::path& dataDir) const override;
 };

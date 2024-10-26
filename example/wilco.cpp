@@ -32,11 +32,10 @@ void configure(Environment& env)
     helloPrinter.import(defaults);
     helloPrinter.files += env.listFiles("hellolib");
     helloPrinter.defines += "MESSAGE=" + str::quote(std::string(*arguments::printerMessage));
-    helloPrinter.exports.includePaths = "hellolib";
-    helloPrinter.exports.libs += helloPrinter.output;
+	helloPrinter.exports.includePaths = "hellolib";
 
-    Project& hello = env.createProject("Hello", Executable);
-    hello.import(defaults);
-    hello.import(helloPrinter); // Import adds all properties in the "exports" section of the imported project
+	Project& hello = env.createProject("Hello", Executable);
+	hello.import(defaults);
+	hello.import(helloPrinter); // Import adds all properties in the "exports" section of the imported project
     hello.files += env.listFiles("helloapp");
 }
