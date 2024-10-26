@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "modules/command.h"
@@ -74,16 +76,18 @@ inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string
     }
 
     // Remove intermediate steps from inputs
-    result.inputs.erase(std::remove_if(result.inputs.begin(), result.inputs.end(), [&](const auto& input) {
-        return std::find(result.outputs.begin(), result.outputs.end(), input) != result.outputs.end();
-    }), result.inputs.end());
+	result.inputs.erase(std::remove_if(result.inputs.begin(), result.inputs.end(), [&](const auto& input) {
+		return std::find_if(result.outputs.begin(), result.outputs.end(), [input = std::filesystem::absolute(input).lexically_normal()](const auto& output) {
+			return input == std::filesystem::absolute(output).lexically_normal();
+		}) != result.outputs.end();
+	}), result.inputs.end());
 
-    if(!newDescription.empty())
-    {
-        result.description = newDescription;
-    }
+	if (!newDescription.empty())
+	{
+		result.description = newDescription;
+	}
 
-    return result;
+	return result;
 }
 
 inline CommandEntry ifExists(std::filesystem::path path, CommandEntry commandEntry)
