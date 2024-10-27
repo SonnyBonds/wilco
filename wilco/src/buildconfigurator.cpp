@@ -5,11 +5,14 @@
 #include "actions/configure.h"
 #include "fileutil.h"
 #include "commandprocessor.h"
+#include "util/string.h"
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #define DEBUG_LOG 0
@@ -49,6 +52,14 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
 		if (command.command.empty() && !command.outputs.empty())
 		{
 			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has outputs but no actual command to produce them.");
+		}
+		if (!command.rspContents.empty() && command.rspFile.empty())
+		{
+			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has rspContents set but no corresponding rspFile.");
+		}
+		if (!command.rspFile.empty() && command.command.find("@" + str::quote(command.rspFile)) == std::string::npos)
+		{
+			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has rspFile set but no corresponding @rspFile in the command string. Currently @\"quoted/path\" is the only supported rsp file flag format, and path must be lexically identical to rspFile.");
 		}
 		collectedCommands.push_back(command);
 	}
@@ -96,11 +107,19 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
             stream << "    \"directory\": " << cwd << ",\n";
             // Assuming first input is the main input
             stream << "    \"file\": " << command.inputs.front() << ",\n";
-            // TODO: Technically the @[rspfile]-part of the command should be replaced by rspContents,
-            // but for now let's just slap it at the end of the command.
-            stream << "    \"command\": " << str::quote(command.command + " " + command.rspContents) << "\n";
-            stream << "  }";
-        }
+			if (command.rspFile.empty())
+			{
+				stream << "    \"command\": " << str::quote(command.command) << "\n";
+			}
+			else
+			{
+				std::string rspFlag = "@" + str::quote(command.rspFile);
+				// Expand rsp contents since the rsp files are transient and won't be
+				// available to whatever consumes the compile commands file.
+				stream << "    \"command\": " << str::quote(str::replaceAll(command.command, rspFlag, command.rspContents)) << "\n";
+			}
+			stream << "  }";
+		}
     };
 
     writeCommands(database.getCommands());

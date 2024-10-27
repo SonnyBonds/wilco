@@ -365,8 +365,8 @@ void ClToolchainProvider::process(Project& project, const std::filesystem::path&
 		command.workingDirectory = workingDir;
 		if (!command.rspContents.empty())
 		{
-			command.rspFile = output.string() + ".rsp";
-			command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
+			command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
+			command.command += " @" + str::quote(command.rspFile, '"', "\"");
 		}
 		command.description = "Compiling " + project.name + ": " + input.path.string();
 		project.commands += std::move(command);
@@ -434,9 +434,9 @@ void ClToolchainProvider::process(Project& project, const std::filesystem::path&
         command.rspContents = getLinkerFlags(project, pathOffset, linkerInputStrs, outputStr);
         if(!command.rspContents.empty())
         {
-            command.rspFile = output.string() + ".rsp";
-            command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
-        }
+			command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
+			command.command += " @" + str::quote(command.rspFile, '"', "\"");
+		}
         command.description = "Linking " + project.name + ": " + output.string();
         project.commands += std::move(command);
 

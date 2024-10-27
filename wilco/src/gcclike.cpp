@@ -3,6 +3,7 @@
 #include "core/project.h"
 #include "modules/toolchain.h"
 #include "util/commands.h"
+#include <filesystem>
 
 GccLikeToolchainProvider::GccLikeToolchainProvider(std::string name, std::string compiler, std::string resourceCompiler, std::string linker, std::string archiver)
     : ToolchainProvider(name) 
@@ -444,10 +445,10 @@ void GccLikeToolchainProvider::process(Project& project, const std::filesystem::
                 }
 
                 str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
-                command.rspFile = output.string() + ".rsp";
-                command.command += " @" + str::quote((pathOffset / command.rspFile).string(), '"', "\"");
-                command.depFile = output.string() + ".d";
-            }
+				command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
+				command.command += " @" + str::quote(command.rspFile, '"', "\"");
+				command.depFile = output.string() + ".d";
+			}
             else
             {
                 command.command = getCommonCompilerCommand(language) + getCompilerFlags(project, arch, pathOffset, language, inputStr, outputStr);
@@ -544,8 +545,8 @@ void GccLikeToolchainProvider::process(Project& project, const std::filesystem::
 			{
 				command.rspContents = getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
 				str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
-				command.rspFile = output.string() + ".rsp";
-				command.command += " @" + str::quote((pathOffset / command.rspFile).string());
+				command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
+				command.command += " @" + str::quote(command.rspFile, '"', "\"");
 			}
 			else
 			{
