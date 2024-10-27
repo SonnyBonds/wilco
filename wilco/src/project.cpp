@@ -32,7 +32,8 @@ void BuildSettings::importExtensions(const BuildSettings& other)
 void Project::import(const Project& other, bool reexport)
 {
     dependencies += &other;
-    ProjectSettings::import(other.exports);
+	exports.dependencies += &other;
+	ProjectSettings::import(other.exports);
     if(reexport)
     {
         exports.import(other.exports);
