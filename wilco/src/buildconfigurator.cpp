@@ -267,61 +267,36 @@ Environment BuildConfigurator::configureEnvironment(cli::Context &cliContext)
     std::filesystem::current_path(cliContext.configurationFile.parent_path());
     configure(env);
 
-	// Sort projects so that dependencies are before dependents.
+	// Reorder the projects list so that dependencies are guaranteed to be
+	// before their dependent projects.
 
-	struct ProjectSortProxy
-	{
-		size_t index;
-		size_t depth;
-	};
-
-	std::vector<ProjectSortProxy> proxies;
+	std::unordered_map<const Project*, size_t> projectIndices;
+	std::unordered_set<size_t> addedIndices;
 	for (size_t i = 0; i < env.projects.size(); ++i)
 	{
-		proxies.push_back({i, 0});
+		projectIndices.insert({env.projects[i].get(), i});
 	}
-
-	auto findProjectIndex = [&](const Project* project) {
-		for (size_t i = 0; i < env.projects.size(); ++i)
+	std::vector<size_t> sortedIndices;
+	auto pushProject = [&](size_t index) {
+		if (addedIndices.find(index) == addedIndices.end())
 		{
-			if (env.projects[i].get() == project)
-			{
-				return i;
-			}
+			sortedIndices.push_back(index);
+			addedIndices.insert(index);
 		}
-
-		throw std::runtime_error("Broken dependency tree.");
 	};
-
-	std::vector<ProjectSortProxy> stack;
-	stack.reserve(env.projects.size());
 	for (size_t i = 0; i < env.projects.size(); ++i)
 	{
-		stack.push_back(proxies[i]);
-		while (!stack.empty())
+		for (auto dependency : env.projects[i]->dependencies)
 		{
-			auto entry = stack.back();
-			stack.pop_back();
-			for (auto& dependency : env.projects[entry.index]->dependencies)
-			{
-				auto dependencyIndex = findProjectIndex(dependency);
-				if (entry.depth + 1 > proxies[dependencyIndex].depth)
-				{
-					proxies[dependencyIndex].depth = entry.depth + 1;
-					stack.push_back(proxies[dependencyIndex]);
-				}
-			}
+			pushProject(projectIndices[dependency]);
 		}
+		pushProject(i);
 	}
-
-	std::stable_sort(proxies.begin(), proxies.end(), [](const auto& a, const auto& b) {
-		return a.depth > b.depth;
-	});
 
 	std::vector<std::unique_ptr<Project>> sortedProjects;
-	for (auto& proxy : proxies)
+	for (auto index : sortedIndices)
 	{
-		sortedProjects.emplace_back(std::move(env.projects[proxy.index]));
+		sortedProjects.emplace_back(std::move(env.projects[index]));
 	}
 
 	swap(env.projects, sortedProjects);
