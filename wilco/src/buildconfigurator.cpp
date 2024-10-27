@@ -91,8 +91,8 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
     {
         for(auto& command : commands)
         {
-            if(command.inputs.empty())
-            {
+			if (command.command.empty() || command.inputs.empty())
+			{
                 continue;
             }
 
