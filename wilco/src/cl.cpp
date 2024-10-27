@@ -366,7 +366,7 @@ void ClToolchainProvider::process(Project& project, const std::filesystem::path&
 		if (!command.rspContents.empty())
 		{
 			command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
-			command.command += " @" + str::quote(command.rspFile, '"', "\"");
+			command.command += " @" + str::quote(command.rspFile.string(), '"', "\"");
 		}
 		command.description = "Compiling " + project.name + ": " + input.path.string();
 		project.commands += std::move(command);
@@ -435,7 +435,7 @@ void ClToolchainProvider::process(Project& project, const std::filesystem::path&
         if(!command.rspContents.empty())
         {
 			command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
-			command.command += " @" + str::quote(command.rspFile, '"', "\"");
+			command.command += " @" + str::quote(command.rspFile.string(), '"', "\"");
 		}
         command.description = "Linking " + project.name + ": " + output.string();
         project.commands += std::move(command);

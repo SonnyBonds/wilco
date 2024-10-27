@@ -446,7 +446,7 @@ void GccLikeToolchainProvider::process(Project& project, const std::filesystem::
 
                 str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
 				command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
-				command.command += " @" + str::quote(command.rspFile, '"', "\"");
+				command.command += " @" + str::quote(command.rspFile.string(), '"', "\"");
 				command.depFile = output.string() + ".d";
 			}
             else
@@ -546,7 +546,7 @@ void GccLikeToolchainProvider::process(Project& project, const std::filesystem::
 				command.rspContents = getLinkerFlags(project, arch, pathOffset, linkerInputStrs, outputStr);
 				str::replaceAllInPlace(command.rspContents, "\\", "\\\\");
 				command.rspFile = std::filesystem::absolute(output.string() + ".rsp").lexically_normal();
-				command.command += " @" + str::quote(command.rspFile, '"', "\"");
+				command.command += " @" + str::quote(command.rspFile.string(), '"', "\"");
 			}
 			else
 			{
