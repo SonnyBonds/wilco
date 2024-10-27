@@ -5,40 +5,14 @@
 #include <optional>
 #include <string>
 
+#include "core/flags.h"
 #include "modules/command.h"
 #include "util/string.h"
 
 namespace commands
 {
 
-// TODO: Do flags better
-
-namespace flags
-{
-
-namespace copy
-{
-
-enum Flags
-{
-    removeDestination = 1,
-    touchDestination = 2,
-};
-
-}
-
-namespace move
-{
-
-enum Flags
-{
-    removeDestination = 1,
-    touchDestination = 2,
-};
-
-}
-
-}
+using flags::operator|;
 
 inline CommandEntry chain(const std::vector<CommandEntry>& commands, std::string newDescription = {})
 {
@@ -171,7 +145,13 @@ inline CommandEntry touch(std::filesystem::path path)
     return commandEntry;
 }
 
-inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to, flags::copy::Flags flags = {})
+enum class CopyFlags
+{
+	removeDestination,
+	touchDestination,
+};
+
+inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to, flags::Flags<CopyFlags> flags = {})
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -190,8 +170,8 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to, f
         commandEntry.command = "cp -R " + fromStr + " " + toStr + "";
     }
 
-    if(flags & flags::copy::touchDestination)
-    {
+	if (flags.has(CopyFlags::touchDestination))
+	{
         commandEntry = chain({commandEntry, touch(to)});
     }
 
@@ -201,8 +181,8 @@ inline CommandEntry copy(std::filesystem::path from, std::filesystem::path to, f
         commandEntry = chain({mkdir(toParent), commandEntry});
     }
 
-    if(flags & flags::copy::removeDestination)
-    {
+	if (flags.has(CopyFlags::removeDestination))
+	{
         commandEntry = chain({ifExists(to, ::commands::remove(to)), commandEntry});
     }
 
@@ -227,7 +207,13 @@ inline CommandEntry copyRelative(std::filesystem::path from, std::filesystem::pa
     return commands::copy(from, targetBase / relativeTo);
 }
 
-inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, flags::move::Flags flags = {})
+enum class MoveFlags
+{
+	removeDestination,
+	touchDestination,
+};
+
+inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, flags::Flags<MoveFlags> flags = {})
 {
     CommandEntry commandEntry;
     commandEntry.inputs = { from };
@@ -246,8 +232,8 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, f
         commandEntry.command = "mv " + fromStr + " " + toStr;
     }
 
-    if(flags & flags::move::touchDestination)
-    {
+	if (flags.has(MoveFlags::touchDestination))
+	{
         commandEntry = chain({commandEntry, touch(to)});
     }
 
@@ -257,8 +243,8 @@ inline CommandEntry move(std::filesystem::path from, std::filesystem::path to, f
         commandEntry = chain({mkdir(toParent), commandEntry});
     }
 
-    if(flags & flags::move::removeDestination)
-    {
+	if (flags.has(MoveFlags::removeDestination))
+	{
         commandEntry = chain({ifExists(to, ::commands::remove(to)), commandEntry});
     }
 
