@@ -57,9 +57,10 @@ void BuildConfigurator::collectCommands(Environment& env, std::vector<CommandEnt
 		{
 			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has rspContents set but no corresponding rspFile.");
 		}
-		if (!command.rspFile.empty() && command.command.find("@" + str::quote(command.rspFile.string())) == std::string::npos)
+		// TODO: This is a bit brittle, with escaping and all
+		if (!command.rspFile.empty() && command.command.find("@" + str::quote(command.rspFile.string(), '"', "\"")) == std::string::npos)
 		{
-			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has rspFile set but no corresponding @rspFile in the command string. Currently @\"quoted/path\" is the only supported rsp file flag format, and path must be lexically identical to rspFile.");
+			throw std::runtime_error("Command '" + command.description + "' in project " + project.name + " has rspFile set but no corresponding @rspFile in the command string. Currently @\"quoted/path\" is the only supported rsp file flag format, and path must be lexically identical to rspFile.\n\n(Tried to find '" + str::quote(command.rspFile.string(), '"', "\"") + "' in '" + command.command + "')");
 		}
 		collectedCommands.push_back(command);
 	}
@@ -113,7 +114,8 @@ static void generateCompileCommandsJson(std::ostream& stream, const Database& da
 			}
 			else
 			{
-				std::string rspFlag = "@" + str::quote(command.rspFile.string());
+				// TODO: This is a bit brittle, with escaping and all
+				std::string rspFlag = "@" + str::quote(command.rspFile.string(), '"', "\"");
 				// Expand rsp contents since the rsp files are transient and won't be
 				// available to whatever consumes the compile commands file.
 				stream << "    \"command\": " << str::quote(str::replaceAll(command.command, rspFlag, command.rspContents)) << "\n";
